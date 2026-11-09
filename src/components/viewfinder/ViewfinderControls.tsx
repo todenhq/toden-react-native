@@ -120,16 +120,20 @@ export function OverlayButton({
  */
 export function Shutter({
   onPress,
-  ready,
+  ready: cameraReady,
   busy,
   progress,
+  blockedHint = null,
 }: {
   onPress: () => void;
   ready: boolean;
   busy: boolean;
   progress: number;
+  /** Set while the four-corner gate holds capture: the shutter is disabled and says why. */
+  blockedHint?: string | null;
 }): React.ReactElement {
   const { colors } = useTheme();
+  const ready = cameraReady && !blockedHint;
   const R = 36;
   const CIRC = 2 * Math.PI * R;
 
@@ -156,7 +160,8 @@ export function Shutter({
         onPress={onPress}
         disabled={busy || !ready}
         accessibilityRole="button"
-        accessibilityLabel="Capture photo"
+        accessibilityLabel={blockedHint ? `Capture photo. ${blockedHint}` : 'Capture photo'}
+        accessibilityState={{ disabled: busy || !ready }}
         style={({ pressed }) => ({
           width: 64,
           height: 64,

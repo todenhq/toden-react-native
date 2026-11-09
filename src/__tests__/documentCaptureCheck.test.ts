@@ -23,7 +23,8 @@ const result = (
   side: 'front' | 'back',
   face: boolean | null,
   barcode: boolean | null,
-): DocumentCaptureCheckResult => ({ side, face, barcode });
+  complete: boolean | null = null,
+): DocumentCaptureCheckResult => ({ side, face, barcode, complete });
 
 describe('captureCheckProblems', () => {
   it('finds nothing when every check passed or did not apply', () => {
@@ -63,6 +64,32 @@ describe('captureRetakeSides', () => {
   });
 });
 
+describe('a document cut off at the frame', () => {
+  it('asks for a retake of that side on false, before the face and the barcode', () => {
+    const problems = captureCheckProblems([result('back', null, false, false), result('front', false, null, false)]);
+    expect(problems).toEqual([
+      { side: 'front', kind: 'not_complete' },
+      { side: 'front', kind: 'no_face' },
+      { side: 'back', kind: 'not_complete' },
+      { side: 'back', kind: 'no_barcode' },
+    ]);
+    expect(captureRetakeSides(captureCheckProblems([result('back', null, null, false)]))).toEqual(['back']);
+  });
+
+  it('asks nothing on true or null', () => {
+    expect(captureCheckProblems([result('front', null, null, null), result('back', null, null, true)])).toEqual([]);
+  });
+
+  it('reads the server answer, and an older server that leaves it out as null', async () => {
+    const body: DocumentCaptureCheckRequest = { mediaId: 'med_f', side: 'front', country: 'NG', idType: 'pvc' };
+    const cut = await runCaptureChecks([body], async () => ({ side: 'front', face: null, barcode: null, complete: false }));
+    expect(captureCheckProblems(cut)).toEqual([{ side: 'front', kind: 'not_complete' }]);
+    const older = await runCaptureChecks([body], async () => ({ side: 'front', face: null, barcode: null }));
+    expect(older).toEqual([result('front', null, null, null)]);
+    expect(captureCheckProblems(older)).toEqual([]);
+  });
+});
+
 describe('the words', () => {
   it('matches the web and Flutter SDKs word for word', () => {
     expect(captureProblemMessage('no_face')).toBe(
@@ -70,6 +97,9 @@ describe('the words', () => {
     );
     expect(captureProblemMessage('no_barcode')).toBe(
       "We couldn't read the barcode on the back of your ID. Retake it with the ID out of any plastic cover, flat, filling the frame and with no glare over the barcode.",
+    );
+    expect(captureProblemMessage('not_complete')).toBe(
+      "We couldn't see the whole of your ID. Retake it with all four corners inside the frame and a little space around the edges.",
     );
     expect(CAPTURE_CHECK_TITLE).toBe('Check your photos');
     expect(CAPTURE_CHECK_CONTINUE_ANYWAY).toBe('Continue anyway');
@@ -86,6 +116,7 @@ describe('the words', () => {
     const words = [
       captureProblemMessage('no_face'),
       captureProblemMessage('no_barcode'),
+      captureProblemMessage('not_complete'),
       CAPTURE_CHECK_TITLE,
       CAPTURE_CHECK_CONTINUE_ANYWAY,
       captureRetakeLabel('front', false),

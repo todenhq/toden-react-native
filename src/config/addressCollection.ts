@@ -12,7 +12,6 @@
 
 import { addressFlowOptions, type AddressFlowOptions } from '../lib/address-flow';
 import { requiredPrefillSubmission } from '../lib/address-field-modes';
-import { isBusinessFlow } from './business';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import type { AddressCollectionConfig } from '../types/workflow';
 import type { AddressState } from '../store/state';
@@ -49,9 +48,9 @@ export function addressFlowFor(
    *  framed street-view page carries the panorama for it. */
   hasStreetViewFrame = false,
 ): AddressFlowOptions {
-  if (isBusinessFlow(config)) {
-    return { searchAvailable: false, photoMode: 'off', streetViewOffered: false };
-  }
+  // A KYB premises runs the same steps as a person's address since
+  // 2026-10-18 (search, pin, entrance, review): the entrance photo and Street
+  // View frame are part of how a business premises is checked.
   return addressFlowOptions({
     photo: config.addressCollection?.photo,
     streetView: config.addressCollection?.streetView,
@@ -110,6 +109,7 @@ export function addressPayload(
           ...(typeof address.deviceAccuracy === 'number'
             ? { deviceAccuracy: address.deviceAccuracy }
             : {}),
+          ...(typeof address.deviceMocked === 'boolean' ? { deviceMocked: address.deviceMocked } : {}),
           ...(address.capturedAt ? { capturedAt: address.capturedAt } : {}),
         }
       : {}),

@@ -211,6 +211,9 @@ describe('how a document is provided', () => {
     expect(resolveSupportingDocuments(doc(), [])[0]?.capture).toBe('upload');
     expect(resolveSupportingDocuments(doc('draw'), [])[0]?.capture).toBe('draw');
     expect(resolveSupportingDocuments(doc('draw_or_upload'), [])[0]?.capture).toBe('draw_or_upload');
+    // A photo taken there and then: the step opens the camera, no source sheet.
+    expect(resolveSupportingDocuments(doc('camera'), [])[0]?.capture).toBe('camera');
+    expect(resolveSupportingDocuments(doc('file'), [])[0]?.capture).toBe('file');
     expect(resolveSupportingDocuments(doc('typed'), [])[0]?.capture).toBe('upload');
   });
 });

@@ -54,6 +54,7 @@ namespace margelo::nitro::myazakyc {
     public:
       // Methods
       virtual DetectedRect detectRect(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame) = 0;
+      virtual void setExpectUpright(bool upright) = 0;
 
     protected:
       // Hybrid Setup

@@ -39,10 +39,12 @@ describeInMonorepo('upload limits (shared vectors)', () => {
 });
 
 describe('upload limits', () => {
-  it('the drop zones read the hint from the one constant', () => {
-    for (const rel of ['screens/ProofOfAddressParts.tsx', 'screens/BusinessDocumentSlot.tsx']) {
+  it('the drop zones read the hint from the one helper', () => {
+    // The Proof of Address step has no drop zone since 2026-11-07: its file
+    // tile names what can be chosen ("PDF or image") as web's does.
+    for (const rel of ['screens/BusinessDocumentSlot.tsx']) {
       const src = readFileSync(join(__dirname, '..', rel), 'utf8');
-      expect(src).toContain('UPLOAD_HINT');
+      expect(src).toContain('documentUploadHint');
       expect(src).not.toMatch(/up to 20MB/);
     }
   });

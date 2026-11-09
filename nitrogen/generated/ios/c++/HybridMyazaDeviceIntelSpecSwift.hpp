@@ -78,6 +78,14 @@ namespace margelo::nitro::myazakyc {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline bool declaresMicrophone() override {
+      auto __result = _swiftPart.declaresMicrophone();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline std::shared_ptr<Promise<std::vector<std::string>>> integritySignals() override {
       auto __result = _swiftPart.integritySignals();
       if (__result.hasError()) [[unlikely]] {

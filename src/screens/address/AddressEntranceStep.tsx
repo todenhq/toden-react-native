@@ -6,9 +6,10 @@ import { useFlowState, useVerificationStore, useTheme } from '../../components/r
 import { UiText } from '../../components/Typography';
 import { UiButton } from '../../components/UiButton';
 import { MediaSourceSheet } from '../../components/MediaSourceSheet';
+import { PhotoCamera } from '../../components/PhotoCamera';
+import { PHOTO_COPY } from '../../components/viewfinder/photoMode';
 import { StickyActions } from '../../components/StickyActions';
 import { withRetry } from '../../services/retry';
-import { compressDocumentImage } from '../../services/mediaCompress';
 import { addressVendorsStubbed } from '../../lib/address-flow';
 import { streetViewFrameUrlOf } from '../../lib/map-frame';
 import { useAddressPhotoAttach, type AddressPhotoPick } from '../useAddressPhotoAttach';
@@ -105,15 +106,24 @@ function EntrancePhoto({
 
   const upload = useCallback(
     async ({ uri, mimeType, name }: AddressPhotoPick) => {
-      await pickPhoto(async () => {
-        const finalUri = await compressDocumentImage(uri).catch(() => uri);
-        return withRetry(() => store.getState().api.upload({ uri: finalUri, type: mimeType, name }, 'address_photo'));
-      }, uri);
+      // The photo arrives already resized and re-encoded by
+      // useAddressPhotoAttach, which judged the size cap on that.
+      await pickPhoto(
+        () => withRetry(() => store.getState().api.upload({ uri, type: mimeType, name }, 'address_photo')),
+        uri,
+      );
     },
     [pickPhoto, store],
   );
 
-  const { pick, sheetOpen, closeSheet, choosePhoto, takePhoto } = useAddressPhotoAttach(upload, setError);
+  // Busy while the picked photo is shrunk, before the upload itself starts.
+  const [preparing, setPreparing] = useState(false);
+  const { pick, sheetOpen, closeSheet, choosePhoto, takePhoto, photoCamera } = useAddressPhotoAttach(
+    upload,
+    setError,
+    setPreparing,
+  );
+  const busy = flow.uploading || preparing;
 
   const uploaded = Boolean(photoId);
   const required = flow.photoMode === 'required';
@@ -123,7 +133,7 @@ function EntrancePhoto({
       actions={
         <UiButton
           label={uploaded || required ? t('common.continue') : t('address.entrance.continueWithoutPhoto')}
-          disabled={flow.uploading || (required && !uploaded)}
+          disabled={busy || (required && !uploaded)}
           onPress={() => flow.goNext()}
         />
       }
@@ -138,6 +148,15 @@ function EntrancePhoto({
         ]}
       />
 
+      {/* "Take a photo": the SDK's own camera, without the scan. Upload is the
+          photo library, as the sheet's other option. */}
+      <PhotoCamera
+        {...photoCamera}
+        title={PHOTO_COPY.entranceTitle}
+        instruction={PHOTO_COPY.fitEntrance}
+        onUpload={() => void choosePhoto()}
+      />
+
       {skipped ? (
         <UiText variant="bodySmall" color={colors.textSecondary} style={{ marginBottom: spacing.sm }}>
           No problem. A quick photo of the entrance works just as well.
@@ -146,7 +165,7 @@ function EntrancePhoto({
 
       <EntranceDropzone
         uploaded={uploaded}
-        uploading={flow.uploading}
+        uploading={busy}
         previewUri={previewUri}
         required={required}
         onPick={() => pick()}

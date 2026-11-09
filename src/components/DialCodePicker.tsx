@@ -4,6 +4,8 @@ import {
   Keyboard,
   Platform,
   Pressable,
+  StyleSheet,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -11,8 +13,8 @@ import {
 import { spacing } from '../config/theme';
 import { useTheme } from './runtime';
 import { UiText } from './Typography';
-import { UiInput } from './UiInput';
 import { Icon } from './Icon';
+import { useInputFontFamily } from './fonts';
 import { FloatingSheet } from './glass/FloatingSheet';
 import { DialCodeDivider, DialCodeRegionHeader, DialCodeRow } from './DialCodeRow';
 import { buildDialCodeItems, dialCodeItemKey, filterDialCodeOptions, type DialCodeItem } from './dialCodeRows';
@@ -27,9 +29,10 @@ import { buildDialCodeItems, dialCodeItemKey, filterDialCodeOptions, type DialCo
 // without it a plain country picker (the key-people "where their ID was
 // issued" field) — SAME sheet, SAME search, so the two feel identical.
 //
-// Laid out to match Flutter's showDialCodePicker row for row: a UiInput with
-// a search prefix on top, then flag / full country name / dial code, with the
-// selected row tinted rather than ticked.
+// Laid out as the web sheet (CountrySummarySelect) is: a borderless search
+// row ruled off underneath, then flag / country name / dial code in rounded
+// rows, with the selected row filled rather than ticked. Flutter's
+// showDialCodePicker is drawn the same.
 //
 // The sheet is sized against the space left ABOVE the keyboard, like Flutter's.
 // The search field autofocuses, so measuring against the full screen would put
@@ -56,6 +59,10 @@ export function DialCodePicker({
   onPick,
   onClose,
   searchPlaceholder = 'Search country or code',
+  selectedTag,
+  geoTag = 'Your location',
+  emptyText = 'No countries match your search.',
+  title,
 }: {
   visible: boolean;
   options: DialCodeOption[];
@@ -71,8 +78,21 @@ export function DialCodePicker({
   onPick: (code: string) => void;
   onClose: () => void;
   searchPlaceholder?: string;
+  /**
+   * The current answer pinned on top too, tagged (the country summary row's
+   * "Selected"), above the geo row. Absent = the current answer stays in its
+   * place, only tinted.
+   */
+  selectedTag?: string;
+  /** The geo row's tag. */
+  geoTag?: string;
+  /** What an empty search says. */
+  emptyText?: string;
+  /** The sheet's title in the house header ("Country code", the field's caption). */
+  title?: string;
 }): React.ReactElement {
   const { colors } = useTheme();
+  const fontFamily = useInputFontFamily();
   const { height: screenHeight } = useWindowDimensions();
   const [query, setQuery] = useState('');
   const [keyboard, setKeyboard] = useState(0);
@@ -97,9 +117,19 @@ export function DialCodePicker({
   // the search, so typing still narrows to what was asked for rather than
   // keeping a row that does not match.
   const rows = useMemo(
-    () => buildDialCodeItems(filterDialCodeOptions(options, query), pinned, grouped),
-    [options, query, pinned, grouped],
+    () =>
+      buildDialCodeItems(filterDialCodeOptions(options, query), pinned, grouped, selectedTag ? selected : null),
+    [options, query, pinned, grouped, selectedTag, selected],
   );
+  // The hairline sits under the LAST pinned row: the geo guess, else the
+  // pinned current answer.
+  const lastPinned = rows.geo ?? rows.selected;
+  const tagOf = (code: string): string | undefined =>
+    rows.selected != null && code === rows.selected.code
+      ? selectedTag
+      : rows.geo != null && code === rows.geo.code
+        ? geoTag
+        : undefined;
 
   const close = (): void => {
     setQuery('');
@@ -114,35 +144,63 @@ export function DialCodePicker({
       // Ride above a raised keyboard — this sheet's whole job is a search box.
       bottomOffset={keyboard}
       closeLabel="Close country picker"
+      title={title}
     >
-        {/* Clear air between the header row (handle + close) and the search
-            field — flush against the close button they read as one control. */}
-        <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            height: 44,
+            paddingHorizontal: 12,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
+          }}
+        >
+          <Icon name="search" size={16} color={colors.textSecondary} />
           {/* Deliberately NOT autofocused: springing the keyboard the instant
               the sheet opens hides half the list before the person has even
               seen it — search is one tap away for whoever wants it. */}
-          <UiInput
+          <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder={searchPlaceholder}
-            prefix={<Icon name="search" size={18} color={colors.textSecondary} />}
+            placeholderTextColor={colors.textMuted}
+            accessibilityLabel={searchPlaceholder}
+            autoCorrect={false}
+            selectionColor={colors.primary}
+            style={{ flex: 1, height: '100%', padding: 0, color: colors.textDark, fontSize: 16, fontFamily }}
           />
+          {query ? (
+            <Pressable
+              onPress={() => setQuery('')}
+              accessibilityRole="button"
+              accessibilityLabel="Clear"
+              hitSlop={10}
+              style={{ width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Icon name="close" size={14} color={colors.textSecondary} />
+            </Pressable>
+          ) : null}
         </View>
 
         <FlatList
           data={rows.items}
           keyExtractor={dialCodeItemKey}
           keyboardShouldPersistTaps="handled"
+          // The web list's p-1.5, and pb-6 so the last row clears the sheet's
+          // rounded bottom edge.
+          contentContainerStyle={{ padding: 6, paddingBottom: spacing.lg }}
           // A hairline under the pinned row only: the alphabet below it is one
           // list, and a rule between every row is noise.
           ItemSeparatorComponent={({ leadingItem }: { leadingItem: DialCodeItem }) =>
-            rows.geo != null && leadingItem.kind === 'row' && leadingItem.option.code === rows.geo.code ? (
+            lastPinned != null && leadingItem.kind === 'row' && leadingItem.option.code === lastPinned.code ? (
               <DialCodeDivider />
             ) : null
           }
           ListEmptyComponent={
             <UiText variant="bodyMedium" style={{ padding: spacing.lg, textAlign: 'center' }}>
-              No countries match your search.
+              {emptyText}
             </UiText>
           }
           renderItem={({ item }) =>
@@ -152,7 +210,7 @@ export function DialCodePicker({
               <DialCodeRow
                 option={item.option}
                 isSelected={item.option.code === selected}
-                badge={rows.geo != null && item.option.code === rows.geo.code ? 'Your location' : undefined}
+                badge={tagOf(item.option.code)}
                 onPress={() => {
                   setQuery('');
                   onPick(item.option.code);

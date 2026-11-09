@@ -1,6 +1,5 @@
 import React from 'react';
 import { View } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
 
 import { radius, spacing } from '../config/theme';
 import { useFlowState, useVerificationConfig, useTheme } from '../components/runtime';
@@ -9,12 +8,15 @@ import { UiButton } from '../components/UiButton';
 import { Icon } from '../components/Icon';
 import { buildConsentModel } from './consent/model';
 import { ConsentLegalNotice } from './consent/ConsentLegalNotice';
+import { ConsentEmblem } from './consent/ConsentEmblem';
+import { ConsentJourney } from './consent/ConsentJourney';
 import { useText } from '../i18n/useText';
 import { resubmitNote } from '../lib/resubmit';
 
-// Consent / welcome screen — 1:1 with the web SDK's ConsentStep and the
-// Flutter SDK's ConsentScreen: shield hero, token-filled greeting, a "DURING
-// THIS PROCESS WE WILL" card, the derived legal notice, Continue, lock footer.
+// Consent / welcome screen, 1:1 with the web SDK's ConsentStep (redesigned
+// 2026-11-08): Toden's mark on a muted square, the greeting, a calm
+// description with how long the flow takes, the steps as an inset grouped
+// list, the derived legal notice, Continue, lock footer.
 // Everything the screen SAYS — title, description, step list, the biometric
 // sentence — is derived in consent/model.ts from what the flow actually does,
 // so a KYB flow gets the business copy and never claims an ID/selfie step it
@@ -64,79 +66,35 @@ export function ConsentStep(): React.ReactElement {
         </View>
       ) : null}
 
-      {/* Shield hero — concentric tinted rings + primary badge */}
       <View style={{ alignItems: 'center' }}>
-        <View style={{ width: 80, height: 80, alignItems: 'center', justifyContent: 'center' }}>
-          <View style={{ position: 'absolute', width: 80, height: 80, borderRadius: 40, backgroundColor: `${colors.primary}1A` }} />
-          <View style={{ position: 'absolute', width: 64, height: 64, borderRadius: 32, backgroundColor: `${colors.primary}26` }} />
-          <View
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 28,
-              alignItems: 'center',
-              justifyContent: 'center',
-              shadowColor: colors.primary,
-              shadowOpacity: 0.3,
-              shadowRadius: 16,
-              shadowOffset: { width: 0, height: 6 },
-              elevation: 6,
-            }}
-          >
-            {/* Solid primary badge — no gradients in the flow (house rule
-                2026-08-29, applied across all three SDKs in lockstep). */}
-            <Svg width={56} height={56} style={{ position: 'absolute' }}>
-              <Circle cx={28} cy={28} r={28} fill={colors.primary} />
-            </Svg>
-            <Icon name="shield" size={28} color={colors.onPrimary} />
-          </View>
-        </View>
+        <ConsentEmblem />
       </View>
 
-      <View style={{ height: spacing.lg }} />
-      <UiText variant="heading1" style={{ textAlign: 'center' }}>
+      <View style={{ height: spacing.md }} />
+      <UiText variant="heading1" style={{ textAlign: 'center', fontWeight: '600' }}>
         {title}
       </UiText>
       <View style={{ height: spacing.sm }} />
-      <UiText variant="bodyMedium" style={{ textAlign: 'center' }}>
+      <UiText
+        variant="bodyMedium"
+        color={colors.textSecondary}
+        style={{ textAlign: 'center', lineHeight: 21, maxWidth: 384, alignSelf: 'center' }}
+      >
         {description}
       </UiText>
       <View style={{ height: spacing.lg }} />
 
-      {/* Process steps card */}
-      <View style={{ backgroundColor: colors.backgroundSecondary, borderRadius: radius.lg, padding: spacing.md + 4 }}>
-        <UiText variant="bodySmall" color={colors.textMuted} style={{ fontWeight: '600', letterSpacing: 0.5 }}>
-          {t('welcome.process.heading')}
-        </UiText>
-        <View style={{ height: spacing.md }} />
-        {steps.map((step, i) => (
-          <View key={step.label} style={{ flexDirection: 'row', alignItems: 'center', marginTop: i > 0 ? 14 : 0 }}>
-            <View
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: radius.xs,
-                backgroundColor: `${colors.primary}1A`,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Icon name={step.icon} size={18} color={colors.primary} />
-            </View>
-            <View style={{ width: spacing.sm + 4 }} />
-            <UiText variant="bodyMedium" color={colors.textDark} style={{ flex: 1, fontWeight: '600' }}>
-              {step.label}
-            </UiText>
-          </View>
-        ))}
-      </View>
+      <ConsentJourney steps={steps} heading={t('welcome.process.heading')} />
 
       <View style={{ height: spacing.lg }} />
 
       {/* The legal notice, directly above the button it describes. */}
-      <ConsentLegalNotice isBusiness={isBusiness} capturesFace={capturesFace} recordsVideo={recordsVideo} />
+      <View style={{ borderRadius: 12, backgroundColor: `${colors.backgroundSecondary}80`, paddingHorizontal: 14, paddingVertical: 12 }}>
+        <ConsentLegalNotice isBusiness={isBusiness} capturesFace={capturesFace} recordsVideo={recordsVideo} />
+      </View>
 
-      <View style={{ height: spacing.lg }} />
+      <View style={{ height: spacing.md }} />
+      {/* No arrow: Continue gives consent, it does not point anywhere. */}
       <UiButton label={t('common.continue')} onPress={nextStep} />
       <View style={{ height: spacing.sm }} />
 

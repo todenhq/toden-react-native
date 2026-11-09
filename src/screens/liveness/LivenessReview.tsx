@@ -14,17 +14,21 @@ import { ImmersiveFrame } from './ImmersiveFrame';
 import { Panel, Pill } from './ImmersiveSurfaces';
 import { SELFIE_DONE_BODY, SELFIE_DONE_TITLE } from './LivenessOutcome';
 import type { SelfieUpload } from './useSelfieUpload';
+import { SELFIE_ASPECT } from '../../lib/selfie-pick';
 
 // ---------------------------------------------------------------------------
-// The review, full screen: the photo where the camera was, in the same window,
-// so it reads as the camera held still rather than as a different screen.
+// The review, full screen: the selfie as it was cut (3:4, head and shoulders,
+// lib/selfie-pick.ts) in a rounded rectangle centred where the camera's
+// window was, over the same photo blurred.
 //
 // Only with a photo to show. A restored session has the uploaded media id and
 // no local file, and keeps the sheet's own review (LivenessComplete).
 // ---------------------------------------------------------------------------
 
-/** The window's green edge on the review. */
+/** The selfie's green edge on the review. */
 const RIM = 4;
+/** The selfie's corners on the review (web's rounded-2xl, at this size). */
+const REVIEW_RADIUS = 24;
 
 export function LivenessReview({
   selfieUri,
@@ -60,42 +64,42 @@ export function LivenessReview({
     <ImmersiveFrame
       // The photo twice: blurred behind, and sharp in the window.
       backdrop={() => <PhotoBackdrop uri={selfieUri} />}
-      cutout={(window, frame) => (
-        <View
-          style={{
-            width: window.width,
-            height: window.height,
-            borderRadius: window.width / 2,
-            borderWidth: RIM,
-            borderColor: colors.success,
-            overflow: 'hidden',
-            backgroundColor: '#111111',
-          }}
-        >
-          {/* The photo is laid out as the camera was: covering the whole
-              frame, and seen through the window. Fitted to the window alone it
-              showed nearly the entire photo, with the face far smaller than it
-              was when it was taken. Offsets are from inside the rim. */}
-          <View style={[StyleAbsFill, { borderRadius: window.width / 2 - RIM, overflow: 'hidden' }]}>
+      cutout={(window) => {
+        // Passport-shaped, as the selfie is cut (lib/selfie-pick.ts): the
+        // 3:4 still whole, in a rounded rectangle centred in the window,
+        // rather than the camera's circle.
+        const width = Math.min(window.width, window.height * SELFIE_ASPECT);
+        const height = width / SELFIE_ASPECT;
+        return (
+          <View
+            style={{
+              position: 'absolute',
+              left: (window.width - width) / 2,
+              top: (window.height - height) / 2,
+              width,
+              height,
+              borderRadius: REVIEW_RADIUS,
+              borderWidth: RIM,
+              borderColor: colors.success,
+              overflow: 'hidden',
+              backgroundColor: '#111111',
+            }}
+          >
+            {/* borderRadius repeated on the Image: iOS does not reliably
+                clip an Image to a rounded parent. */}
             <Image
               source={{ uri: selfieUri }}
               resizeMode="cover"
-              style={{
-                position: 'absolute',
-                left: -(window.x + RIM),
-                top: -(window.y + RIM),
-                width: frame.width,
-                height: frame.height,
-              }}
+              style={{ width: '100%', height: '100%', borderRadius: REVIEW_RADIUS - RIM }}
             />
+            {busy ? (
+              <View style={[StyleAbsFill, { backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' }]}>
+                <UiPulseLoader size={64} />
+              </View>
+            ) : null}
           </View>
-          {busy ? (
-            <View style={[StyleAbsFill, { backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' }]}>
-              <UiPulseLoader size={64} />
-            </View>
-          ) : null}
-        </View>
-      )}
+        );
+      }}
       above={() => (
         <View style={{ alignItems: 'center' }}>
           <Pill>

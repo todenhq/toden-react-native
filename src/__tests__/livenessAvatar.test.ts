@@ -28,10 +28,10 @@ describe('livenessAvatarUrl', () => {
     // contract; the server validates the gesture against a closed list, so a
     // drift on either side is a 404 and a missing avatar, never an error.
     expect(livenessAvatarUrl('nod', LIVE)).toBe(
-      'https://trust.myaza.app/api/v1/assets/liveness/nod-transparent.gif',
+      'https://api.toden.co/api/v1/assets/liveness/nod-transparent.gif',
     );
     expect(livenessAvatarUrl('smile', LIVE)).toBe(
-      'https://trust.myaza.app/api/v1/assets/liveness/smile-transparent.gif',
+      'https://api.toden.co/api/v1/assets/liveness/smile-transparent.gif',
     );
   });
 
@@ -60,10 +60,10 @@ describe('primeLivenessAvatars', () => {
     primeLivenessAvatars(LIVE);
     expect(prefetch).toHaveBeenCalledTimes(4);
     expect(prefetch.mock.calls.map((c) => c[0])).toEqual([
-      'https://trust.myaza.app/api/v1/assets/liveness/nod-transparent.gif',
-      'https://trust.myaza.app/api/v1/assets/liveness/turn-transparent.gif',
-      'https://trust.myaza.app/api/v1/assets/liveness/blink-transparent.gif',
-      'https://trust.myaza.app/api/v1/assets/liveness/smile-transparent.gif',
+      'https://api.toden.co/api/v1/assets/liveness/nod-transparent.gif',
+      'https://api.toden.co/api/v1/assets/liveness/turn-transparent.gif',
+      'https://api.toden.co/api/v1/assets/liveness/blink-transparent.gif',
+      'https://api.toden.co/api/v1/assets/liveness/smile-transparent.gif',
     ]);
   });
 

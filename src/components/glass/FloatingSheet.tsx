@@ -4,15 +4,21 @@ import {
   Easing,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
+  StatusBar,
+  StyleSheet,
+  useWindowDimensions,
   View,
   type ViewStyle,
 } from 'react-native';
-import { spacing } from '../../config/theme';
+import { initialWindowMetrics } from 'react-native-safe-area-context';
+import { sheetMaxHeight } from '../../lib/sheet-height';
+import { sheetBorderColor, spacing } from '../../config/theme';
 import { displayCornerRadius } from '../../lib/screen-corners';
 import { useTheme } from '../runtime';
 import { GlassIconButton } from '../GlassIconButton';
-import { GlassSheet } from './GlassSheet';
+import { UiText } from '../Typography';
 
 // ---------------------------------------------------------------------------
 // FloatingSheet — the shell every bottom sheet in the SDK sits in.
@@ -43,12 +49,12 @@ const FLOAT_GAP = spacing.sm;
  * computed the way Apple computes nested corners: CONCENTRIC with the display,
  * i.e. the device's own corner radius minus the gap, so the sheet's curve runs
  * parallel to the phone's. Square-cornered screens have no curve to be
- * concentric with, so they keep the share-sheet look instead. Never the
+ * concentric with, so they take the web SDK's default sheet radius (28). Never the
  * brand-scaled `radius` tokens: an org whose buttons are 4px square should not
  * get a squared-off bottom sheet.
  */
 const screenRadius = displayCornerRadius();
-const SHEET_RADIUS = screenRadius > 0 ? Math.max(screenRadius - FLOAT_GAP, 16) : 38;
+const SHEET_RADIUS = screenRadius > 0 ? Math.max(screenRadius - FLOAT_GAP, 16) : 28;
 
 /**
  * The corner curve eats into the header, so the close button's inset SCALES
@@ -73,6 +79,13 @@ export interface FloatingSheetProps {
   /** Accessible label for the close button. */
   closeLabel?: string;
   /**
+   * The house sheet header (the web SDK's SheetHeader): the title, an optional
+   * line under it, and the close button on the same row. Every titled sheet
+   * passes it here, so the title and the close sit the same everywhere.
+   */
+  title?: string;
+  description?: string;
+  /**
    * Fires once the modal has finished going away (iOS only, from `Modal`).
    *
    * Needed by callers that must wait for THIS sheet to be gone before opening
@@ -90,9 +103,17 @@ export function FloatingSheet({
   maxHeight,
   closeLabel = 'Close',
   onDismiss,
+  title,
+  description,
 }: FloatingSheetProps): React.ReactElement {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const translateY = useRef(new Animated.Value(0)).current;
+  // The DEVICE's status bar: this sheet is its own full-screen modal, so the
+  // flow's insets do not apply. Without a cap a long form grew under it.
+  const { height: screenHeight } = useWindowDimensions();
+  const statusBar =
+    initialWindowMetrics?.insets.top ?? (Platform.OS === 'android' ? StatusBar.currentHeight ?? 24 : 47);
+  const cappedHeight = sheetMaxHeight(screenHeight, statusBar, FLOAT_GAP, bottomOffset, maxHeight);
 
   // The PanResponder is built once, so it would otherwise close over the FIRST
   // onClose forever and stop dismissing after the parent re-renders.
@@ -100,9 +121,28 @@ export function FloatingSheet({
   onCloseRef.current = onClose;
 
   // A sheet reopened after being dragged away must not still be off-screen.
+  const closingRef = useRef(false);
   useEffect(() => {
-    if (visible) translateY.setValue(0);
+    if (visible) {
+      translateY.setValue(0);
+      closingRef.current = false;
+    }
   }, [visible, translateY]);
+
+  // The close button, the backdrop and Android's back all slide the sheet
+  // down first, as a drag does, rather than removing it at once: a parent
+  // that unmounts the sheet on close would otherwise skip the Modal's own
+  // slide.
+  const dismiss = (): void => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    Animated.timing(translateY, {
+      toValue: 700,
+      duration: 200,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => onCloseRef.current());
+  };
 
   const pan = useRef(
     PanResponder.create({
@@ -161,32 +201,63 @@ export function FloatingSheet({
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={dismiss}
       onDismiss={onDismiss}
     >
-      <Pressable
-        onPress={onClose}
-        accessibilityLabel="Dismiss"
-        style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}
-      >
+      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        {/* The backdrop is a SIBLING behind the panel, not its parent. Wrapped
+            in Pressables (one to dismiss, one to swallow taps on the panel),
+            a scrolling body never got the gesture on Android: the touchable
+            took the responder and a long list could not be scrolled. */}
+        <Pressable
+          onPress={dismiss}
+          accessibilityLabel="Dismiss"
+          style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+        />
         <Animated.View style={[panel, { transform: [{ translateY }] }]}>
-          {/* Swallows taps so only the backdrop dismisses. */}
-          <Pressable onPress={() => undefined}>
-            <GlassSheet
-              style={{
-                // Floating card: all four corners round, not just the top
-                // pair — at the SYSTEM sheet's radius, never the brand scale.
-                borderRadius: SHEET_RADIUS,
-                maxHeight,
-                // No bottom padding, deliberately: a scrolling body runs all
-                // the way to the lip and is CLIPPED by the curve — content
-                // sliding under the rounded edge, the way the system does it.
-                overflow: 'hidden',
-              }}
-            >
-              {/* The drag lives on the header, NOT the whole panel: bodies here
-                  scroll, and a panel-wide responder fights the list for every
-                  downward swipe. */}
+          {/* A solid panel, the flow's own background: sheets are full of text
+              and codes that have to read clearly, so nothing shows through.
+              Liquid Glass stays on the chrome that floats over content. The
+              brand-tinted edge is what lifts it off the page now that the
+              material no longer does. */}
+          <View
+            style={{
+              backgroundColor: colors.background,
+              borderWidth: 1,
+              borderColor: sheetBorderColor(colors.primary, mode),
+              // Floating card: all four corners round, not just the top
+              // pair — at the SYSTEM sheet's radius, never the brand scale.
+              borderRadius: SHEET_RADIUS,
+              maxHeight: cappedHeight,
+              // No bottom padding, deliberately: a scrolling body runs all
+              // the way to the lip and is CLIPPED by the curve — content
+              // sliding under the rounded edge, the way the system does it.
+              overflow: 'hidden',
+            }}
+          >
+            {/* The drag lives on the header, NOT the whole panel: bodies here
+                scroll, and a panel-wide responder fights the list for every
+                downward swipe. */}
+            {title ? (
+              // The titled header: the handle on top, then the title (and
+              // its line) beside the close button, one row.
+              <View {...pan.panHandlers} style={{ paddingLeft: spacing.md + 4, paddingRight: CLOSE_INSET, paddingBottom: spacing.sm }}>
+                <View style={{ alignSelf: 'center', width: 36, height: 5, borderRadius: 2.5, marginTop: 8, backgroundColor: colors.border }} />
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginTop: 6 }}>
+                  <View style={{ flex: 1, minWidth: 0, paddingTop: 4 }}>
+                    <UiText variant="heading3" accessibilityRole="header" style={{ lineHeight: 24 }}>
+                      {title}
+                    </UiText>
+                    {description ? (
+                      <UiText variant="bodySmall" color={colors.textSecondary} style={{ marginTop: 2 }}>
+                        {description}
+                      </UiText>
+                    ) : null}
+                  </View>
+                  <GlassIconButton icon="close" onPress={dismiss} size={32} iconSize={18} accessibilityLabel={closeLabel} />
+                </View>
+              </View>
+            ) : (
               <View
                 {...pan.panHandlers}
                 style={{
@@ -225,18 +296,18 @@ export function FloatingSheet({
                 >
                   <GlassIconButton
                     icon="close"
-                    onPress={onClose}
+                    onPress={dismiss}
                     size={32}
                     iconSize={18}
                     accessibilityLabel={closeLabel}
                   />
                 </View>
               </View>
-              {children}
-            </GlassSheet>
-          </Pressable>
+            )}
+            {children}
+          </View>
         </Animated.View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }

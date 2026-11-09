@@ -35,7 +35,11 @@ def safeExtGet(prop, fallback) {
 // Resolved ONCE and used twice: it picks the ML Kit artifacts below AND is
 // compiled into BuildConfig so the native readiness checks can answer without
 // asking Play Services about a model that is sitting in the APK.
-def bundledMlKit = safeExtGet('myazaKycBundledMlKit', false).toString().toBoolean()
+//
+// The host sets `ext { todenBundledMlKit = true }` in its root build.gradle.
+// The earlier name, `myazaKycBundledMlKit`, is still read when the new one is
+// not set, so an app that already sets it keeps its bundled models.
+def bundledMlKit = safeExtGet('todenBundledMlKit', safeExtGet('myazaKycBundledMlKit', false)).toString().toBoolean()
 
 android {
   namespace 'co.myazahq.kyc.rn'
@@ -131,6 +135,9 @@ dependencies {
   // CameraX core — for the ImageProxy / ExperimentalGetImage APIs.
   compileOnly 'androidx.camera:camera-core:1.3.4'
 
+  // JVM unit tests for the pure document border detector (no device needed).
+  testImplementation 'junit:junit:4.13.2'
+
   // ── ML Kit: models fetched on demand by default ──────────────────────────
   //
   // Two variants of the same API exist. The `com.google.mlkit:*` artifacts embed
@@ -144,7 +151,7 @@ dependencies {
   //
   // The trade-off is real and is why the flag exists: the unbundled variants need
   // Google Play Services, so they do not work on Huawei or AOSP builds without
-  // GMS. An org shipping to those devices sets `myazaKycBundledMlKit = true` in
+  // GMS. An org shipping to those devices sets `todenBundledMlKit = true` in
   // its root build.gradle ext and gets today's fully-offline behaviour back.
   //
   // Availability is NOT inferred per frame. Both models carry the same

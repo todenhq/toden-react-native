@@ -234,6 +234,17 @@ export function applyAppearance(
   return next;
 }
 
+/**
+ * The edge of a bottom sheet: a faint pale line on a dark flow, and a deeper
+ * tint on a light one, so the panel stands off the page in both without the
+ * line drawing the eye. Drawn from `primary` so it follows an organisation's
+ * brand.
+ */
+export function sheetBorderColor(primary: string, mode: ThemeMode): string {
+  if (mode === 'dark') return withAlpha(alphaBlend(primary, '#FFFFFF', 0.15), 0.28, '#000000');
+  return alphaBlend(primary, '#FFFFFF', 0.5);
+}
+
 /** Resolves the active color scheme for a mode + appearance override. */
 export function resolveColors(mode: ThemeMode, appearance?: VerificationAppearance): UiColorScheme {
   // The appearance is applied ON TOP of the active base scheme, so without the

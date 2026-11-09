@@ -113,21 +113,25 @@ describe('the business (KYB) flow', () => {
     business: { country: 'NG' },
   });
 
-  it('collapses to the single premises step, with no search and no photo', () => {
-    // The premises pin plus its directions ARE the capture, and it follows the
-    // company details it is about.
+  it('runs the same address steps as a person, after the company details', () => {
+    // A premises is checked on its entrance photo and Street View frame too
+    // (2026-10-18), so it gets the search, entrance and review steps.
     expect(buildStepOrder(o)).toEqual([
       'consent',
       'business-details',
+      'address-search',
       'address-collection',
+      'address-entrance',
+      'address-review',
       'submitted',
     ]);
   });
 
-  it('offers neither search nor a photo, whatever the workflow asked for', () => {
+  it('offers search and the photo the workflow asked for', () => {
     expect(o.addressFlow).toEqual({
-      searchAvailable: false,
-      photoMode: 'off',
+      // A person's address book is never offered on a business premises.
+      searchAvailable: true,
+      photoMode: 'required',
       streetViewOffered: false,
     });
   });
@@ -167,12 +171,12 @@ describe('an attempt resumed onto a step this flow no longer has', () => {
     );
   });
 
-  it('lands a KYB attempt on its premises pin', () => {
+  it('keeps a KYB attempt on the premises step it was saved on', () => {
     const o = withAddress({ enabled: true }, true, {
       isBusiness: true,
       business: { country: 'NG' },
     });
-    expect(recover(o, 'address-review')).toBe('address-collection');
+    expect(recover(o, 'address-review')).toBeNull();
   });
 
   it('leaves the address flow entirely when the workflow dropped it', () => {

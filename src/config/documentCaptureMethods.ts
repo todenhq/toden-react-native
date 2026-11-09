@@ -29,3 +29,48 @@ export function documentCaptureMethods(config: {
   const scan = upload ? config.allowDocumentScan !== false : true;
   return { scan, upload };
 }
+
+/** How a side's photo arrived. Mirrors the web and Flutter SDKs. */
+export type DocumentSideSource = 'camera' | 'upload' | null;
+
+/**
+ * Whether a capture moves straight on, past the review screen: only when the
+ * review is off unless the workflow asks for it, and even then only every side
+ * scanned just now moves on. An
+ * uploaded photo has had no look from anyone, so it keeps its preview.
+ */
+export function skipsDocumentReview(
+  config: { documentReview?: boolean },
+  sources: DocumentSideSource[],
+): boolean {
+  return config.documentReview !== true && sources.every((source) => source === 'camera');
+}
+
+export type AfterDocumentCapture = 'preview-front' | 'scan-back' | 'review' | 'hand-over';
+
+/** Where a side's capture leads. The rule all three SDKs share. */
+export function afterDocumentCapture(
+  config: { documentReview?: boolean },
+  capture: {
+    side: 'front' | 'back';
+    twoSided: boolean;
+    front: DocumentSideSource;
+    back: DocumentSideSource;
+    /** A photo of the back is already held (a retake of the front). */
+    hasBack: boolean;
+  },
+): AfterDocumentCapture {
+  const { side, twoSided, front, back, hasBack } = capture;
+  if (skipsDocumentReview(config, twoSided ? [front, back] : [front])) return 'hand-over';
+  if (side === 'back' || !twoSided) return 'review';
+  return !hasBack && skipsDocumentReview(config, [front]) ? 'scan-back' : 'preview-front';
+}
+
+/** Whether the document clip records sound. Off unless a workflow asked. */
+export function recordsDocumentAudio(config: {
+  documentAudio?: boolean;
+  allowDocumentScan?: boolean;
+  allowDocumentUpload?: boolean;
+}): boolean {
+  return config.documentAudio === true && documentCaptureMethods(config).scan;
+}

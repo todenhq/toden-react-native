@@ -1,10 +1,10 @@
-# @myazahq/kyc-sdk-react-native
+# @toden/react-native
 
 Toden SDK for **React Native (Expo)** — ID verification with document
 auto-capture, **eMRTD chip reading (NFC)**, active **on-device** liveness,
 email/phone OTP verification, questionnaires, proof of address, and full
 business (**KYB**) verification, for any supported country. Mirrors the
-[web](https://www.npmjs.com/package/@myazahq/kyc-sdk-react) and Flutter SDKs
+[web](https://www.npmjs.com/package/@toden/react) and Flutter SDKs
 feature-for-feature — including `workflowId` embeds — and calls the same Toden
 KYC API server.
 
@@ -13,7 +13,7 @@ photos, a live selfie), uploads the media, and submits a verification request.
 All verification (OCR, facial comparison, gov-DB checks) happens server-side and
 is delivered asynchronously via webhook — the SDK is **fire-and-forget**.
 
-> **New names.** The entry points were renamed in 3.6.0 (`Verification`, `useVerification`, `VerificationError`). The earlier names (`MyazaKYC`, `useMyazaKYC`, the hook's `MyazaKYCModal`, `KYCError` and the rest) still work, so existing code needs no change. The package name is unchanged.
+> **Entry points.** Use `Verification`, `useVerification` and `VerificationError`. The names from before 3.6.0 still work, so existing code needs no change.
 
 ## Requirements
 
@@ -45,14 +45,17 @@ Nitro module), so it needs a **custom native build** and **does not run in Expo 
 | `react-native-svg` | `>=15` | Liveness/overlay graphics |
 
 > Voice guidance is **text-to-speech output only** — the SDK never records audio,
-> so **no microphone permission** is requested or required.
+> so it needs **no microphone**. The only thing that records sound is a workflow
+> with `documentAudio` or `livenessAudio` on, which needs `microphone: true` on the config plugin (or
+> `NSMicrophoneUsageDescription` and `RECORD_AUDIO` in a bare app). Without them,
+> or if the person refuses, the video records without sound.
 
 ## Installation
 
 ### Expo app (managed / prebuild — recommended)
 
 ```sh
-npx expo install @myazahq/kyc-sdk-react-native \
+npx expo install @toden/react-native \
   react-native-vision-camera react-native-vision-camera-worklets \
   react-native-worklets react-native-nitro-modules react-native-nitro-image \
   react-native-safe-area-context react-native-svg
@@ -61,7 +64,7 @@ npx expo install @myazahq/kyc-sdk-react-native \
 Add the config plugins to `app.json`. The SDK's plugin adds the iOS camera and
 location usage strings + Android `CAMERA`/`INTERNET` and foreground location
 permissions (location backs the address-collection step's "Use my current
-location" and presence attestation; `["@myazahq/kyc-sdk-react-native",
+location" and presence attestation; `["@toden/react-native",
 { "location": false }]` opts out); the VisionCamera plugin wires up
 the camera + frame processors. Make sure the **New Architecture** is on (it is by
 default on Expo SDK 56):
@@ -72,7 +75,7 @@ default on Expo SDK 56):
   "expo": {
     "newArchEnabled": true,
     "plugins": [
-      "@myazahq/kyc-sdk-react-native"
+      "@toden/react-native"
     ]
   }
 }
@@ -93,7 +96,7 @@ JAVA_HOME=/path/to/jdk-17 npx expo run:android    # Android — needs JDK 17
 ```
 
 > The SDK plugin accepts optional custom prompts:
-> `["@myazahq/kyc-sdk-react-native", { "cameraPermission": "Your message…",
+> `["@toden/react-native", { "cameraPermission": "Your message…",
 > "locationPermission": "Your message…", "nfcPermission": "Your message…" }]`.
 
 #### NFC is opt-in
@@ -103,7 +106,7 @@ that most apps should not carry, so the SDK declares **none of them** unless you
 ask:
 
 ```jsonc
-["@myazahq/kyc-sdk-react-native", { "nfc": true }]
+["@toden/react-native", { "nfc": true }]
 ```
 
 With it on, the plugin writes the Android `NFC` permission plus a
@@ -145,7 +148,7 @@ missing a capability rather than a detail, so install them deliberately:
 | `expo-device` | Make, model, manufacturer and physical-vs-simulator in the device metadata | Those fields are omitted and the device class is guessed from the platform, so Device Intelligence has a weaker fingerprint and shared-device detection suffers |
 | `expo-application` | Your app's id, version and build number on the submission | The `app` block is omitted entirely, so a result cannot be traced to the build that produced it |
 | `expo-localization` | The device's region, explicitly | Country defaults and the reported locale fall back to the JS runtime's locale, which often carries no region at all (`en` rather than `en-NG`) |
-| `expo-document-picker` | "Choose a file" on the proof-of-address and KYB document steps | Those steps accept a camera capture only, so a PDF bank statement cannot be submitted at all |
+| `expo-document-picker` | "Choose a file" on the proof-of-address and KYB document steps | Those steps offer the photo library and camera only, and no longer offer "Choose a file", so a PDF bank statement cannot be submitted at all |
 
 ```sh
 npx expo install expo-device expo-application expo-localization expo-document-picker
@@ -161,7 +164,7 @@ package — you don't need the managed workflow) and let it autolink:
 npx install-expo-modules@latest
 
 # 2. Install the SDK + peers:
-npm install @myazahq/kyc-sdk-react-native \
+npm install @toden/react-native \
   react-native-vision-camera react-native-vision-camera-worklets \
   react-native-worklets react-native-nitro-modules react-native-nitro-image \
   react-native-safe-area-context react-native-svg \
@@ -212,7 +215,7 @@ from the workflow, so changing the flow is a re-publish in the dashboard rather
 than a new app build and an app-store review. See [Workflows](#workflows).
 
 ```tsx
-import { Verification } from '@myazahq/kyc-sdk-react-native';
+import { Verification } from '@toden/react-native';
 
 export default function VerifyScreen() {
   return (
@@ -246,7 +249,7 @@ Skip the workflow and pass the flow's shape as props. Useful for a quick start
 or a single fixed flow; anything you'd change later means shipping a new build.
 
 ```tsx
-import { Verification } from '@myazahq/kyc-sdk-react-native';
+import { Verification } from '@toden/react-native';
 
 export default function VerifyScreen() {
   return (
@@ -342,8 +345,8 @@ base URL) from the API key prefix, the single source of truth:
 
 | Prefix     | Environment | Base URL                          |
 | ---------- | ----------- | --------------------------------- |
-| `pk_test_` | sandbox     | `https://trust.myaza.app`      |
-| `pk_live_` | production  | `https://trust.myaza.app`      |
+| `pk_test_` | sandbox     | `https://sandbox-api.toden.co` |
+| `pk_live_` | production  | `https://api.toden.co`         |
 
 An unrecognized or malformed key throws at setup (it never silently defaults).
 
@@ -447,7 +450,7 @@ open the flow programmatically), use the `useVerification()` hook:
 
 ```tsx
 import { Pressable, Text } from 'react-native';
-import { useVerification } from '@myazahq/kyc-sdk-react-native';
+import { useVerification } from '@toden/react-native';
 
 function CustomTrigger() {
   const { open, close, isOpen, currentStep } = useVerification({
@@ -559,7 +562,7 @@ conditions, and reports technical failures through `onError` with a typed code.
 and optional `details`. The codes are **identical to the web and Flutter SDKs**:
 
 ```tsx
-import { Verification, type VerificationError } from '@myazahq/kyc-sdk-react-native';
+import { Verification, type VerificationError } from '@toden/react-native';
 
 <Verification
   {...config}
@@ -631,8 +634,8 @@ and a short liveness video is recorded and uploaded best-effort.
 ## Device Intelligence (device signals and attestation)
 
 While a workflow's `deviceIntelligence` is on (the default), the SDK sends a
-device fingerprint with each submission and an `X-Myaza-Device-Id` header with
-every upload. Besides the components it has always sent, it now adds, all
+device fingerprint with each submission and a per-install device ID header
+with every upload. Besides the components it has always sent, it now adds, all
 best-effort and never blocking a submission:
 
 - **`stableId`**: an id that survives a reinstall. iOS: a random UUID in the
@@ -698,7 +701,7 @@ in your root `build.gradle` and you get fully-offline models back, at 18.5 MB pe
 device:
 
 ```gradle
-ext { myazaKycBundledMlKit = true }
+ext { todenBundledMlKit = true }
 ```
 
 **Ship an App Bundle, or filter your ABIs.** Native libraries dominate the rest
@@ -734,7 +737,7 @@ ones, and the SDK's peer range assumes it.
 
 ## Documentation
 
-Full documentation, configuration options, and webhook setup: **[trust.myaza.co/documentation/sdks](https://trust.myaza.co/documentation/sdks)**.
+Full documentation, configuration options, and webhook setup: **[docs.toden.co/integrate/sdks/react-native](https://docs.toden.co/integrate/sdks/react-native)**.
 
 ## License
 
@@ -747,7 +750,7 @@ the SDK stores the confirmed pin on-device at capture. Call the reporter from yo
 app on a natural moment (app open works well):
 
 ```tsx
-import { reportAddressPresence, clearPresencePin } from '@myazahq/kyc-sdk-react-native';
+import { reportAddressPresence, clearPresencePin } from '@toden/react-native';
 
 const result = await reportAddressPresence({
   apiKey: 'pk_live_…',
@@ -788,7 +791,7 @@ Three opt-ins, each deliberate:
    your app's store review posture, so it is never a default:
 
    ```json
-   ["@myazahq/kyc-sdk-react-native", { "location": "always" }]
+   ["@toden/react-native", { "location": "always" }]
    ```
 
 3. Register the task at your app's ROOT module (before the component tree —
@@ -796,7 +799,7 @@ Three opt-ins, each deliberate:
 
    ```tsx
    // index.js
-   import { registerBackgroundPresence } from '@myazahq/kyc-sdk-react-native';
+   import { registerBackgroundPresence } from '@toden/react-native';
    registerBackgroundPresence();
 
    // later, after the KYC flow stored a pin:
@@ -881,7 +884,7 @@ notification. Word the notification honestly — it is on screen for days.
 Permissions get revoked in Settings and nothing tells the app. Ask:
 
 ```tsx
-import { presenceStatus, openLocationSettings } from '@myazahq/kyc-sdk-react-native';
+import { presenceStatus, openLocationSettings } from '@toden/react-native';
 
 const status = await presenceStatus('user_42');
 // status.tier: 'background' | 'foreground' | 'none'
@@ -918,7 +921,7 @@ const { status, progress, tier } = await res.json();
 The SDK wraps that read:
 
 ```ts
-import { fetchPresenceWatchStatus } from '@myazahq/kyc-sdk-react-native';
+import { fetchPresenceWatchStatus } from '@toden/react-native';
 
 const check = await fetchPresenceWatchStatus({ apiKey: 'pk_live_…', externalUserId });
 if (check === null) {

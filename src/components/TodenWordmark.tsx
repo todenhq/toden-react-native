@@ -47,3 +47,26 @@ export function TodenWordmark({
     </Svg>
   );
 }
+
+/**
+ * Toden's split shield alone, without the lettering: the consent screen's
+ * emblem (screens/consent/ConsentEmblem.tsx). Same path data and colours as
+ * the wordmark's shield, so the two read as one mark.
+ */
+export function TodenMark({
+  size,
+  ink,
+  accent = TODEN_ACCENT,
+}: {
+  size: number;
+  ink: string;
+  accent?: string;
+}): React.ReactElement {
+  return (
+    <Svg viewBox="12 10 76 82" width={size} height={size} accessible={false}>
+      <Rect x="15" y="12" width="70" height="13" rx="6.5" fill={ink} />
+      <Path d="M35 35H47.5V90C39 83 30 74 30 58V40A5 5 0 0 1 35 35Z" fill={ink} />
+      <Path d="M52.5 35H65A5 5 0 0 1 70 40V58C70 74 61 83 52.5 90Z" fill={accent} />
+    </Svg>
+  );
+}

@@ -25,6 +25,10 @@ final class HybridMyazaDeviceIntel: HybridMyazaDeviceIntelSpec {
     MyazaDeviceKeychain.stableId()
   }
 
+  func declaresMicrophone() throws -> Bool {
+    Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription") != nil
+  }
+
   func integritySignals() throws -> Promise<[String]> {
     // Off the JS thread: the image walk and the loopback probe are cheap but
     // not free, and nothing here needs the main queue.

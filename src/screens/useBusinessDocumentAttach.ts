@@ -1,17 +1,22 @@
-import { useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 
 import type { ResolvedBusinessDocumentType } from '../config/businessSteps';
 import { isAcceptedPoaMimeType, POA_ACCEPTED_MIME_TYPES } from '../config/proofOfAddress';
-import { uploadSizeError } from '../config/uploadLimits';
+import { isPdfMime, uploadSizeError } from '../config/uploadLimits';
 import { loadDocumentPicker } from '../services/documentPicker';
+import { documentPhotoPreparers } from '../services/mediaCompress';
+import { asJpegName, preparePickedPhoto, type PickedPhoto } from '../services/pickedPhoto';
+import type { CapturedPhoto } from '../components/viewfinder/photoMode';
 
 // ---------------------------------------------------------------------------
 // Getting a company document off the device — the business-documents step's
 // twin of usePoaAttach (extracted from BusinessDocumentsStep, 200-line rule).
-// Three sources, one shape handed to the step's uploader. Every pick is judged
-// against the shared upload caps BEFORE anything is compressed or sent, so
-// the refusal names the file that was chosen (images 5 MB, PDFs 15 MB).
+// Three sources, one shape handed to the step's uploader. A photo is resized
+// and re-encoded FIRST and the shared caps are judged on what is sent (a
+// camera still is often over 5 MB as taken; see services/pickedPhoto). A PDF
+// is judged as chosen (images 5 MB, PDFs 15 MB). The uploader gets the
+// prepared file and must not re-encode it.
 // ---------------------------------------------------------------------------
 
 /**
@@ -30,6 +35,8 @@ export type AttachBusinessDocument<S extends AttachableSlot = ResolvedBusinessDo
   uri: string,
   mimeType: string | undefined,
   name: string,
+  /** Size in bytes, when the picker reports it. */
+  size?: number,
 ) => Promise<void>;
 
 type Pick<S extends AttachableSlot> = (slot: S) => Promise<void>;
@@ -37,7 +44,18 @@ type Pick<S extends AttachableSlot> = (slot: S) => Promise<void>;
 export function useBusinessDocumentAttach<S extends AttachableSlot = ResolvedBusinessDocumentType>(
   attach: AttachBusinessDocument<S>,
   setError: (message: string) => void,
-): { takePhoto: Pick<S>; choosePhoto: Pick<S>; chooseFile: Pick<S> } {
+  /** The slot whose photo is being shrunk (null when done), so the card can
+   *  show it is busy: a 48 MP still takes a moment. */
+  onPreparing?: (slot: S | null) => void,
+): {
+  takePhoto: Pick<S>;
+  choosePhoto: Pick<S>;
+  chooseFile: Pick<S>;
+  /** The slot the SDK's camera was last opened for, or null. */
+  cameraSlot: S | null;
+  /** Spread onto the step's PhotoCamera (its title is the slot's label). */
+  photoCamera: { open: boolean; onDismiss: () => void; onPhoto: (photo: CapturedPhoto) => void };
+} {
   const tooLarge = useCallback(
     (mime: string | undefined, size: number | undefined): boolean => {
       const message = uploadSizeError(mime, size);
@@ -47,31 +65,48 @@ export function useBusinessDocumentAttach<S extends AttachableSlot = ResolvedBus
     [setError],
   );
 
-  const takePhoto = useCallback<Pick<S>>(
-    async (slot) => {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        setError('Camera access is needed to photograph the document.');
-        return;
-      }
-      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
-      const asset = result.canceled ? undefined : result.assets[0];
-      if (!asset || tooLarge(asset.mimeType, asset.fileSize)) return;
-      // A FRIENDLY name, not the picker's temp junk — camera/library assets
-      // carry generated names; the slot key says what the file IS.
-      await attach(slot, asset.uri, asset.mimeType ?? 'image/jpeg', `${slot.key}.jpg`);
+  // Shrink a photo, then judge it. The slot key names it: camera and library
+  // assets carry generated names, the slot key says what the file IS.
+  const attachPhoto = useCallback(
+    async (slot: S, photo: PickedPhoto, name: string): Promise<void> => {
+      onPreparing?.(slot);
+      const prepared = await preparePickedPhoto(photo, documentPhotoPreparers).finally(() =>
+        onPreparing?.(null),
+      );
+      if (tooLarge(prepared.mimeType, prepared.size)) return;
+      await attach(slot, prepared.uri, prepared.mimeType, name, prepared.size);
     },
-    [attach, setError, tooLarge],
+    [attach, onPreparing, tooLarge],
+  );
+
+  // The SDK's own camera (PhotoCamera), rendered by the step for this slot; it
+  // owns the permission ask. The slot outlives `open`, so the title holds while
+  // the camera fades and the photo still finds its slot after it has started
+  // to close.
+  const [cameraSlot, setCameraSlot] = useState<S | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const cameraSlotRef = useRef<S | null>(null);
+  const takePhoto = useCallback<Pick<S>>(async (slot) => {
+    cameraSlotRef.current = slot;
+    setCameraSlot(slot);
+    setCameraOpen(true);
+  }, []);
+  const dismissCamera = useCallback(() => setCameraOpen(false), []);
+  const cameraPhoto = useCallback(
+    (photo: CapturedPhoto) => {
+      const slot = cameraSlotRef.current;
+      if (slot) void attachPhoto(slot, photo, `${slot.key}.jpg`);
+    },
+    [attachPhoto],
   );
 
   const choosePhoto = useCallback<Pick<S>>(
     async (slot) => {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
       const asset = result.canceled ? undefined : result.assets[0];
-      if (!asset || tooLarge(asset.mimeType, asset.fileSize)) return;
-      await attach(slot, asset.uri, asset.mimeType ?? 'image/jpeg', `${slot.key}.jpg`);
+      if (asset) await attachPhoto(slot, asset, `${slot.key}.jpg`);
     },
-    [attach, tooLarge],
+    [attachPhoto],
   );
 
   const chooseFile = useCallback<Pick<S>>(
@@ -94,11 +129,23 @@ export function useBusinessDocumentAttach<S extends AttachableSlot = ResolvedBus
         setError('Please choose a PDF, JPG or PNG file.');
         return;
       }
+      // An image from Files is shrunk like any photo; a PDF goes as chosen.
+      if (!isPdfMime(asset.mimeType)) {
+        const photo = { uri: asset.uri, mimeType: asset.mimeType, fileSize: asset.size };
+        await attachPhoto(slot, photo, asJpegName(asset.name ?? slot.key));
+        return;
+      }
       if (tooLarge(asset.mimeType, asset.size)) return;
-      await attach(slot, asset.uri, asset.mimeType, asset.name ?? slot.key);
+      await attach(slot, asset.uri, asset.mimeType, asset.name ?? slot.key, asset.size);
     },
-    [attach, setError, tooLarge],
+    [attach, attachPhoto, setError, tooLarge],
   );
 
-  return { takePhoto, choosePhoto, chooseFile };
+  return {
+    takePhoto,
+    choosePhoto,
+    chooseFile,
+    cameraSlot,
+    photoCamera: { open: cameraOpen, onDismiss: dismissCamera, onPhoto: cameraPhoto },
+  };
 }

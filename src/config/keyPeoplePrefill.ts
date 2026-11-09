@@ -53,7 +53,7 @@ export function roleFromDesignation(designation: string | null): KeyPersonRole {
  * other lacks is a different person; one side holding extras is the fuller
  * spelling. Mirrors the server's namesLikelySame.
  */
-function samePerson(a: string, b: string): boolean {
+export function samePerson(a: string, b: string): boolean {
   const words = (s: string) =>
     new Set(
       s

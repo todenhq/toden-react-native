@@ -155,7 +155,7 @@ export interface LivenessFaceData {
   faceSizeRatio: number;
   /** # faces in frame. `> 1` pauses challenges. Defaults to 1 for older plugins. */
   faceCount: number;
-  /** Mean frame luma (0–255). Feeds the low-light gate (<62 dark, >200 bright). */
+  /** Mean frame luma (0–255). Decides the low-light gate only with no face in view (liveness/light-level.ts). */
   brightness: number;
   /**
    * Face centre in normalised frame coordinates (0–1), when the detector

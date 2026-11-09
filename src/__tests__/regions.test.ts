@@ -141,16 +141,18 @@ describe('every picker offers the geo row', () => {
     expect(read('screens/CompanyInfoFields.tsx')).toMatch(/geoCountry=\{geoCountry\}/);
   });
 
-  it('the address-scope country control pins it on top of a region-grouped sheet', () => {
+  it('the PoA country control pins it on top of a region-grouped sheet', () => {
     // The sheet, not a line under the field: "Your location looks like X. Use
     // it" was removed (user decision 2026-09-06) in favour of the same pinned
-    // row the country-select step and the phone field carry.
+    // row the country-select step and the phone field carry. Since 2026-11-07
+    // the control is the shared summary row, whose sheet also pins the
+    // current answer as "Selected".
     const control = read('screens/AddressCountryControl.tsx');
     expect(control).toMatch(/geoCountry=\{inferredCountry\(geo\)\}/);
-    expect(control).toMatch(/\n\s+grouped\n/);
     expect(control).not.toMatch(/looks like/);
-    const field = read('components/CountryField.tsx');
-    expect(field).toMatch(/pinned=\{geoCountry\}/);
-    expect(field).toMatch(/grouped=\{grouped\}/);
+    const row = read('components/CountrySummarySelect.tsx');
+    expect(row).toMatch(/pinned=\{geo\}/);
+    expect(row).toMatch(/\n\s+grouped\n/);
+    expect(row).toMatch(/selectedTag=\{copy\.selected\}/);
   });
 });

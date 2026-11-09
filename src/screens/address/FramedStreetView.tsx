@@ -15,6 +15,7 @@ import {
 } from '../../lib/map-frame';
 import { captureStreetViewFrame, type StreetViewFrame } from '../../lib/street-view-fov';
 import { mapSurfaceHeight, type LatLng } from '../../lib/map-tiles';
+import { useFillHeight } from '../../components/useFillHeight';
 import { StreetViewChrome, streetViewFrameRect } from './StreetViewChrome';
 import { Spinner } from '../../components/Spinner';
 
@@ -51,7 +52,10 @@ export function FramedStreetView({
   const WebView = useMemo(loadWebView, []);
   const { colors, mode } = useTheme();
   const t = useText();
-  const height = mapSurfaceHeight(useWindowDimensions());
+  // The panorama takes the body's spare height (components/useFillHeight.ts);
+  // the frame maths and the chrome use the height it is actually drawn at.
+  const fill = useFillHeight(mapSurfaceHeight(useWindowDimensions()));
+  const height = fill.height;
   const [ready, setReady] = useState(false);
   const [viewWidth, setViewWidth] = useState(0);
   const readyRef = useRef(false);
@@ -110,8 +114,11 @@ export function FramedStreetView({
       }
     >
       <View
-        onLayout={(e) => setViewWidth(e.nativeEvent.layout.width)}
-        style={{ height, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.backgroundSecondary }}
+        onLayout={(e) => {
+          setViewWidth(e.nativeEvent.layout.width);
+          fill.onLayout(e);
+        }}
+        style={{ ...fill.style, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.backgroundSecondary }}
       >
         {WebView ? (
           <WebView

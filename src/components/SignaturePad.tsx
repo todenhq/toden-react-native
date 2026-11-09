@@ -259,27 +259,48 @@ export function SignaturePad({
             {expanded ? 'Collapse' : 'Expand'}
           </UiText>
         </Pressable>
+        {/* Clear in the other top corner, and only once there is ink: on a row
+            of its own under the box it took a full button's height from every
+            signature card. Mirrors the web pad. */}
+        {!empty ? (
+          <Pressable
+            onPress={clear}
+            disabled={disabled}
+            accessibilityRole="button"
+            accessibilityLabel={clearLabel}
+            accessibilityState={{ disabled }}
+            hitSlop={10}
+            style={({ pressed }) => ({
+              position: 'absolute',
+              top: 8,
+              left: 8,
+              height: 28,
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 10,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: '#D4D4D4',
+              backgroundColor: pressed ? '#F5F5F5' : 'rgba(255,255,255,0.95)',
+              opacity: disabled ? 0.5 : 1,
+              shadowColor: '#000000',
+              shadowOpacity: 0.05,
+              shadowOffset: { width: 0, height: 1 },
+              shadowRadius: 2,
+              elevation: 1,
+            })}
+          >
+            <Icon name="refresh-ccw" size={12} color="#262626" />
+            <UiText
+              variant="bodySmall"
+              color="#262626"
+              style={{ fontWeight: '600', fontSize: 11, lineHeight: 13, marginLeft: 4 }}
+            >
+              {clearLabel}
+            </UiText>
+          </Pressable>
+        ) : null}
       </Animated.View>
-      <View style={{ alignItems: 'flex-end', marginTop: 8 }}>
-        <Pressable
-          onPress={clear}
-          disabled={disabled || empty}
-          accessibilityRole="button"
-          accessibilityLabel={clearLabel}
-          accessibilityState={{ disabled: disabled || empty }}
-          hitSlop={8}
-          style={({ pressed }) => ({
-            minHeight: 44,
-            justifyContent: 'center',
-            paddingHorizontal: 12,
-            opacity: disabled || empty ? 0.5 : pressed ? 0.7 : 1,
-          })}
-        >
-          <UiText variant="label" color={colors.primary} style={{ fontSize: 12 }}>
-            {clearLabel}
-          </UiText>
-        </Pressable>
-      </View>
     </View>
   );
 }

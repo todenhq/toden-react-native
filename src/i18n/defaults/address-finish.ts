@@ -9,6 +9,8 @@ export const ADDRESS_FINISH_TEXTS: Record<string, string> = {
   'address.entrance.title': 'Show the entrance',
   'address.entrance.description.framing': 'Frame your entrance in the street imagery. No camera needed.',
   'address.entrance.description.photo': 'A picture of the gate or front door makes the address findable.',
+  'address.entrance.description.photo.business':
+    'A photo of the shop front, office entrance or signboard helps show the business trades here.',
   'address.review.title': 'Confirm your address',
   'address.review.title.business': 'Confirm the premises',
   'address.review.description': 'Check everything is right before you continue.',
@@ -38,6 +40,16 @@ export const ADDRESS_FINISH_TEXTS: Record<string, string> = {
   'address.presence.step3.stage': 'Then',
   'address.presence.step3.title': 'Confirmed',
   'address.presence.step3.caption': 'You get a notification. That is it.',
+  // The success card once the "allow all the time" question was answered.
+  'address.presence.off.title': 'One more step to finish',
+  // The "allow all the time" screen (screens/SubmittedBackgroundAsk.tsx).
+  'address.background.title': 'Confirm your address automatically',
+  'address.background.title.business': 'Confirm the premises automatically',
+  'address.background.description': "Allow location all the time and your phone checks in on its own while you're at home.",
+  'address.background.description.business':
+    "Allow location all the time and your phone checks in on its own while you're at the premises.",
+  'address.background.allow': 'Continue with automatic checks',
+  'address.background.later': 'Not now',
 };
 
 export const ADDRESS_FINISH_NOT_SHOWN: Record<string, string> = {};

@@ -40,6 +40,26 @@ describe('restoreAttemptProgress', () => {
     expect(s.questionnaireAnswers['source_of_funds']).toBe('salary');
   });
 
+  it('restores business documents, an older upload without its group kept by type', () => {
+    const store = makeStore();
+    restoreAttemptProgress(store, {
+      step: 'business-documents',
+      data: {
+        businessApplication: {
+          documents: [
+            { type: 'memart', mediaId: 'med_old', fileName: 'memart.pdf' },
+            { type: 'incorporation_certificate', group: 'legal_presence', mediaId: 'med_new', fileName: 'cert.jpg' },
+            { mediaId: 'med_broken' },
+          ],
+        },
+      },
+    });
+    expect(store.getState().businessApplication.documents).toEqual([
+      { type: 'memart', mediaId: 'med_old', fileName: 'memart.pdf' },
+      { type: 'incorporation_certificate', group: 'legal_presence', mediaId: 'med_new', fileName: 'cert.jpg' },
+    ]);
+  });
+
   it('normalizes key-people rows saved before the sectioned redesign', () => {
     const store = makeStore();
     restoreAttemptProgress(store, {

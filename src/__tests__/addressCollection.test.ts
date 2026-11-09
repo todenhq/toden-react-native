@@ -67,19 +67,19 @@ describe('step presence', () => {
     expect(order.indexOf('address-review')).toBe(order.indexOf('address-collection') + 1);
   });
 
-  it('joins the KYB flow as the premises step, after business details', () => {
+  it('joins the KYB flow as the premises steps, after business details', () => {
     const order = buildStepOrder({
       ...BASE,
       isBusiness: true,
       hasAddressCollection: true,
     });
     const details = order.indexOf('business-details');
-    expect(order.indexOf('address-collection')).toBe(details + 1);
-    // KYB collapses to that single step: the premises pin and its directions
-    // ARE the capture, and the business flow has its own section rhythm.
-    expect(order).not.toContain('address-search');
-    expect(order).not.toContain('address-entrance');
-    expect(order).not.toContain('address-review');
+    // A premises runs the same steps as a person's address (2026-10-18).
+    expect(order.slice(details + 1, details + 4)).toEqual([
+      'address-collection',
+      'address-entrance',
+      'address-review',
+    ]);
   });
 
   it('is a workflow-controllable key', () => {
@@ -113,6 +113,7 @@ describe('wire payload', () => {
         deviceLat: 6.4283,
         deviceLng: 3.4217,
         deviceAccuracy: 20,
+        deviceMocked: true,
         capturedAt: '2026-08-25T00:00:00.000Z',
       }),
     ).toEqual({
@@ -125,6 +126,7 @@ describe('wire payload', () => {
       deviceLat: 6.4283,
       deviceLng: 3.4217,
       deviceAccuracy: 20,
+      deviceMocked: true,
       capturedAt: '2026-08-25T00:00:00.000Z',
     });
   });

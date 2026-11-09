@@ -1,4 +1,4 @@
-# Consumer R8 / ProGuard rules for @myazahq/kyc-sdk-react-native.
+# Consumer R8 / ProGuard rules for @toden/react-native.
 #
 # Merged into the host app's shrinker configuration automatically through
 # `consumerProguardFiles`, so an integrator who enables R8 (`minifyEnabled true`,

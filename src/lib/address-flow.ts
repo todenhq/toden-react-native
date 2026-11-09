@@ -52,6 +52,7 @@ export function addressFlowSteps(o: AddressFlowOptions): VerificationStep[] {
 }
 
 const ADDRESS_STEPS: ReadonlySet<VerificationStep> = new Set<VerificationStep>([
+  'address-book',
   'address-search',
   'address-collection',
   'address-entrance',
@@ -61,6 +62,14 @@ const ADDRESS_STEPS: ReadonlySet<VerificationStep> = new Set<VerificationStep>([
 /** Whether `step` belongs to the address flow. */
 export function isAddressStep(step: VerificationStep): boolean {
   return ADDRESS_STEPS.has(step);
+}
+
+/**
+ * The first step that CAPTURES the address (the presence primer's home). The
+ * address book step is only the confirmation of a picked saved address.
+ */
+export function firstAddressCaptureStep(steps: readonly VerificationStep[]): VerificationStep | undefined {
+  return steps.find((s) => isAddressStep(s) && s !== 'address-book');
 }
 
 export function nextAddressStep(steps: VerificationStep[], current: VerificationStep): VerificationStep | null {

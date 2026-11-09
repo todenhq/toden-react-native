@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { View } from 'react-native';
 
-import { useVerificationStore } from './runtime';
+import { useVerificationConfig, useVerificationStore } from './runtime';
 import type { VerificationStep } from '../types/config';
 import { ConsentStep } from '../screens/ConsentStep';
 import { IdTypeStep } from '../screens/IdTypeStep';
@@ -14,6 +14,8 @@ import { ContactVerificationStep } from '../screens/ContactVerificationStep';
 import { SupportingDocumentsStep } from '../screens/SupportingDocumentsStep';
 import { ProofOfAddressStep } from '../screens/ProofOfAddressStep';
 import {
+  AddressBookStep,
+  SavedAddressSheet,
   AddressEntranceStep,
   AddressPinStep,
   AddressReviewStep,
@@ -27,6 +29,8 @@ import { ApplicantRoleStep } from '../screens/ApplicantRoleStep';
 import { NfcStep } from '../screens/NfcStep';
 import { MultiIdProgress } from './MultiIdProgress';
 import { useMultiIdPlan } from '../lib/use-multi-id-plan';
+import { countryOnIdStep } from '../lib/id-selection-layout';
+import { FlowCloseContext } from './flowClose';
 
 // ---------------------------------------------------------------------------
 // The step router — which screen a step renders.
@@ -48,15 +52,21 @@ const MULTI_ID_STEPS: readonly VerificationStep[] = [
 /** Wraps a step's screen with the multi-ID position strip when a run is active. */
 export function StepView({ step, onClose }: { step: VerificationStep; onClose: () => void }): React.ReactElement {
   const plan = useMultiIdPlan();
+  const disableClose = useVerificationConfig().disableClose === true;
+  // A full-screen camera inside a step covers the header's X, so it draws its
+  // own and closes through this (components/flowClose.ts).
+  const screen = (
+    <FlowCloseContext.Provider value={disableClose ? null : onClose}>{stepScreen(step, onClose)}</FlowCloseContext.Provider>
+  );
   if (plan && MULTI_ID_STEPS.includes(step)) {
     return (
       <View style={{ flex: 1 }}>
         <MultiIdProgress plan={plan} />
-        <View style={{ flex: 1 }}>{stepScreen(step, onClose)}</View>
+        <View style={{ flex: 1 }}>{screen}</View>
       </View>
     );
   }
-  return stepScreen(step, onClose);
+  return screen;
 }
 
 function stepScreen(step: VerificationStep, onClose: () => void): React.ReactElement {
@@ -90,16 +100,30 @@ function stepScreen(step: VerificationStep, onClose: () => void): React.ReactEle
     // The address flow, in order: find it, confirm it, show it, commit it.
     // 'address-collection' is the PIN step and keeps that wire name so older
     // session progress restores cleanly.
+    // A picked saved address stands in for the capture steps; the offer of
+    // one is a sheet over whichever of them opens the flow.
+    case 'address-book':
+      return <AddressBookStep />;
     case 'address-search':
-      return <AddressSearchStep />;
+      return (
+        <>
+          <AddressSearchStep />
+          <SavedAddressSheet />
+        </>
+      );
     case 'address-collection':
-      return <AddressPinStep />;
+      return (
+        <>
+          <AddressPinStep />
+          <SavedAddressSheet />
+        </>
+      );
     case 'address-entrance':
       return <AddressEntranceStep />;
     case 'address-review':
       return <AddressReviewStep />;
     case 'country-select':
-      return <CountrySelectStep />;
+      return <CountrySelectRoute />;
     case 'business-details':
       return <BusinessDetailsStep />;
     case 'business-key-people':
@@ -115,6 +139,22 @@ function stepScreen(step: VerificationStep, onClose: () => void): React.ReactEle
     default:
       return <UnimplementedStep step={step} />;
   }
+}
+
+/**
+ * The country step, or on the combined layout (lib/id-selection-layout.ts)
+ * the ID-type step that carries the country. A combined flow reaches
+ * 'country-select' only from older state (a resumed run), so it moves on to
+ * 'id-type', the step the order knows, and shows that meanwhile.
+ */
+function CountrySelectRoute(): React.ReactElement {
+  const config = useVerificationConfig();
+  const store = useVerificationStore();
+  const combined = countryOnIdStep(config);
+  useEffect(() => {
+    if (combined) store.getState().goToStep('id-type');
+  }, [combined, store]);
+  return combined ? <IdTypeStep /> : <CountrySelectStep />;
 }
 
 /**

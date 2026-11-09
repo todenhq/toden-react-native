@@ -8,6 +8,10 @@ import { radius, spacing } from '../config/theme';
 import { useTheme } from './theme-provider';
 import { useText } from '../i18n/useText';
 import type { TextFn } from '../i18n/types';
+import { useVerificationConfig } from './runtime';
+import { UiButton } from './UiButton';
+import { effortWithoutBackground, finishSentence } from '../presence/background-primer';
+import type { BackgroundOutcome } from '../presence/use-background-ask';
 
 // ---------------------------------------------------------------------------
 // The success screen's presence card, drawn as a LIVE PROCESS rather than a
@@ -46,9 +50,26 @@ const milestones = (t: TextFn): readonly Milestone[] => [
   },
 ];
 
-export function PresenceExpectations(): React.ReactElement {
+export function PresenceExpectations({
+  background = null,
+  onTurnOn,
+}: {
+  /** The "allow all the time" answer: `'off'` swaps the header for the work
+   *  still to do and a way to turn checks on; null keeps the usual wording. */
+  background?: BackgroundOutcome;
+  onTurnOn?: () => void;
+}): React.ReactElement {
   const { colors } = useTheme();
   const t = useText();
+  const config = useVerificationConfig();
+  const business = config.subjectType === 'business';
+  const off = background === 'off';
+  const title = off ? t('address.presence.off.title') : t('address.presence.title');
+  const description = off
+    ? finishSentence(effortWithoutBackground(config.addressCollection?.presence, business), business)
+    : background === 'on'
+      ? 'Automatic checks are on. Nothing else for you to do.'
+      : t('address.presence.description');
   return (
     <View
       style={{
@@ -95,11 +116,16 @@ export function PresenceExpectations(): React.ReactElement {
           </UiText>
         </View>
         <UiText variant="bodyMedium" style={{ fontWeight: '600', marginTop: spacing.sm }}>
-          {t('address.presence.title')}
+          {title}
         </UiText>
         <UiText variant="bodySmall" color={colors.textSecondary} style={{ marginTop: 2 }}>
-          {t('address.presence.description')}
+          {description}
         </UiText>
+        {off && onTurnOn ? (
+          <View style={{ marginTop: spacing.sm + 4 }}>
+            <UiButton variant="outline" label={t('address.background.allow')} onPress={onTurnOn} />
+          </View>
+        ) : null}
       </View>
 
       {/* Web's h-8 nodes here, against the primer's h-10. */}

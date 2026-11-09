@@ -2,6 +2,9 @@ import React from 'react';
 import { View } from 'react-native';
 
 import { UiInput } from '../components/UiInput';
+import { UiAlert } from '../components/UiAlert';
+import { BusinessRegionField, type BusinessRegion } from './BusinessRegionField';
+import { BusinessNumberInputs } from './BusinessNumberInputs';
 import { spacing } from '../config/theme';
 import { CompanyInfoFields } from './CompanyInfoFields';
 import { isValidContactEmail } from '../config/contact';
@@ -14,8 +17,8 @@ import type { CompanyInfoField, CompanyInfoMode } from '../types/business';
 // ---------------------------------------------------------------------------
 // The DETAILS screen of the business step: confirming what the register said.
 //
-// Registration number and name are editable here too — this is also where
-// manual entry lands, for the companies no search index carries. Split from
+// Registration number and name stay editable here: the register has answered
+// by now, and this is where its answer is confirmed or corrected. Split from
 // BusinessDetailsStep (200-line rule); field order mirrors the web SDK.
 // ---------------------------------------------------------------------------
 
@@ -31,6 +34,8 @@ export function BusinessDetailsFields({
   modes,
   showCompanyInfo,
   showContactEmail,
+  notice,
+  regions,
   onChange,
 }: {
   business: BusinessState;
@@ -44,6 +49,10 @@ export function BusinessDetailsFields({
   modes: Record<CompanyInfoField, CompanyInfoMode>;
   showCompanyInfo: boolean;
   showContactEmail: boolean;
+  /** Why search by name is not on offer (the server's words), or null. */
+  notice?: string | null;
+  /** Registry regions, when number entry has to ask for one. */
+  regions?: BusinessRegion[];
   onChange: <K extends keyof BusinessState>(key: K, value: BusinessState[K]) => void;
 }): React.ReactElement {
   const t = useText();
@@ -53,36 +62,23 @@ export function BusinessDetailsFields({
     contactEmail.trim() !== '' && !isValidContactEmail(contactEmail.trim());
   return (
     <View>
-      <UiInput
-        label={
-          productDef.inputLabel === 'TIN'
-            ? productDef.inputLabel
-            : t('business.details.registrationNumberLabel')
-        }
-        value={regNumber}
-        onChangeText={(text) => onChange('registrationNumber', text)}
-        placeholder={regHint.placeholder}
-        autoCapitalize="characters"
-        autoCorrect={false}
-        // Live like the web SDK: a wrong CAC prefix is corrected on the spot,
-        // not discovered on Continue. The registry tip fills the same slot
-        // until there is an error to show.
-        error={
-          regNumber !== '' && !numberValid
-            ? (!formatOk && regHint.formatError) ||
-              `Enter a valid ${productDef.inputLabel.toLowerCase()}.`
-            : null
-        }
-        helper={regHint.tip ?? undefined}
-      />
-
-      <View style={{ height: spacing.md }} />
-      <UiInput
-        label={`${t('business.details.nameLabel')}${requireName ? '' : ' (optional)'}`}
-        value={business.registrationName}
-        onChangeText={(text) => onChange('registrationName', text)}
-        placeholder="Enter the registered business name"
-        autoCorrect={false}
+      {notice ? (
+        <View style={{ marginBottom: spacing.md }}>
+          <UiAlert variant="info" message={notice} />
+        </View>
+      ) : null}
+      <BusinessRegionField regions={regions ?? []} region={business.subdivisionCode} />
+      <BusinessNumberInputs
+        productDef={productDef}
+        regHint={regHint}
+        number={regNumber}
+        numberValid={numberValid}
+        formatOk={formatOk}
+        name={business.registrationName}
+        showName
+        requireName={requireName}
+        onNumber={(text) => onChange('registrationNumber', text)}
+        onName={(text) => onChange('registrationName', text)}
       />
 
       {showCompanyInfo ? (

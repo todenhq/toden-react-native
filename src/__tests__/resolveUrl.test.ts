@@ -19,9 +19,9 @@ describe('detectEnvironment', () => {
 
 describe('resolveBaseUrl', () => {
   it('uses the hardcoded sandbox/production URLs and ignores devUrl', () => {
-    expect(resolveBaseUrl('pk_test_abc')).toBe('https://trust.myaza.app');
-    expect(resolveBaseUrl('pk_test_abc', 'http://example.test')).toBe('https://trust.myaza.app');
-    expect(resolveBaseUrl('pk_live_abc')).toBe('https://trust.myaza.app');
+    expect(resolveBaseUrl('pk_test_abc')).toBe('https://sandbox-api.toden.co');
+    expect(resolveBaseUrl('pk_test_abc', 'http://example.test')).toBe('https://sandbox-api.toden.co');
+    expect(resolveBaseUrl('pk_live_abc')).toBe('https://api.toden.co');
   });
 
   it('uses devUrl for development keys, defaulting to localhost', () => {

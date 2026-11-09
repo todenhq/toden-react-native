@@ -2,7 +2,9 @@ import React from 'react';
 import { View } from 'react-native';
 
 import { spacing } from '../config/theme';
-import { useTheme } from '../components/runtime';
+import { useTheme, useVerificationConfig } from '../components/runtime';
+import { isScopedBusiness } from '../lib/scope';
+import { businessKey } from '../i18n/business-variants';
 import { UiText } from '../components/Typography';
 import { UiInput } from '../components/UiInput';
 import { PhoneNumberInput } from '../components/PhoneNumberInput';
@@ -34,10 +36,13 @@ export function ContactDestinationField({
   disabled?: boolean;
 }): React.ReactElement {
   const t = useText();
+  // A scoped business workflow asks for the company's contact details.
+  const config = useVerificationConfig();
+  const scopedBusiness = isScopedBusiness(config);
   if (isEmail) {
     return (
       <UiInput
-        label={t('contact.email.label')}
+        label={t(businessKey('contact.email.label', scopedBusiness))}
         value={email}
         onChangeText={onEmailChange}
         placeholder="you@example.com"
@@ -53,13 +58,15 @@ export function ContactDestinationField({
   return (
     <View>
       <UiText variant="label" style={{ marginBottom: spacing.xs }}>
-        {t('contact.phone.label')}
+        {t(businessKey('contact.phone.label', scopedBusiness))}
       </UiText>
       <PhoneNumberInput
         defaultCountry={defaultCountry}
         geoCountry={geoCountry}
         disabled={disabled}
         autoFocus
+        // The dial-code countries the workflow offers; absent = all.
+        countries={config.phoneVerification?.countries}
         onChange={onPhoneChange}
       />
       {error ? <ErrorLine text={error} /> : null}

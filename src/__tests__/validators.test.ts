@@ -1,6 +1,15 @@
 import { validateIdNumber, maskIdNumber } from '../services/validators';
 
 describe('validateIdNumber', () => {
+  it.each(['phone-number', 'nin-phone'] as const)('accepts every way a Nigerian number is typed for %s', (idType) => {
+    for (const typed of ['08031234567', '+234 803 123 4567', '2348031234567', '803 123 4567']) {
+      expect(validateIdNumber('NG', idType, typed).valid).toBe(true);
+    }
+    expect(validateIdNumber('NG', idType, '0803123456').valid).toBe(false);
+    expect(validateIdNumber('NG', idType, '01234567890').valid).toBe(false);
+    expect(validateIdNumber('NG', idType, '0803ABC4567').valid).toBe(false);
+  });
+
   it('validates Nigerian number-only IDs', () => {
     expect(validateIdNumber('NG', 'bvn', '12345678901').valid).toBe(true);
     expect(validateIdNumber('NG', 'bvn', '123').valid).toBe(false);

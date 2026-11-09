@@ -46,6 +46,13 @@ export interface UiTextProps extends TextProps {
    * a logo is not.
    */
   brandMark?: boolean;
+  /**
+   * Take the copy typeface below 16px too. On the web, text sized off the
+   * scale (`text-[15px]`) inherits the copy face from its surroundings rather
+   * than dropping to the body face; this is that, for the few places that
+   * mirror such text.
+   */
+  copyFace?: boolean;
 }
 
 export function UiText({
@@ -53,6 +60,7 @@ export function UiText({
   color,
   style,
   brandMark = false,
+  copyFace = false,
   ...rest
 }: UiTextProps): React.ReactElement {
   const { colors, fontsLoaded, brandFonts } = useTheme();
@@ -74,7 +82,7 @@ export function UiText({
         flat.fontWeight,
         fontsLoaded,
         brandFonts,
-        typeof flat.fontSize === 'number' && flat.fontSize >= LARGE_COPY_FROM,
+        copyFace || (typeof flat.fontSize === 'number' && flat.fontSize >= LARGE_COPY_FROM),
       );
 
   return (

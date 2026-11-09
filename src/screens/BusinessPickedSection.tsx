@@ -16,24 +16,29 @@ export function BusinessPickedSection({
   name,
   registrationNumber,
   isSandbox,
+  showCard = true,
   onChange,
 }: {
   country: string;
   name: string;
   registrationNumber: string;
   isSandbox: boolean;
+  /** False under typed number entry, where the box already shows the number. */
+  showCard?: boolean;
   onChange: () => void;
 }): React.ReactElement {
   const { colors } = useTheme();
   const t = useText();
   return (
     <>
-      <BusinessPickedCard
-        country={country}
-        name={name}
-        registrationNumber={registrationNumber}
-        onChange={onChange}
-      />
+      {showCard ? (
+        <BusinessPickedCard
+          country={country}
+          name={name}
+          registrationNumber={registrationNumber}
+          onChange={onChange}
+        />
+      ) : null}
       <View style={{ height: spacing.lg }} />
       {/* Says what the button is about to do: Continue runs a real lookup
           against the register, which takes a moment and is charged to the

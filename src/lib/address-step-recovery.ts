@@ -17,8 +17,10 @@ import type { VerificationStep } from '../types/config';
 // redo work they had already finished.
 // ---------------------------------------------------------------------------
 
-/** The address flow's four screens, in the order they are always walked. */
+/** The address flow's screens, in the order they are always walked (the
+ *  address book step leads when the organisation has reuse on). */
 const CANONICAL: readonly VerificationStep[] = [
+  'address-book',
   'address-search',
   'address-collection',
   'address-entrance',

@@ -6,7 +6,7 @@ import { join } from 'path';
 // Some suites here read a SIBLING package: the shared vector files under
 // sdk-flutter/test (one rule written down as data for all three SDKs), and
 // the web or Flutter source a mirror test diffs this SDK against. The public
-// repo (todenhq/kyc-sdk-react-native) carries this package alone, so those
+// repo (todenhq/toden-react-native) carries this package alone, so those
 // files do not exist there, and every such suite failed with ENOENT on the
 // 2.6.0 publish, which refused the release. Outside the monorepo the
 // cross-package suites SKIP: the monorepo's own CI still runs all of them, so

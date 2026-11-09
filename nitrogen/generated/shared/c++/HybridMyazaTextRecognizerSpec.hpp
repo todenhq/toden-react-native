@@ -17,10 +17,13 @@
 namespace margelo::nitro::myazakyc { struct TextResult; }
 // Forward declaration of `HybridFrameSpec` to properly resolve imports.
 namespace margelo::nitro::camera { class HybridFrameSpec; }
+// Forward declaration of `TurnedTextResult` to properly resolve imports.
+namespace margelo::nitro::myazakyc { struct TurnedTextResult; }
 
 #include "TextResult.hpp"
 #include <memory>
 #include <VisionCamera/HybridFrameSpec.hpp>
+#include "TurnedTextResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include <string>
 
@@ -56,6 +59,7 @@ namespace margelo::nitro::myazakyc {
     public:
       // Methods
       virtual TextResult recognizeText(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame, double bottomFraction) = 0;
+      virtual TurnedTextResult recognizeTextTurned(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame, double quarterTurns) = 0;
       virtual std::shared_ptr<Promise<TextResult>> recognizeTextInImage(const std::string& uri, double bottomFraction) = 0;
       virtual bool isModelReady() = 0;
       virtual std::shared_ptr<Promise<bool>> prepareModel() = 0;

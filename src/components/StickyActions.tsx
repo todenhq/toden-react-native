@@ -32,7 +32,9 @@ export function StickyActions({
     <View style={{ flex: 1 }}>
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: spacing.sm }}
+        // flexGrow: a map's box can grow into the body's spare height
+        // (components/useFillHeight.ts); nothing else on these steps grows.
+        contentContainerStyle={{ paddingBottom: spacing.sm, flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"
       >
         {children}

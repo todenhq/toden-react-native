@@ -8,6 +8,7 @@ import type {
   LivenessPhase,
 } from './types';
 import type { FlashResult } from './flashDetector';
+import type { PromptTime } from './promptTimeline';
 import type { TextFn } from '../i18n/types';
 
 // ---------------------------------------------------------------------------
@@ -30,6 +31,8 @@ export const INTEGRITY_FAILED_PATCH = {
 };
 
 import { LivenessSpeaker } from './speech';
+import type { HeldSelfie, SelfieShot } from '../lib/selfie-candidates';
+import type { StillFace } from '../lib/selfie-pick';
 import type { VoiceGuidanceOption } from '../types/config';
 
 export const CHALLENGE_PASSED_MS = 700; // brief "Great!" before the next challenge
@@ -64,8 +67,17 @@ export interface LivenessUiState {
 export interface UseLivenessOptions {
   config?: Partial<LivenessConfig>;
   voiceGuidance?: VoiceGuidanceOption;
-  /** Fires once when all challenges pass and the phase enters `capturing`. */
-  onReadyToCapture?: () => void;
+  /**
+   * Fires once on the final capture, when the shutter should close: `live`
+   * with the frame that qualified (take the still now), or `best` with the
+   * run's best still (lib/selfie-capture-gate.ts).
+   */
+  onReadyToCapture?: (choice: SelfieChoice) => void;
+  /**
+   * A frame of the gestures was the best selfie so far: take a silent still
+   * now and hand it back through `landSelfieShot` (lib/selfie-candidates.ts).
+   */
+  onSelfieShot?: (face: LivenessFaceData, shot: SelfieShot) => void;
   /**
    * Whether the step is actually on screen and the user has started.
    *
@@ -120,6 +132,8 @@ export interface UseLivenessReturn extends LivenessUiState {
    */
   challenges: string[];
   /** The flash verdict, once run — carried into the submission as context. */
+  /** When each gesture prompt appeared and passed, against the recording. */
+  promptTimes: () => PromptTime[] | undefined;
   flashResult: FlashResult | null;
   /** How many face discontinuities the continuity guard saw this session. */
   faceGlitches: number;
@@ -134,7 +148,12 @@ export interface UseLivenessReturn extends LivenessUiState {
   isCompromised: () => boolean;
   /** Surfaces a failure that was detected mid-capture and deliberately held. */
   reportIntegrityFailure: () => void;
+  /** A still asked for by `onSelfieShot` landed (`uri`) or failed (null). */
+  landSelfieShot: (shot: SelfieShot, uri: string | null, face: StillFace | null) => void;
 }
+
+/** What the final capture uses: the live frame now, or the run's best still. */
+export type SelfieChoice = { source: 'live'; face: LivenessFaceData } | { source: 'best'; selfie: HeldSelfie };
 
 /** Position guidance text (spoken + shown), matching the Flutter SDK exactly. */
 export function positionGuidanceText(g: PositionGuidance): string {

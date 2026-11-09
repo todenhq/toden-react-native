@@ -12,6 +12,11 @@ export const ID_TYPES: IdTypesByCountry = {
     { key: 'tax-id',          label: 'Tax ID', inputLabel: 'NIN',      digits: 11,                    requiresDocumentCapture: false },
     { key: 'nin',             label: 'NIN',                            digits: 11,                    requiresDocumentCapture: false },
     { key: 'vnin',            label: 'Virtual NIN (vNIN)',             digits: 16,                    requiresDocumentCapture: false },
+    // Both looked up by a Nigerian mobile number: the phone check, and the NIN
+    // record found by the number. Two IDs, each billed on its own.
+    { key: 'phone-number',    label: 'Phone Number', inputLabel: 'Phone number',                      requiresDocumentCapture: false },
+    { key: 'nin-phone',       label: 'NIN (phone number)', inputLabel: 'Phone number',                requiresDocumentCapture: false },
+    { key: 'nin-slip',        label: 'NIN (Slip)',                                                    requiresDocumentCapture: true, scanSides: 'front_only'     },
     { key: 'passport',        label: 'International Passport',          pattern: /^[A-Z]\d{8}$/,       requiresDocumentCapture: true, scanSides: 'front_only'     },
     { key: 'drivers-license', label: "Driver's License",               pattern: /^[A-Z]{3}\d{5,12}$/, requiresDocumentCapture: true, scanSides: 'front_and_back' },
     { key: 'pvc',             label: "Permanent Voter's Card",         pattern: /^\d{19}$/,           requiresDocumentCapture: true, scanSides: 'front_and_back' },
@@ -102,6 +107,15 @@ export function shortDocumentLabel(idType: string | null, label: string): string
   return idType === 'passport' ? 'Passport' : label;
 }
 
+/** The name written across the sample document in the capture guide. The step's
+ *  own label when it has a real one; "Document" says nothing on a document, so
+ *  that falls back to the ID's key. */
+export function specimenTitle(idType: string | null, label: string): string {
+  const short = shortDocumentLabel(idType, label);
+  if (short && short !== 'Document') return short;
+  return idType ? humanizeIdType(idType) : 'Document';
+}
+
 /** `drivers-license` → `Drivers License`. Last-resort label for an unknown key. */
 export function humanizeIdType(key: string): string {
   return key
@@ -159,12 +173,16 @@ export function resolveIdTypeDefinition(
 
 // Card-guide / crop aspect (width ÷ height) for the live camera. Mirrors the
 // Flutter SDK's documentGuideAspect: ID-1 cards use 1.586; passports use a taller
-// 1.42 so the data page's bottom MRZ band isn't cropped off.
+// 1.42 so the data page's bottom MRZ band isn't cropped off; a NIN slip is
+// longer (paper slips measured 2.00 to 2.32, median 2.07).
 export const CARD_GUIDE_ASPECT = 85.6 / 53.98; // ISO/IEC 7810 ID-1 ≈ 1.586
 export const PASSPORT_GUIDE_ASPECT = 1.42;
+export const NIN_SLIP_GUIDE_ASPECT = 2.07;
 
 export function documentGuideAspect(idType: string | null): number {
-  return idType === 'passport' ? PASSPORT_GUIDE_ASPECT : CARD_GUIDE_ASPECT;
+  if (idType === 'passport') return PASSPORT_GUIDE_ASPECT;
+  if (idType === 'nin-slip') return NIN_SLIP_GUIDE_ASPECT;
+  return CARD_GUIDE_ASPECT;
 }
 
 export const COUNTRY_LABELS: Record<string, string> = {

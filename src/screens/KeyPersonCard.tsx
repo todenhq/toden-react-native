@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, View } from 'react-native';
 
 import { radius, spacing } from '../config/theme';
-import { useTheme } from '../components/runtime';
+import { useTheme, useVerificationConfig } from '../components/runtime';
 import { UiText } from '../components/Typography';
 import { Icon } from '../components/Icon';
 import { CountryFlag } from '../components/CountryFlag';
@@ -13,7 +13,9 @@ import {
   isKeyPersonRowValid,
   type KeyPersonEntry,
 } from '../config/keyPeople';
+import { keyPeopleRequireOwnership, rowMissingStake } from '../config/keyPersonStake';
 import { regionCountryName } from '../config/regions';
+import { DOCUMENT_REMOVED_CARD_NOTE } from '../config/documentPeople';
 import type { KeyPersonRole } from '../types/business';
 
 // ---------------------------------------------------------------------------
@@ -51,11 +53,15 @@ export function KeyPersonCard({
   // missing REQUIRED email gets named specifically: "incomplete" on a row
   // whose name, role and country are all filled reads as a bug.
   const required = emailRequiredFor ?? new Set<KeyPersonRole>();
-  const incomplete = !isKeyPersonRowValid(entry, required);
+  const stakeRequired = keyPeopleRequireOwnership(useVerificationConfig().business);
+  const incomplete = !isKeyPersonRowValid(entry, required, stakeRequired);
+  const named = entry.name.trim().length >= 2;
   const problem =
-    rowNeedsEmail(entry, required) && entry.email.trim() === '' && entry.name.trim().length >= 2
-      ? 'Email required, tap to add'
-      : 'Incomplete, tap to finish';
+    named && rowMissingStake(entry, stakeRequired)
+      ? 'Ownership % required, tap to add'
+      : rowNeedsEmail(entry, required) && entry.email.trim() === '' && named
+        ? 'Email required, tap to add'
+        : 'Incomplete, tap to finish';
 
   const meta = [
     roleLabel ?? KEY_PERSON_ROLE_LABELS[entry.role],
@@ -131,6 +137,14 @@ export function KeyPersonCard({
           <UiText variant="bodySmall" color={colors.textMuted} numberOfLines={1} style={{ marginTop: 1 }}>
             {detail}
           </UiText>
+        ) : null}
+        {entry.documentRemoved ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+            <Icon name="file-text" size={14} color={colors.warning} />
+            <UiText variant="bodySmall" color={colors.textDark} numberOfLines={1} style={{ flex: 1, fontWeight: '500' }}>
+              {DOCUMENT_REMOVED_CARD_NOTE}
+            </UiText>
+          </View>
         ) : null}
       </View>
 

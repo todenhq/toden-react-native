@@ -2,17 +2,20 @@ import { useCallback, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 
 import { isAcceptedPoaMimeType, POA_ACCEPTED_MIME_TYPES } from '../config/proofOfAddress';
-import { uploadSizeError } from '../config/uploadLimits';
+import { isPdfMime, uploadSizeError } from '../config/uploadLimits';
 import { loadDocumentPicker } from '../services/documentPicker';
+import { documentPhotoPreparers } from '../services/mediaCompress';
+import { asJpegName, preparePickedPhoto, type PickedPhoto } from '../services/pickedPhoto';
+import type { CapturedPhoto } from '../components/viewfinder/photoMode';
 
 // ---------------------------------------------------------------------------
 // Getting a proof-of-address document off the device.
 //
-// One drop zone, like the web SDK — tapping it asks WHERE the document is
-// coming from. Photographing a bill on the table and choosing a downloaded PDF
-// are still different pickers, but they're a choice made after the user has
-// committed to uploading, rather than two competing buttons that make the step
-// look like it wants two files.
+// The step offers it as the workflow's `proofOfAddress.capture` says: "Take a
+// photo" opens the SDK's own camera (PhotoCamera, the full-screen document
+// camera without the scan) straight away, and "Upload a file" asks WHERE the
+// file is (the photo library, or the files app when `expo-document-picker` is
+// in the build) in the SDK's own source sheet.
 // ---------------------------------------------------------------------------
 
 /** What the picker handed back, so the screen can preview it. */
@@ -27,6 +30,8 @@ type UploadFn = (pick: PoaPick) => Promise<void>;
 export function usePoaAttach(
   upload: UploadFn,
   setError: (message: string) => void,
+  /** True while a photo is being shrunk, so the step can show it is busy. */
+  onPreparing?: (preparing: boolean) => void,
 ): {
   pick: () => void;
   sheetOpen: boolean;
@@ -34,9 +39,13 @@ export function usePoaAttach(
   choosePhoto: () => Promise<void>;
   takePhoto: () => Promise<void>;
   chooseFile: () => Promise<void>;
+  /** Spread onto the step's PhotoCamera. */
+  photoCamera: { open: boolean; onDismiss: () => void; onPhoto: (photo: CapturedPhoto) => void };
 } {
-  // Judged against the shared caps BEFORE anything is compressed or sent, so
-  // the refusal names the file that was chosen (images 5 MB, PDFs 15 MB).
+  // A PDF is judged against the shared caps as chosen (15 MB). A photo is
+  // resized and re-encoded FIRST and judged on what is sent (5 MB): a camera
+  // still is often over 5 MB as taken (see services/pickedPhoto). The
+  // uploader gets the prepared photo and must not re-encode it.
   const tooLarge = useCallback(
     (mime: string | undefined, size: number | undefined): boolean => {
       const message = uploadSizeError(mime, size);
@@ -46,22 +55,30 @@ export function usePoaAttach(
     [setError],
   );
 
-  const takePhoto = useCallback(async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      setError('Camera access is needed to photograph the document.');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
-    const asset = result.canceled ? undefined : result.assets[0];
-    if (!asset) return;
-    if (tooLarge(asset.mimeType, asset.fileSize)) return;
-    await upload({
-      uri: asset.uri,
-      mimeType: asset.mimeType ?? 'image/jpeg',
-      name: asset.fileName ?? 'proof-of-address.jpg',
-    });
-  }, [setError, tooLarge, upload]);
+  const uploadPhoto = useCallback(
+    async (photo: PickedPhoto, name: string): Promise<void> => {
+      onPreparing?.(true);
+      const prepared = await preparePickedPhoto(photo, documentPhotoPreparers).finally(() =>
+        onPreparing?.(false),
+      );
+      if (tooLarge(prepared.mimeType, prepared.size)) return;
+      await upload({
+        uri: prepared.uri,
+        mimeType: prepared.mimeType,
+        name: asJpegName(name),
+      });
+    },
+    [onPreparing, tooLarge, upload],
+  );
+
+  // The SDK's own camera, rendered by the step; it owns the permission ask.
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const takePhoto = useCallback(async () => setCameraOpen(true), []);
+  const dismissCamera = useCallback(() => setCameraOpen(false), []);
+  const cameraPhoto = useCallback(
+    (photo: CapturedPhoto) => void uploadPhoto(photo, 'proof-of-address.jpg'),
+    [uploadPhoto],
+  );
 
   const choosePhoto = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -69,14 +86,8 @@ export function usePoaAttach(
       quality: 1,
     });
     const asset = result.canceled ? undefined : result.assets[0];
-    if (!asset) return;
-    if (tooLarge(asset.mimeType, asset.fileSize)) return;
-    await upload({
-      uri: asset.uri,
-      mimeType: asset.mimeType ?? 'image/jpeg',
-      name: asset.fileName ?? 'proof-of-address.jpg',
-    });
-  }, [tooLarge, upload]);
+    if (asset) await uploadPhoto(asset, asset.fileName ?? 'proof-of-address.jpg');
+  }, [uploadPhoto]);
 
   const chooseFile = useCallback(async () => {
     const picker = loadDocumentPicker();
@@ -97,13 +108,19 @@ export function usePoaAttach(
       setError('Please choose a PDF, JPG or PNG file.');
       return;
     }
+    // An image from Files is shrunk like any photo; a PDF goes as chosen.
+    if (!isPdfMime(asset.mimeType)) {
+      const photo = { uri: asset.uri, mimeType: asset.mimeType, fileSize: asset.size };
+      await uploadPhoto(photo, asset.name ?? 'proof-of-address.jpg');
+      return;
+    }
     if (tooLarge(asset.mimeType, asset.size)) return;
     await upload({
       uri: asset.uri,
       mimeType: asset.mimeType,
       name: asset.name ?? 'proof-of-address',
     });
-  }, [setError, tooLarge, upload]);
+  }, [setError, tooLarge, upload, uploadPhoto]);
 
   // The "where is it?" question is the SDK's own sheet now, not
   // ActionSheetIOS / Alert — both were stock OS dialogs dropped into the
@@ -114,5 +131,13 @@ export function usePoaAttach(
   const pick = useCallback(() => setSheetOpen(true), []);
   const closeSheet = useCallback(() => setSheetOpen(false), []);
 
-  return { pick, sheetOpen, closeSheet, choosePhoto, takePhoto, chooseFile };
+  return {
+    pick,
+    sheetOpen,
+    closeSheet,
+    choosePhoto,
+    takePhoto,
+    chooseFile,
+    photoCamera: { open: cameraOpen, onDismiss: dismissCamera, onPhoto: cameraPhoto },
+  };
 }

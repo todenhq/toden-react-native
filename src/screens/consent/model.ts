@@ -1,4 +1,5 @@
-import { configScope, isFaceScope } from '../../lib/scope';
+import { configScope, isFaceScope, isScopedBusiness } from '../../lib/scope';
+import { businessKey } from '../../i18n/business-variants';
 import type { VerificationConfig } from '../../types/config';
 import type { IconName } from '../../components/Icon';
 import { fillTokens } from '../../utils/tokens';
@@ -6,11 +7,16 @@ import { defaultText } from '../../i18n/translate';
 import type { TextFn } from '../../i18n/types';
 import {
   ADDRESS_PIN_BULLETS,
+  BUSINESS_SCOPE_DESCRIPTION_KEYS,
+  BUSINESS_SCOPE_TITLE_KEYS,
   CONTACT_BULLET_KEYS,
   DEFAULT_BUSINESS_DESCRIPTION,
   SCOPE_BULLETS,
   SCOPE_DESCRIPTIONS,
   SCOPE_TITLES,
+  STEP_SECONDS,
+  consentMinutes,
+  consentTimeSentence,
   type Bullet,
 } from './copy';
 import { hasEmailVerificationStep, hasPhoneVerificationStep } from '../../config/contact';
@@ -42,9 +48,13 @@ import {
 export interface ConsentProcessStep {
   icon: IconName;
   label: string;
+  /** About how long the step takes a person, for the screen's time estimate. */
+  seconds: number;
 }
 
 export interface ConsentModel {
+  /** The KYB application flow, or a scoped business workflow: either way the
+   *  legal notice names business data. */
   isBusiness: boolean;
   title: string;
   description: string;
@@ -61,9 +71,16 @@ export interface ConsentModel {
  * customisable, as on web, but the older `consent.*` fields still win there.
  */
 export function buildConsentModel(config: VerificationConfig, t: TextFn = defaultText): ConsentModel {
-  const bullet = (b: Bullet): ConsentProcessStep => ({ icon: b.icon, label: t(b.key) });
-  const isBusiness = config.subjectType === 'business';
-  const scope = isBusiness ? null : configScope(config);
+  // The scope is read FIRST, whoever the workflow is about: a scoped business
+  // workflow runs its scope's own steps, never the KYB application.
+  const scope = configScope(config);
+  const isBusiness = !scope && config.subjectType === 'business';
+  const scopedBusiness = isScopedBusiness(config);
+  const bullet = (b: Bullet): ConsentProcessStep => ({
+    icon: b.icon,
+    label: t(businessKey(b.key, scopedBusiness)),
+    seconds: STEP_SECONDS[b.key] ?? 30,
+  });
   const faceScope = isFaceScope(scope);
   const firstName = config.userData?.firstName ?? '';
 
@@ -71,15 +88,21 @@ export function buildConsentModel(config: VerificationConfig, t: TextFn = defaul
     ? `Welcome, ${firstName}`
     : isBusiness
       ? 'Business Verification'
-      : SCOPE_TITLES[scope ?? ''];
+      : scopedBusiness
+        ? t(BUSINESS_SCOPE_TITLE_KEYS[scope ?? ''] ?? '')
+        : SCOPE_TITLES[scope ?? ''];
   const title =
     variantTitle === undefined
       ? t('welcome.title', undefined, config.consent?.title)
       : config.consent?.title
         ? fillTokens(config.consent.title, config.userData)
         : variantTitle;
-  const variantDescription = isBusiness ? DEFAULT_BUSINESS_DESCRIPTION : SCOPE_DESCRIPTIONS[scope ?? ''];
-  const description =
+  const variantDescription = isBusiness
+    ? DEFAULT_BUSINESS_DESCRIPTION
+    : scopedBusiness
+      ? t(BUSINESS_SCOPE_DESCRIPTION_KEYS[scope ?? ''] ?? '')
+      : SCOPE_DESCRIPTIONS[scope ?? ''];
+  const calm =
     variantDescription === undefined
       ? t('welcome.description', undefined, config.consent?.description)
       : config.consent?.description
@@ -106,10 +129,7 @@ export function buildConsentModel(config: VerificationConfig, t: TextFn = defaul
             ? ADDRESS_PIN_BULLETS
             : []
           : SCOPE_BULLETS[scope] ?? []
-        : [
-            { icon: 'badge-check', key: 'welcome.process.verifyId' },
-            { icon: 'user', key: 'welcome.process.personalInfo' },
-          ]) as Bullet[]
+        : []) as Bullet[]
   ).map(bullet); // a fresh array: the pushes below never touch the constants
   // On the CONTACT scope the catalogue bullet already says this — appending
   // the generic line showed "confirm your contact details" twice the moment
@@ -123,12 +143,14 @@ export function buildConsentModel(config: VerificationConfig, t: TextFn = defaul
   if (!isBusiness && !scope && config.enableDocumentCapture !== false) {
     steps.push(bullet({ icon: 'scan-line', key: 'welcome.process.captureDocument' }));
   }
+  // The ID is checked once it is in hand: after the scan, before the selfie.
+  if (!isBusiness && !scope) steps.push(bullet({ icon: 'badge-check', key: 'welcome.process.verifyId' }));
   // Chip-capable IDs additionally read the document's NFC chip — listed when
   // the flow enables NFC so the user knows to have the physical document to
   // hand (a non-chip ID simply skips the step). Individual flows only; a KYB
   // config can't carry `nfc`.
   if (!isBusiness && !scope && config.nfc?.enabled) {
-    steps.push({ icon: 'nfc', label: 'Scan your document’s security chip (NFC)' });
+    steps.push({ icon: 'nfc', label: 'Scan your document’s security chip (NFC)', seconds: 30 });
   }
   if (!isBusiness && !scope && config.enableSelfie !== false) {
     steps.push(bullet({ icon: 'scan-face', key: 'welcome.process.selfie' }));
@@ -163,5 +185,10 @@ export function buildConsentModel(config: VerificationConfig, t: TextFn = defaul
     steps.push(bullet({ icon: 'scan-face', key: 'welcome.process.applicant' }));
   }
 
-  return { isBusiness, title, description, steps, capturesFace, recordsVideo };
+  // The calm description, then how long the flow takes, a sentence of its own
+  // (copy.ts consentTimeSentence): the face and contact screens already say.
+  const timed = scope === 'contact' || faceScope ? null : consentTimeSentence(consentMinutes(steps), t);
+  const description = timed ? `${calm} ${timed}` : calm;
+
+  return { isBusiness: isBusiness || scopedBusiness, title, description, steps, capturesFace, recordsVideo };
 }

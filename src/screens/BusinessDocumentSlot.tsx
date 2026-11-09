@@ -2,7 +2,7 @@ import React from 'react';
 import { Image, Pressable, View } from 'react-native';
 
 import { radius, spacing } from '../config/theme';
-import { UPLOAD_HINT } from '../config/uploadLimits';
+import { documentUploadHint } from '../services/documentPicker';
 import { useTheme } from '../components/runtime';
 import { UiText } from '../components/Typography';
 import { Icon } from '../components/Icon';
@@ -189,7 +189,7 @@ export function BusinessDocumentSlot({
           </UiText>
         ) : null}
         <UiText variant="bodySmall" color={colors.textMuted}>
-          {uploading ? 'Uploading…' : UPLOAD_HINT}
+          {uploading ? 'Uploading…' : documentUploadHint()}
         </UiText>
       </View>
     </Pressable>

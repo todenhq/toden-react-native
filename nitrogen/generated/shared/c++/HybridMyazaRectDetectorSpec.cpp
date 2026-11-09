@@ -15,6 +15,7 @@ namespace margelo::nitro::myazakyc {
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridMethod("detectRect", &HybridMyazaRectDetectorSpec::detectRect);
+      prototype.registerHybridMethod("setExpectUpright", &HybridMyazaRectDetectorSpec::setExpectUpright);
     });
   }
 

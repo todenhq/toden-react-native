@@ -24,6 +24,11 @@ export function markRecordingStart(at: number | null): void {
   recordingStartedAt = at;
 }
 
+/** When the recorder went live, or null: what prompt times are measured from too. */
+export function recordingStart(): number | null {
+  return recordingStartedAt;
+}
+
 /**
  * The colour-on times as ms from the start of the recording, or undefined when
  * there is no recording to measure from or a colour never ran. One whole,

@@ -53,6 +53,7 @@ namespace margelo::nitro::myazakyc {
     public:
       // Methods
       virtual std::string stableId() = 0;
+      virtual bool declaresMicrophone() = 0;
       virtual std::shared_ptr<Promise<std::vector<std::string>>> integritySignals() = 0;
       virtual bool appAttestSupported() = 0;
       virtual std::string appAttestKeyId() = 0;

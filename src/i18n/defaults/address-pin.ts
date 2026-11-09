@@ -7,6 +7,7 @@
 export const ADDRESS_PIN_TEXTS: Record<string, string> = {
   // Sheet headers (components/stepHeaderCopy.ts, stepHeaderMeta.tsx).
   'address.search.title': 'Find your address',
+  'address.search.title.business': 'Find the business premises',
   'address.search.description': 'Search it, use your current location, or place a pin on the map.',
   'address.pin.title': 'Is the pin on your building?',
   'address.pin.title.business': 'Is the pin on the premises?',

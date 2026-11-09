@@ -16,12 +16,23 @@ import type { VerificationStep } from '../types/config';
 /** Default display labels per document key (server contract). */
 export const BUSINESS_DOCUMENT_LABELS: Record<BusinessDocumentKey, string> = {
   incorporation_certificate: 'Certificate of incorporation',
-  memart: 'MEMART / articles of association',
+  memart: 'Memorandum and articles / company constitution',
   proof_of_address: 'Proof of business address',
-  tax_document: 'Tax document',
-  regulatory_license: 'Regulatory license',
+  tax_document: 'Tax registration or clearance certificate',
+  regulatory_license: 'Regulatory licence or permit',
   board_resolution: 'Board resolution',
   other: 'Other document',
+  business_registration: 'Business registration certificate',
+  good_standing_certificate: 'Certificate of good standing',
+  registry_extract: 'Official company extract or profile from the registrar',
+  annual_return: 'Latest annual return',
+  register_of_directors: 'Register of directors',
+  shareholder_register: 'Register of shareholders',
+  share_certificate: 'Share certificate',
+  ubo_declaration: 'Beneficial ownership declaration',
+  power_of_attorney: 'Power of attorney',
+  authorization_letter: 'Letter of authorisation',
+  financial_statements: 'Financial statements or audited accounts',
 };
 
 /** Whether the flow collects key people from the applicant. */
@@ -43,6 +54,8 @@ export interface ResolvedBusinessDocumentType {
   key: BusinessDocumentKey;
   label: string;
   required: boolean;
+  /** How recent it must be, in months; null = any date. */
+  maxAgeMonths: number | null;
 }
 
 /**
@@ -60,6 +73,7 @@ export function resolveBusinessDocumentTypes(
         key: 'incorporation_certificate',
         label: BUSINESS_DOCUMENT_LABELS.incorporation_certificate,
         required: true,
+        maxAgeMonths: null,
       },
     ];
   }
@@ -67,6 +81,7 @@ export function resolveBusinessDocumentTypes(
     key: t.key,
     label: t.label ?? BUSINESS_DOCUMENT_LABELS[t.key] ?? t.key,
     required: t.required === true,
+    maxAgeMonths: typeof t.maxAgeMonths === 'number' ? t.maxAgeMonths : null,
   }));
 }
 

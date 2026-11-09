@@ -35,6 +35,10 @@ abstract class HybridMyazaDeviceIntelSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun declaresMicrophone(): Boolean
+  
+  @DoNotStrip
+  @Keep
   abstract fun integritySignals(): Promise<Array<String>>
   
   @DoNotStrip

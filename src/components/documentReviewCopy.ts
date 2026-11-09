@@ -44,3 +44,10 @@ export function documentReviewCopy(
     redoSide: (side) => `Retake ${side.toLowerCase()}`,
   };
 }
+
+/** The loading screen while a scan moves straight on. A loading state, so fixed
+ *  wording, outside the customisable texts. */
+export const DOCUMENT_HANDOVER_COPY = {
+  title: 'Checking your document',
+  description: 'This only takes a moment.',
+};

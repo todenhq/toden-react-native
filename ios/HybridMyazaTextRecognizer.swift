@@ -36,6 +36,38 @@ final class HybridMyazaTextRecognizer: HybridMyazaTextRecognizerSpec {
 
   func prepareModel() throws -> Promise<Bool> { Promise.resolved(withResult: true) }
 
+  // The quarter turn the last turned read used; the next one tries the other.
+  // Only the camera worklet calls in, on one thread.
+  private var lastQuarterTurns: Double = 1
+
+  func recognizeTextTurned(frame: (any HybridFrameSpec), quarterTurns: Double) throws -> TurnedTextResult {
+    // A known direction is kept; otherwise alternate between the two.
+    let turns: Double = quarterTurns == 1 || quarterTurns == 3 ? quarterTurns : (lastQuarterTurns == 3 ? 1 : 3)
+    lastQuarterTurns = turns
+    guard
+      let nativeFrame = frame as? NativeFrame,
+      let sampleBuffer = nativeFrame.sampleBuffer,
+      let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+    else {
+      return TurnedTextResult(lines: [], quarterTurns: turns)
+    }
+    // `.right` is the upright read (see recognizeText); one more clockwise
+    // quarter makes it `.down`, three more make it `.up`.
+    let orientation: CGImagePropertyOrientation = turns == 1 ? .down : .up
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = false
+    request.recognitionLanguages = ["en-US"]
+    let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: orientation, options: [:])
+    do {
+      try handler.perform([request])
+    } catch {
+      return TurnedTextResult(lines: [], quarterTurns: turns)
+    }
+    let ordered = (request.results ?? []).sorted { $0.boundingBox.midY > $1.boundingBox.midY }
+    return TurnedTextResult(lines: ordered.compactMap { $0.topCandidates(1).first?.string }, quarterTurns: turns)
+  }
+
   func recognizeText(frame: any HybridFrameSpec, bottomFraction: Double) throws -> TextResult {
     guard
       let nativeFrame = frame as? NativeFrame,

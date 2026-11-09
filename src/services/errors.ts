@@ -10,6 +10,9 @@
 import { VerificationApiError } from './api';
 import { VerificationError, type VerificationErrorCode } from '../types/verification';
 import { cancelledRefusalOf } from '../lib/session-cancelled';
+import { BUSINESS_DOCUMENT_LABELS } from '../config/businessSteps';
+import { businessDocumentGroupTitle } from '../config/businessDocumentGroups';
+import type { BusinessDocumentKey } from '../types/business';
 
 /** Which operation failed — picks the fallback code for non-HTTP failures. */
 export type ErrorContext = 'upload' | 'verify';
@@ -92,6 +95,19 @@ export function mapToVerificationError(err: unknown, context: ErrorContext): Ver
       const code: VerificationErrorCode = context === 'upload' ? 'upload_failed' : 'network_error';
       return new VerificationError(code, 'A server error occurred. Please try again in a moment.');
     }
+    // The reference names a record of the other type (a business flow naming
+    // a person, or the reverse): a configuration problem, not a retry. Mirrors
+    // the web SDK's CODED_ERRORS.
+    if (err.code === 'entity_type_mismatch') {
+      return new VerificationError('invalid_workflow', 'This verification is set up for a different kind of record. Contact the organisation that sent it.');
+    }
+    // 422 missing_documents: name what is missing rather than passing the
+    // server's message through, which names raw document keys. A server that
+    // asks one document per group names the groups; an older one names each
+    // document. Mirrors the web SDK's lib/errors.ts.
+    if (err.code === 'missing_documents') {
+      return new VerificationError('unknown', missingDocumentsMessage(err.body));
+    }
     // Other 4xx — pass the server message through under the context's code.
     const code: VerificationErrorCode = context === 'upload' ? 'upload_failed' : 'unknown';
     return new VerificationError(code, err.message);
@@ -102,4 +118,16 @@ export function mapToVerificationError(err: unknown, context: ErrorContext): Ver
   }
   const code: VerificationErrorCode = context === 'upload' ? 'upload_failed' : 'unknown';
   return new VerificationError(code, err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+}
+
+function missingDocumentsMessage(body: Record<string, unknown> | undefined): string {
+  const strings = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  const groupLabels = strings(body?.missingGroups).flatMap((key) => businessDocumentGroupTitle(key) ?? []);
+  const labels = groupLabels.length > 0
+    ? groupLabels
+    : strings(body?.missing).map((key) => BUSINESS_DOCUMENT_LABELS[key as BusinessDocumentKey] ?? key);
+  return labels.length > 0
+    ? `Required business documents are missing: ${labels.join(', ')}. Please go back and upload them.`
+    : 'Some required business documents are missing. Please go back and upload them.';
 }

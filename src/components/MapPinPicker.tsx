@@ -8,6 +8,7 @@ import { MapAttribution, MapZoomControls } from './MapChrome';
 import {
   MAX_ZOOM,
   MIN_ZOOM,
+  TILE_HEADERS,
   panCenter,
   visibleTiles,
   type LatLng,
@@ -149,7 +150,7 @@ export function MapPinPicker({
         {tiles.map((tile) => (
           <Image
             key={tile.key}
-            source={{ uri: tile.url }}
+            source={{ uri: tile.url, headers: TILE_HEADERS }}
             style={{ position: 'absolute', left: tile.left, top: tile.top, width: 256, height: 256 }}
           />
         ))}

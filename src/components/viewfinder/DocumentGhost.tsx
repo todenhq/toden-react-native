@@ -1,43 +1,76 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Easing } from 'react-native';
-import Svg, { Rect } from 'react-native-svg';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Animated, Easing, Platform, View } from 'react-native';
+import { SvgXml } from 'react-native-svg';
+
+import { documentSpecimen, specimenKind } from '../../lib/documentSpecimen';
 
 // ---------------------------------------------------------------------------
-// Document ghost.
+// The sample document in the capture guide.
 //
-// A faint outline of the document's LAYOUT inside the capture guide, shown for
-// a few seconds when the camera opens: where the portrait sits, where the
-// printed details run, and — on a passport — the machine-readable band across
-// the bottom.
+// Shown for a few seconds when the camera opens, so the person sees what to hold
+// up and which way round: a passport with PASSPORT written on it and its
+// machine-readable lines inside the frame, a licence with its categories, the
+// back of a card with what the back carries. The commonest passport mistake is
+// cropping those lines off the bottom edge, which auto-capture then refuses.
 //
-// The guide rectangle says WHERE to put the document. It does not say which way
-// round, and the commonest passport mistake is framing the page with the MRZ
-// cropped off the bottom edge — which auto-capture then refuses, because that
-// band is the chip's key and the proof the page is a passport.
-//
-// Placeholder BARS and BLOCKS, never literal drawings: nothing here is meant to
-// be read, only recognised as a shape. A sketched face would be a worse thing
-// to show a user than nothing at all.
-//
-// Ported from the Flutter SDK's DocumentGhost — geometry included, so the two
-// cannot drift.
+// It sits exactly on the guide, under the corners, so the two cannot disagree
+// about where the document goes. The drawing itself is lib/documentSpecimen.ts.
 // ---------------------------------------------------------------------------
 
-/** How long the ghost stays before fading. Long enough to register while the
- *  user is still lifting the document into frame; short enough to be gone
- *  before it can obscure the document itself. */
-const GHOST_MS = 5000;
+/** When it starts to leave if nothing is framed: long enough to read it, find the
+ *  document and bring it up to the camera. */
+const SPECIMEN_MS = 5000;
+/** A document in frame brings that forward, but never before it has been read. */
+const MIN_SPECIMEN_MS = 2000;
+/** Slow on purpose, so it melts away over the camera rather than blinking off
+ *  while the person is still lining their document up with it. */
+const FADE_OUT_MS = 1600;
+/** See-through, so the sample guides the person without hiding the camera:
+ *  they have to see their own document arrive behind it. */
+const SPECIMEN_OPACITY = 0.6;
 
-const LINE = 'rgba(255,255,255,0.30)';
-const FILL = 'rgba(255,255,255,0.12)';
-const BAND = 'rgba(255,255,255,0.35)';
+const SANS = Platform.select({ ios: 'Helvetica Neue', default: 'sans-serif' });
+const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
+
+/** What to draw: the ID in hand, and the side the camera is asking for. */
+export interface DocumentSpecimenSubject {
+  idType: string | null;
+  title: string;
+  country: string | null;
+  side: 'front' | 'back';
+}
+
+/** The drawing of one face of the document, ready for SvgXml. */
+export function useSpecimenXml(
+  subject: DocumentSpecimenSubject,
+  side: 'front' | 'back',
+  aspect: number,
+  accent: string,
+): string {
+  return useMemo(
+    () =>
+      documentSpecimen({
+        kind: specimenKind(subject.idType),
+        title: subject.title,
+        country: subject.country,
+        side,
+        aspect,
+        accent,
+        sans: SANS,
+        mono: MONO,
+      }),
+    [subject.idType, subject.title, subject.country, side, aspect, accent],
+  );
+}
 
 export function DocumentGhost({
   x,
   y,
   width,
   height,
-  showMrzBand,
+  aspect,
+  accent,
+  subject,
   documentFound,
 }: {
   /** The guide rect, in the same coordinates the overlay uses. */
@@ -45,105 +78,90 @@ export function DocumentGhost({
   y: number;
   width: number;
   height: number;
-  /** Passport data pages carry a machine-readable band. */
-  showMrzBand: boolean;
-  /** Hides it early: once a document is framed the guidance has done its job
-   *  and would only sit on top of the thing being captured. */
+  aspect: number;
+  accent: string;
+  subject: DocumentSpecimenSubject;
+  /** Ends it early, after MIN_SPECIMEN_MS: once a document is framed the guidance
+   *  has done its job and would only sit on top of the thing being captured. */
   documentFound: boolean;
 }): React.ReactElement | null {
   const opacity = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
+  // An upright guide (a turned NIN slip) shows the landscape sample turned.
+  const turned = aspect < 1;
+  const xml = useSpecimenXml(subject, subject.side, turned ? 1 / aspect : aspect, accent);
+  const shownAt = useRef(Date.now());
+  const fading = useRef(false);
+
+  // Both ways out share this, and only the first runs: a second start would
+  // restart the fade from wherever the first had got to.
+  const fadeOut = useCallback(() => {
+    if (fading.current) return;
+    fading.current = true;
     Animated.timing(opacity, {
-      toValue: 1,
-      duration: 400,
-      easing: Easing.out(Easing.ease),
+      toValue: 0,
+      duration: FADE_OUT_MS,
+      easing: Easing.inOut(Easing.ease),
       useNativeDriver: true,
     }).start();
-    const t = setTimeout(() => {
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }).start();
-    }, GHOST_MS);
-    return () => clearTimeout(t);
   }, [opacity]);
 
   useEffect(() => {
-    if (!documentFound) return;
-    Animated.timing(opacity, { toValue: 0, duration: 250, useNativeDriver: true }).start();
-  }, [documentFound, opacity]);
+    Animated.timing(opacity, {
+      toValue: SPECIMEN_OPACITY,
+      duration: 300,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+    const t = setTimeout(fadeOut, SPECIMEN_MS);
+    return () => clearTimeout(t);
+  }, [opacity, fadeOut]);
+
+  useEffect(() => {
+    if (!documentFound) return undefined;
+    const wait = Math.max(0, MIN_SPECIMEN_MS - (Date.now() - shownAt.current));
+    const t = setTimeout(fadeOut, wait);
+    return () => clearTimeout(t);
+  }, [documentFound, fadeOut]);
 
   if (width <= 0 || height <= 0) return null;
 
-  // Inset so the layout sits inside the document's edge, not on the guide.
-  const pad = width * 0.07;
-  const pl = x + pad;
-  const pt = y + pad;
-  const pw = width - pad * 2;
-  const ph = height - pad * 2;
-
-  const photoW = pw * 0.24;
-  const photoH = ph * (showMrzBand ? 0.46 : 0.58);
-
-  // Alternating lengths so it reads as printed fields rather than a barcode.
-  const barLeft = pl + photoW + pw * 0.06;
-  const barMax = pl + pw - barLeft;
-  const widths = [1.0, 0.62, 0.85, 0.5];
-  const barH = Math.min(7, Math.max(3, photoH * 0.1));
-
-  const bandH = Math.min(8, Math.max(3, ph * 0.055));
-  const bandTop = pt + ph - bandH * 3.2;
-
   return (
-    <Animated.View pointerEvents="none" style={{ position: 'absolute', inset: 0, opacity }}>
-      <Svg width="100%" height="100%">
-        {/* Portrait block — a block, not a face. The proportion identifies it. */}
-        <Rect x={pl} y={pt} width={photoW} height={photoH} rx={4} fill={FILL} />
-        <Rect
-          x={pl}
-          y={pt}
-          width={photoW}
-          height={photoH}
-          rx={4}
-          fill="none"
-          stroke={LINE}
-          strokeWidth={1.5}
-        />
-
-        {widths.map((w, i) => {
-          const by = pt + photoH * (0.08 + i * 0.26);
-          if (by + barH > pt + photoH) return null;
-          return (
-            <Rect
-              key={i}
-              x={barLeft}
-              y={by}
-              width={barMax * w}
-              height={barH}
-              rx={barH / 2}
-              fill={FILL}
-            />
-          );
-        })}
-
-        {/* The reason the ghost exists: it shows the band belongs INSIDE the
-            frame, which is the edge users most often crop away. */}
-        {showMrzBand
-          ? [0, 1].map((i) => (
-              <Rect
-                key={`b${i}`}
-                x={pl}
-                y={bandTop + i * bandH * 1.9}
-                width={pw * (i === 0 ? 1 : 0.93)}
-                height={bandH}
-                rx={bandH / 2}
-                fill={BAND}
-              />
-            ))
-          : null}
-      </Svg>
+    <Animated.View pointerEvents="none" style={{ position: 'absolute', left: x, top: y, width, height, opacity }}>
+      <SpecimenImage xml={xml} width={width} height={height} turned={turned} />
     </Animated.View>
+  );
+}
+
+/**
+ * The sample drawing in a `width` × `height` box. Turned, the landscape drawing
+ * is laid out sideways and rotated a quarter clockwise, so its top faces the
+ * right of the screen (documentTurn's default direction).
+ */
+export function SpecimenImage({
+  xml,
+  width,
+  height,
+  turned,
+}: {
+  xml: string;
+  width: number;
+  height: number;
+  turned: boolean;
+}): React.ReactElement {
+  if (!turned) return <SvgXml xml={xml} width={width} height={height} preserveAspectRatio="none" />;
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        width: height,
+        height: width,
+        left: (width - height) / 2,
+        top: (height - width) / 2,
+        transform: [{ rotate: '90deg' }],
+      }}
+    >
+      <SvgXml xml={xml} width={height} height={width} preserveAspectRatio="none" />
+    </View>
   );
 }

@@ -30,7 +30,7 @@ export interface RequestedSupportingDocument {
    */
   reads: string[];
   /** How it is provided: uploaded, signed on screen, or either. */
-  capture: 'upload' | 'draw' | 'draw_or_upload';
+  capture: 'upload' | 'draw' | 'draw_or_upload' | 'camera' | 'file';
 }
 
 /** The names on one document's fields: what the applicant is told we read. */
@@ -85,7 +85,13 @@ export function resolveSupportingDocuments(
       required: entry.required === true && inScope,
       reads: documentReads(entry.fields),
       // An unknown mode from a newer workflow degrades to the upload slot.
-      capture: entry.capture === 'draw' || entry.capture === 'draw_or_upload' ? entry.capture : 'upload',
+      capture:
+        entry.capture === 'draw' ||
+        entry.capture === 'draw_or_upload' ||
+        entry.capture === 'camera' ||
+        entry.capture === 'file'
+          ? entry.capture
+          : 'upload',
     });
   }
   return out;

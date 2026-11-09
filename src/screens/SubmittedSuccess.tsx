@@ -8,14 +8,16 @@ import { UiText } from '../components/Typography';
 import { UiButton } from '../components/UiButton';
 import { Icon } from '../components/Icon';
 import { fillTokens } from '../utils/tokens';
-import { configScope } from '../lib/scope';
+import { configScope, isScopedBusiness } from '../lib/scope';
 import { KeepLinksSheet } from './KeepLinksSheet';
 import { KeyPeopleAwaitList, rowsFromServer } from './KeyPeopleAwaitList';
 import { PresenceExpectations } from '../components/PresenceBlocks';
 import { StaggerIn } from '../components/StaggerIn';
 import { KeyPeoplePending } from './KeyPeoplePending';
 import { useAwaitingPeople } from './useAwaitingPeople';
+import { KeyPeopleOwnershipNote } from './KeyPeopleOwnershipNote';
 import { Badge } from './SubmittedBadge';
+import type { BackgroundAsk } from '../presence/use-background-ask';
 
 // The submitted step's success screen (split from SubmittedStep, 200-line
 // rule): the org's success copy, the presence expectations, the KYB key
@@ -34,7 +36,16 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
   contact: "Your contact verification has been submitted. You'll be notified of the result.",
 };
 
-export function SubmittedSuccess({ showDone, onClose }: { showDone: boolean; onClose: () => void }): React.ReactElement {
+export function SubmittedSuccess({
+  showDone,
+  onClose,
+  background,
+}: {
+  showDone: boolean;
+  onClose: () => void;
+  /** The "allow all the time" answer, for the presence card. */
+  background?: Pick<BackgroundAsk, 'outcome' | 'openSettings'>;
+}): React.ReactElement {
   const { colors } = useTheme();
   const config = useVerificationConfig();
   const t = useText();
@@ -43,12 +54,20 @@ export function SubmittedSuccess({ showDone, onClose }: { showDone: boolean; onC
   // the submit-time invites are a first draft the register can contradict
   // (it adds people the applicant never listed, including ones they removed).
   const sessionId = useFlowState((s) => s.sessionId);
-  const settled = useAwaitingPeople(store.getState().api, sessionId, true);
+  const { people: settled, ownershipPending } = useAwaitingPeople(
+    store.getState().api,
+    sessionId,
+    true,
+  );
   const [keepLinksOpen, setKeepLinksOpen] = useState(false);
 
   // The org's `success.*` fields ride as the legacy value, so they still win.
   const legacy = config.success?.description;
-  const scopeDefault = SCOPE_DESCRIPTIONS[configScope(config) ?? ''];
+  const scope = configScope(config) ?? '';
+  // A scoped business workflow names the business in its scope's line.
+  const scopeDefault = isScopedBusiness(config)
+    ? t(`result.success.description.${scope}.business`)
+    : SCOPE_DESCRIPTIONS[scope];
   const title = t('result.success.title', undefined, config.success?.title);
   const description = scopeDefault
     ? (legacy ? fillTokens(legacy, config.userData) : scopeDefault)
@@ -61,8 +80,9 @@ export function SubmittedSuccess({ showDone, onClose }: { showDone: boolean; onC
 
   // People still owing a check when the applicant leaves. The settled list is
   // authoritative once it arrives; before that, minted invites are the signal.
+  // Shareholders still on their way bring links of their own.
   const outstanding = settled
-    ? settled.some((r) => r.status === 'pending' || r.status === 'failed')
+    ? ownershipPending || settled.some((r) => r.status === 'pending' || r.status === 'failed')
     : invitesExpected;
   const sessionUrl = store.getState().sessionUrl;
   // Tapping Done with links still live: offer the web page those links live
@@ -72,7 +92,10 @@ export function SubmittedSuccess({ showDone, onClose }: { showDone: boolean; onC
 
   return (
     <View style={{ flex: 1, justifyContent: 'space-between' }}>
-      <View style={{ alignItems: 'center' }}>
+      {/* space-between only leaves a gap when there is room to spare, and the
+          address card or a long key-people list uses it all up, so the gap above
+          Done is set here. */}
+      <View style={{ alignItems: 'center', marginBottom: spacing.lg }}>
         <View style={{ height: spacing.xl }} />
         {/* Lands in the order Flutter's success view does: badge, title,
             description, then Done (delays 0 / 200 / 320 / 600 ms). */}
@@ -93,8 +116,11 @@ export function SubmittedSuccess({ showDone, onClose }: { showDone: boolean; onC
             {description}
           </UiText>
         </StaggerIn>
-        {config.addressCollection?.presence?.enabled === true && store.getState().address ? (
-          <PresenceExpectations />
+        {/* A reused saved address starts no presence check on this device. */}
+        {config.addressCollection?.presence?.enabled === true &&
+        store.getState().address &&
+        !store.getState().addressBookReuse ? (
+          <PresenceExpectations background={background?.outcome ?? null} onTurnOn={background?.openSettings} />
         ) : null}
         {settled
           ? settled.length > 0
@@ -103,6 +129,9 @@ export function SubmittedSuccess({ showDone, onClose }: { showDone: boolean; onC
           : invitesExpected
             ? <KeyPeoplePending />
             : null}
+        {/* Shareholders a slow register sends late join the list above, with
+            their links, when they arrive. */}
+        {settled && ownershipPending ? <KeyPeopleOwnershipNote where="submitted" /> : null}
       </View>
       {showDone ? (
         <StaggerIn delayMs={600}>

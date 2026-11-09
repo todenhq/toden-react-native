@@ -17,12 +17,15 @@ import type { QuestionnaireAnswers } from '../config/questionnaire';
 import type { ContactChallenge } from '../config/contact';
 import type { QuestionnaireAnswerValue } from '../types/workflow';
 import type { KeyPersonEntry } from '../config/keyPeople';
+import type { DocumentPeopleAction } from '../config/documentPeople';
 import type { ServerConfigState } from './serverConfig';
 import type { CaptureIntegrity, LivenessVideoReport } from '../liveness/integritySignals';
 import type { MrzScan } from '../mrz/parse';
 import type { EmrtdReadResult } from '../emrtd';
 import type { SelfieUploadState } from '../lib/selfie-upload-wait';
 import type { SilentCaptureFrame, SilentCaptureMoment } from '../lib/silentCapture';
+import type { AddressBookReuse, AddressBookSaveChoice } from '../lib/address-book';
+import type { AddressBookFlowState } from './addressBook';
 
 export interface VerificationMediaIds {
   /** Proof-of-address document (image or PDF). */
@@ -88,6 +91,12 @@ export interface BusinessCheckState {
   company: BusinessCompanyRecord | null;
   /** The officers on file — what makes the key-people question a confirmation. */
   officers: RegistryOfficer[];
+  /**
+   * The register has not sent the shareholders yet, so `officers` has no
+   * owners. The server adds them to the application when they arrive; the
+   * key-people step says so (config/ownershipPending.ts).
+   */
+  ownershipPending: boolean;
   /** Which company was checked (normalised), so a changed number re-runs it. */
   checkedNumber: string | null;
   /**
@@ -106,6 +115,7 @@ export const EMPTY_BUSINESS_CHECK: BusinessCheckState = {
   status: 'idle',
   company: null,
   officers: [],
+  ownershipPending: false,
   checkedNumber: null,
   prefilled: [],
 };
@@ -129,6 +139,14 @@ export interface BusinessDocumentUpload {
    */
   previewUri?: string;
   isPdf?: boolean;
+  /**
+   * The group it was uploaded for. The applicant never says which document it
+   * is: the server recognises it, and `type` is the group's first document
+   * until then. Absent on an upload restored from before groups were sent.
+   */
+  group?: string;
+  /** Size in bytes, for the uploaded card (absent on a restored session). */
+  size?: number;
 }
 
 /** The KYB application beyond the registry details. */
@@ -151,6 +169,16 @@ export interface BusinessApplicationState {
    * never a verdict; the registry lookup still says what it says.
    */
   uboUnidentifiable: boolean;
+  /**
+   * The people each uploaded company document names, by mediaId, read as the
+   * document was uploaded (config/documentPeople.ts). The key-people step
+   * merges them in once each (documentPeopleApplied).
+   */
+  documentPeople?: Record<string, RegistryOfficer[]>;
+  /** Documents whose people are already in `keyPeople`: never merged twice. */
+  documentPeopleApplied?: string[];
+  /** Documents still being read for their people. */
+  documentPeopleReading?: string[];
 }
 
 export const EMPTY_BUSINESS_APPLICATION: BusinessApplicationState = {
@@ -258,14 +286,19 @@ export interface AddressState {
    *  /embed/street-view page in a WebView (FramedStreetView), and also
    *  restored from a session begun on a hosted page. */
   streetView?: { panoId: string; heading: number; pitch: number; fov: number };
+  /** "Save this address to my Toden address book" (review step, unticked by
+   *  default). Rides the submission as address.book. Never on restore: the
+   *  choice is asked again on a resumed session. */
+  book?: AddressBookSaveChoice;
   deviceLat?: number;
   deviceLng?: number;
   deviceAccuracy?: number;
+  deviceMocked?: boolean;
   capturedAt?: string;
 }
 
 /** Document-capture sub-phase — drives the sheet header title/description. */
-export type DocumentCapturePhase = 'front' | 'front-preview' | 'back' | 'review';
+export type DocumentCapturePhase = 'checking' | 'front' | 'front-preview' | 'back' | 'review';
 
 /** The mediaIds keys settable via `setMediaId`. */
 export type MediaIdKey = keyof VerificationMediaIds;
@@ -465,14 +498,32 @@ export interface VerificationState {
   poaDocumentType: PoaDocumentType | null;
   /** Its file name, so the uploaded state can name what it has. */
   poaFileName: string | null;
+  /** The country the proof of address is from, picked on that step. Not the
+   *  ID's country (`selectedCountry`): people live outside the country that
+   *  issued their ID. Null until picked; the address scope uses
+   *  `selectedCountry`, its declaration, instead (lib/poa-country-gate.ts). */
+  poaCountry: string | null;
   /** The smart address, when the address-collection step gathered one. */
   address: AddressState | null;
+  /** A saved address picked from the person's Toden address book instead of
+   *  capturing one. Replaces `address` on the submission. Never saved to
+   *  session progress: the grant behind it is a short-lived credential. */
+  addressBookReuse: AddressBookReuse | null;
+  /** The address book step's own progress (store/addressBook.ts): kept here
+   *  so the sheet header can caption it and Back can step within it. */
+  addressBookFlow: AddressBookFlowState;
   /** Local URI of the uploaded entrance photo, so the review step can show it.
    *  A display artefact — never serialised, never restored (a resumed session
    *  holds the mediaId but not the bytes). */
   addressPhotoPreview: string | null;
   /** The presence "how it works" primer was acknowledged this session. */
   addressIntroSeen: boolean;
+  /** The business-documents group open now (screens/business-documents), so
+   *  Back walks the groups before it leaves the step. Null off that step. */
+  businessDocumentGroup: number | null;
+  /** The supporting document open now, so Back walks them before it leaves
+   *  the step, as it does the business-documents groups. Null off that step. */
+  supportingDocumentIndex: number | null;
   /** The entrance step is showing the Street View framer, so the sheet
    *  header says so. Transient: never serialised, never restored. */
   addressEntranceFraming: boolean;
@@ -540,10 +591,18 @@ export interface VerificationState {
   /** Run the paid registry check for the typed company. Never blocks the flow. */
   checkBusiness: () => Promise<BusinessCheckResult>;
   setKeyPeople: (rows: KeyPersonEntry[]) => void;
+  /** The key-people list with documents' people merged in, and every document merged so far. */
+  applyDocumentPeople: (rows: KeyPersonEntry[], applied: string[]) => void;
+  /** A company document's people read started or finished (config/documentPeople.ts). */
+  documentPeopleRead: (action: DocumentPeopleAction) => void;
   /** The UBO-exemption attestation (FATF fallback) — see BusinessApplicationState. */
   setUboUnidentifiable: (checked: boolean) => void;
   setBusinessDocument: (doc: BusinessDocumentUpload) => void;
   removeBusinessDocument: (type: string) => void;
+  /** Replace the whole document list (a group holds one document). */
+  setBusinessDocuments: (docs: BusinessDocumentUpload[]) => void;
+  setBusinessDocumentGroup: (index: number | null) => void;
+  setSupportingDocumentIndex: (index: number | null) => void;
   setSupportingDocument: (doc: {
     type: string;
     mediaId: string;
@@ -560,6 +619,10 @@ export interface VerificationState {
   setMrzScan: (scan: MrzScan) => void;
   setChipData: (data: EmrtdReadResult) => void;
   setProofOfAddress: (mediaId: string, docType: PoaDocumentType, fileName: string) => void;
+  /** The kind picked on the Proof of Address step, before (or without) a file. */
+  setPoaDocumentType: (docType: PoaDocumentType) => void;
+  /** Where the proof of address is from (outside the address scope). */
+  setPoaCountry: (country: string) => void;
   clearProofOfAddress: () => void;
   /** Set / update the smart address (null clears it). */
   setAddress: (address: AddressState | null) => void;
@@ -572,6 +635,16 @@ export interface VerificationState {
   markAddressIntroSeen: () => void;
   /** The entrance step is (or stops) showing the Street View framer. */
   setAddressEntranceFraming: (framing: boolean) => void;
+  /** The review step's "save to my Toden address book" choice. */
+  setAddressBookSave: (choice: AddressBookSaveChoice) => void;
+  /** Keep (or, with null, drop) a picked saved address. */
+  setAddressBookReuse: (reuse: AddressBookReuse | null) => void;
+  /** Update the address book step's own progress. */
+  patchAddressBookFlow: (patch: Partial<AddressBookFlowState>) => void;
+  /** Back to the address book step's start: a new email, or entering instead. */
+  restartAddressBook: () => void;
+  /** The server refused the picked saved address: ask again on its step. */
+  addressBookReuseRefused: () => void;
   /** Drop the pin, its uploaded photo and that photo's preview together — a
    *  half-cleared address would show an entrance for a building nobody
    *  pinned. */

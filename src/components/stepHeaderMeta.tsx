@@ -1,8 +1,10 @@
 import { ID_TYPES, getScanSides } from '../config/idTypes';
 import { poaDocumentTypes, poaMaxAgeDays, poaNamePolicy } from '../config/proofOfAddress';
+import { poaKindDays } from '../lib/poa-subtypes';
 import { documentCaptureMethods } from '../config/documentCaptureMethods';
 import { contactCodeLength, contactMeta, type ContactChallenge } from '../config/contact';
-import { addressStepMeta } from '../screens/address';
+import { isScopedBusiness } from '../lib/scope';
+import { addressBookMeta, addressStepMeta } from '../screens/address';
 import { resolveSupportingDocuments, verifiedIdsFor } from '../config/supportingDocuments';
 import {
   applicantRoleMeta,
@@ -53,9 +55,15 @@ export interface StepHeaderContext {
   /** The proof-of-address kind the applicant has picked, so the header can ask
    *  for what the workflow's name rule wants on THAT document. */
   poaDocumentType?: string | null;
+  /** Where the proof of address is from (store/derive.ts poaCountryFor): its
+   *  kinds and name rule follow that country, not the ID's. */
+  poaCountry?: string | null;
+  /** The ID-type step carries the country row (store/derive.ts idCountryOnStep). */
+  idCountryOnStep?: boolean;
   /** The committed multi-ID slots, so the supporting-documents header resolves
    *  the SAME list the screen shows. */
   multiIdSlots?: Array<{ idType: string }>;
+  /** The address book step's phase and the email a code went to. */
   /** The workflow's texts (useText): every fixed header is customisable. */
   t: TextFn;
 }
@@ -71,22 +79,30 @@ export function stepHeaderMeta(
     addressIntroPending,
     addressEntranceFraming,
     poaDocumentType,
+    poaCountry,
+    idCountryOnStep,
     multiIdSlots,
     t,
   }: StepHeaderContext,
 ): { title: string; description: string | null } {
   const label = labelFor(country, selectedIdType);
+  // A scoped business workflow words its screens for the company.
+  const scopedBusiness = isScopedBusiness(config);
   if (addressIntroPending) return { title: '', description: null };
     switch (currentStep) {
       case 'consent':
         return { title: '', description: null as string | null };
       case 'id-type':
-        return { title: t('selectDocument.idType.title'), description: t('selectDocument.idType.description') };
+        // The combined layout picks the country here too, and says so.
+        return idCountryOnStep
+          ? { title: t('selectDocument.combined.title'), description: t('selectDocument.combined.description') }
+          : { title: t('selectDocument.idType.title'), description: t('selectDocument.idType.description') };
       case 'id-input':
         // The number is all this step asks for. The name comes from the
         // integrator (mount props / the session), never the applicant.
         return { title: `Enter your ${label}`, description: t('selectDocument.idInput.description') };
       case 'document-capture':
+        if (documentCapturePhase === 'checking') return { title: '', description: null };
         // Phase-aware title/description live in the header (synced from the
         // capture screen via `documentCapturePhase`) — mirrors Flutter.
         return documentCaptureMeta(
@@ -99,29 +115,37 @@ export function stepHeaderMeta(
       case 'liveness':
         return { title: t('presence.title'), description: t('presence.camera.description') };
       case 'questionnaire':
-        return questionnaireMeta(config.questionnaire?.title, config.questionnaire?.description, t);
+        return questionnaireMeta(config.questionnaire?.title, config.questionnaire?.description, t, scopedBusiness);
       case 'email-verification':
         return contactMeta('email', {
           codeLength: contactCodeLength(config.emailVerification),
           challenge: contactChallenge,
-        }, t);
+        }, t, scopedBusiness);
       case 'phone-verification':
         return contactMeta('phone', {
           codeLength: contactCodeLength(config.phoneVerification),
           challenge: contactChallenge,
-        }, t);
+        }, t, scopedBusiness);
       case 'proof-of-address': {
         // Word the ask by the rule the server will judge THIS document under:
         // the picked kind, else the first the country offers (what the screen
         // preselects). Under `off` the header stops asking for the name.
+        // Both follow the document's own country, which need not be the ID's.
+        // The window is the picked kind's (0, any date, states the default).
         const poa = config.proofOfAddress;
-        const kind = poaDocumentType ?? poaDocumentTypes(poa, country)[0];
+        const kinds = poaDocumentTypes(poa, poaCountry);
+        const kind = poaDocumentType && (kinds as string[]).includes(poaDocumentType)
+          ? (poaDocumentType as (typeof kinds)[number])
+          : kinds[0]!;
         return proofOfAddressMeta(
-          poaMaxAgeDays(poa),
-          poaNamePolicy(poa, country, kind as Parameters<typeof poaNamePolicy>[2]) !== 'off',
+          poaKindDays(poa, kind) || poaMaxAgeDays(poa),
+          poaNamePolicy(poa, poaCountry, kind) !== 'off',
           t,
+          scopedBusiness,
         );
       }
+      case 'address-book':
+        return addressBookMeta(t);
       case 'address-search':
       case 'address-collection':
       case 'address-entrance':

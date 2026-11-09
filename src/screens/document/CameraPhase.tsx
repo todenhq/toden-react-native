@@ -9,6 +9,11 @@ import { CameraViewfinder } from '../../components/CameraViewfinder';
 import { RequiredPill } from './RequiredPill';
 import { useText } from '../../i18n/useText';
 import type { MrzScan } from '../../mrz/parse';
+import type { CornerFraming } from '../../capture/useCornerGate';
+import type { GuideRect } from '../../capture/documentTurn';
+
+/** The upright-frame details a capture carries (CameraViewfinder's `turn`). */
+export type CaptureTurn = { guide: GuideRect; readTurn: number | null };
 
 export interface CameraPhaseProps {
   isBack: boolean;
@@ -20,15 +25,26 @@ export interface CameraPhaseProps {
   isTwoSided: boolean;
   busy: boolean;
   allowUpload: boolean;
+  /** Record sound on the side's video. */
+  recordAudio?: boolean;
   country: string;
   idType?: string;
   mrzAlreadyCaptured: boolean;
   onMrz: (scan: MrzScan) => void;
-  onCapture: (uri: string, videoPath: string | null, viewAr: number) => void;
+  onCapture: (uri: string, videoPath: string | null, viewAr: number, framing: CornerFraming | null, turn: CaptureTurn | null) => void;
   onUpload: () => void;
   onBack: () => void;
   /** Safe-area bottom inset for the full-bleed camera's controls. */
   bottomInset?: number;
+  /** The back follows the front with no tap: tell them to turn it over first. */
+  turnOver?: boolean;
+  /**
+   * A screen that must open over the camera (the crop screen for an uploaded
+   * photo). Rendered INSIDE the full-screen camera modal: iOS cannot open a
+   * second screen from the one underneath while it is still showing the
+   * camera, and says nothing when it refuses.
+   */
+  overlay?: React.ReactNode;
 }
 
 /**
@@ -61,6 +77,7 @@ export function CameraPhase(p: CameraPhaseProps): React.ReactElement {
       guideAspect={p.guideAspect}
       onCapture={p.onCapture}
       busy={p.busy}
+      recordAudio={p.recordAudio}
       // Auto-capture needs to know WHICH document it is looking for — without
       // this it would fire on any text-dense frame.
       country={p.country}
@@ -69,6 +86,7 @@ export function CameraPhase(p: CameraPhaseProps): React.ReactElement {
       // same passport again at the chip step. Only the front carries one.
       onMrz={p.isBack ? undefined : p.onMrz}
       mrzAlreadyCaptured={p.mrzAlreadyCaptured}
+      turnOver={p.turnOver}
       {...extra}
     />
   );
@@ -104,6 +122,7 @@ export function CameraPhase(p: CameraPhaseProps): React.ReactElement {
             onUpload: p.allowUpload ? p.onUpload : null,
             bottomInset: p.bottomInset ?? 0,
           })}
+          {p.overlay}
         </View>
       </Modal>
     );
@@ -111,6 +130,7 @@ export function CameraPhase(p: CameraPhaseProps): React.ReactElement {
 
   return (
     <View>
+      {p.overlay}
       <RequiredPill
         documentLabel={p.documentLabel}
         sideBadge={p.isTwoSided ? (p.isBack ? 'Back Side' : 'Front Side') : undefined}
@@ -134,12 +154,19 @@ export function CameraPhase(p: CameraPhaseProps): React.ReactElement {
             Tap the button to capture manually
           </UiText>
           {p.allowUpload ? (
-            <Pressable onPress={p.onUpload} style={{ marginTop: spacing.sm }}>
+            <Pressable
+              onPress={p.onUpload}
+              accessibilityRole="button"
+              accessibilityLabel={t('uploadDocument.camera.uploadInstead')}
+              accessibilityHint="Choose a photo of your document instead of using the camera."
+              hitSlop={8}
+              style={{ marginTop: spacing.xs, minHeight: 44, justifyContent: 'center' }}
+            >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                <UiText variant="bodySmall">{`${t('uploadDocument.camera.havingTrouble')} `}</UiText>
-                <Icon name="upload" size={14} color={colors.primary} />
+                <UiText variant="bodyMedium">{`${t('uploadDocument.camera.havingTrouble')} `}</UiText>
+                <Icon name="upload" size={16} color={colors.primary} />
                 <View style={{ width: 4 }} />
-                <UiText variant="bodySmall" color={colors.primary} style={{ fontWeight: '700' }}>
+                <UiText variant="bodyMedium" color={colors.primary} style={{ fontWeight: '700' }}>
                   {t('uploadDocument.camera.uploadInstead')}
                 </UiText>
               </View>

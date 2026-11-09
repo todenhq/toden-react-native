@@ -56,9 +56,9 @@ export const READY_LIVENESS: ReadyContent = {
     'is present, not a photo or a recording.',
   checklist: [
     { icon: 'user', label: 'Put your face in the circle' },
-    { icon: 'glasses', label: 'Take off glasses or anything covering your face' },
+    { icon: 'glasses', label: 'Take off glasses, hats, caps or anything covering your face' },
     { icon: 'sun', label: 'Choose a bright spot, with the light in front of you' },
-    { icon: 'sparkles', label: 'Keep glare and shiny reflections off your face' },
+    { icon: 'zap-off', label: 'Keep glare and shiny reflections off your face' },
   ],
   textKeys: {
     title: 'primer.selfie.title',

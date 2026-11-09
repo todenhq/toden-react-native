@@ -1,28 +1,27 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing } from 'react-native';
-import Svg, { Defs, G, Line, Mask, Path, Rect } from 'react-native-svg';
+import Svg, { Defs, Mask, Path, Rect } from 'react-native-svg';
 
 import { useTheme } from '../runtime';
-import { DocumentGhost } from './DocumentGhost';
+import { DocumentGhost, type DocumentSpecimenSubject } from './DocumentGhost';
 import type { DocumentFraming } from '../../capture';
+import { GUIDE_WIDTH_FRACTION, guideRect } from '../../capture/documentTurn';
 
 // ---------------------------------------------------------------------------
 // The full-screen document guide.
 //
 // A 1:1 port of the Flutter SDK's immersive viewfinder frame: a dimmed
 // surround, a rounded window at the document's own aspect, heavy corner
-// brackets, a faint grid inside, and a scan line sweeping down it.
+// brackets, and a scan line sweeping down it.
 //
-// The grid and the sweep are not decoration — they are what makes a dim,
-// featureless preview read as "actively looking at something". Without them a
-// user holding a passport still gets no feedback until the shutter fires.
+// The sweep is not decoration: it is what makes a dim, featureless preview read
+// as "actively looking at something". Without it a user holding a passport
+// still gets no feedback until the shutter fires.
 // ---------------------------------------------------------------------------
 
 /** Share of the screen width the guide occupies (Flutter uses ~88%). */
-const GUIDE_WIDTH_FRACTION = 0.88;
-/** Grid divisions inside the window. */
-const GRID_COLS = 8;
-const GRID_ROWS = 6;
+export { GUIDE_WIDTH_FRACTION };
+
 
 export function ImmersiveGuide({
   guideAspect,
@@ -30,7 +29,9 @@ export function ImmersiveGuide({
   width,
   height,
   framing,
-  showMrzBand,
+  subject,
+  showSpecimen,
+  band,
 }: {
   guideAspect: number;
   primary: string;
@@ -38,11 +39,14 @@ export function ImmersiveGuide({
   height: number;
   /** Auto-capture's verdict for the current frame. */
   framing: DocumentFraming;
-  /** Draw the ghost's machine-readable band (passport data pages carry one). */
-  showMrzBand: boolean;
+  /** The ID being captured, for the sample document. */
+  subject: DocumentSpecimenSubject;
+  /** Off once the turn-over prompt has already shown this side. */
+  showSpecimen: boolean;
+  /** For an upright guide: the space it must stay clear of (immersiveBand). */
+  band?: { topReserve: number; bottomReserve: number };
 }): React.ReactElement {
   const { colors } = useTheme();
-
   // Each state answers a question the user is actually asking:
   //   searching  → "is the camera even working?"  → neutral, sweeping
   //   wrongShape/adjust → "what do I do?"         → amber, motion stops
@@ -59,10 +63,7 @@ export function ImmersiveGuide({
   // Only dim once confident: dimming while still searching makes a dark room
   // impossible to aim in.
   const scrim = locked ? 0.45 : needsAction ? 0.25 : 0.18;
-  const gw = width * GUIDE_WIDTH_FRACTION;
-  const gh = gw / guideAspect;
-  const gx = (width - gw) / 2;
-  const gy = (height - gh) / 2;
+  const { x: gx, y: gy, width: gw, height: gh } = guideRect(width, height, guideAspect, band);
   const corner = Math.min(gw, gh) * 0.16;
   const r = 14;
 
@@ -91,6 +92,21 @@ export function ImmersiveGuide({
 
   return (
     <>
+      {/* Under the guide, so the corners sit on the sample's edges. Keyed by side
+          so turning the document over shows the other face. */}
+      {showSpecimen ? (
+      <DocumentGhost
+        key={subject.side}
+        x={gx}
+        y={gy}
+        width={gw}
+        height={gh}
+        aspect={guideAspect}
+        accent={primary}
+        subject={subject}
+        documentFound={framing !== 'none' && framing !== 'wrongShape'}
+      />
+      ) : null}
       <Svg style={{ position: 'absolute', inset: 0 }} width={width} height={height}>
         <Defs>
           <Mask id="guideWindow">
@@ -104,30 +120,6 @@ export function ImmersiveGuide({
         <Rect width={width} height={height} fill={`rgba(0,0,0,${scrim})`} mask="url(#guideWindow)" />
 
         {/* Faint grid — alignment help that survives a low-contrast page. */}
-        <G opacity={0.28}>
-          {Array.from({ length: GRID_COLS - 1 }, (_, i) => (
-            <Line
-              key={`c${i}`}
-              x1={gx + (gw / GRID_COLS) * (i + 1)}
-              y1={gy}
-              x2={gx + (gw / GRID_COLS) * (i + 1)}
-              y2={gy + gh}
-              stroke={accent}
-              strokeWidth={0.75}
-            />
-          ))}
-          {Array.from({ length: GRID_ROWS - 1 }, (_, i) => (
-            <Line
-              key={`r${i}`}
-              x1={gx}
-              y1={gy + (gh / GRID_ROWS) * (i + 1)}
-              x2={gx + gw}
-              y2={gy + (gh / GRID_ROWS) * (i + 1)}
-              stroke={accent}
-              strokeWidth={0.75}
-            />
-          ))}
-        </G>
 
         <Rect x={gx} y={gy} width={gw} height={gh} rx={r} fill="none" stroke={`${accent}66`} strokeWidth={1.5} />
 
@@ -160,14 +152,6 @@ export function ImmersiveGuide({
             { translateY: sweep.interpolate({ inputRange: [0, 1], outputRange: [0, gh - 2] }) },
           ],
         }}
-      />
-      <DocumentGhost
-        x={gx}
-        y={gy}
-        width={gw}
-        height={gh}
-        showMrzBand={showMrzBand}
-        documentFound={framing !== 'none' && framing !== 'wrongShape'}
       />
     </>
   );

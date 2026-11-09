@@ -36,6 +36,8 @@ namespace margelo::nitro::myazakyc { class HybridMyazaTextRecognizerSpec; }
 namespace margelo::nitro::myazakyc { class HybridMyazaTouchGuardSpec; }
 // Forward declaration of `TextResult` to properly resolve imports.
 namespace margelo::nitro::myazakyc { struct TextResult; }
+// Forward declaration of `TurnedTextResult` to properly resolve imports.
+namespace margelo::nitro::myazakyc { struct TurnedTextResult; }
 
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridFrameSpec_cxx` to properly resolve imports.
@@ -69,6 +71,7 @@ namespace KycSdkReactNative { class HybridMyazaTouchGuardSpec_cxx; }
 #include "HybridMyazaTextRecognizerSpec.hpp"
 #include "HybridMyazaTouchGuardSpec.hpp"
 #include "TextResult.hpp"
+#include "TurnedTextResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/PromiseHolder.hpp>
 #include <NitroModules/Result.hpp>
@@ -253,15 +256,6 @@ namespace margelo::nitro::myazakyc::bridge::swift {
     return Result<std::string>::withError(error);
   }
   
-  // pragma MARK: Result<std::shared_ptr<Promise<std::vector<std::string>>>>
-  using Result_std__shared_ptr_Promise_std__vector_std__string____ = Result<std::shared_ptr<Promise<std::vector<std::string>>>>;
-  inline Result_std__shared_ptr_Promise_std__vector_std__string____ create_Result_std__shared_ptr_Promise_std__vector_std__string____(const std::shared_ptr<Promise<std::vector<std::string>>>& value) noexcept {
-    return Result<std::shared_ptr<Promise<std::vector<std::string>>>>::withValue(value);
-  }
-  inline Result_std__shared_ptr_Promise_std__vector_std__string____ create_Result_std__shared_ptr_Promise_std__vector_std__string____(const std::exception_ptr& error) noexcept {
-    return Result<std::shared_ptr<Promise<std::vector<std::string>>>>::withError(error);
-  }
-  
   // pragma MARK: Result<bool>
   using Result_bool_ = Result<bool>;
   inline Result_bool_ create_Result_bool_(bool value) noexcept {
@@ -269,6 +263,15 @@ namespace margelo::nitro::myazakyc::bridge::swift {
   }
   inline Result_bool_ create_Result_bool_(const std::exception_ptr& error) noexcept {
     return Result<bool>::withError(error);
+  }
+  
+  // pragma MARK: Result<std::shared_ptr<Promise<std::vector<std::string>>>>
+  using Result_std__shared_ptr_Promise_std__vector_std__string____ = Result<std::shared_ptr<Promise<std::vector<std::string>>>>;
+  inline Result_std__shared_ptr_Promise_std__vector_std__string____ create_Result_std__shared_ptr_Promise_std__vector_std__string____(const std::shared_ptr<Promise<std::vector<std::string>>>& value) noexcept {
+    return Result<std::shared_ptr<Promise<std::vector<std::string>>>>::withValue(value);
+  }
+  inline Result_std__shared_ptr_Promise_std__vector_std__string____ create_Result_std__shared_ptr_Promise_std__vector_std__string____(const std::exception_ptr& error) noexcept {
+    return Result<std::shared_ptr<Promise<std::vector<std::string>>>>::withError(error);
   }
   
   // pragma MARK: Result<std::shared_ptr<Promise<AppAttestKey>>>
@@ -527,6 +530,15 @@ namespace margelo::nitro::myazakyc::bridge::swift {
     return Result<DetectedRect>::withError(error);
   }
   
+  // pragma MARK: Result<void>
+  using Result_void_ = Result<void>;
+  inline Result_void_ create_Result_void_() noexcept {
+    return Result<void>::withValue();
+  }
+  inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
+    return Result<void>::withError(error);
+  }
+  
   // pragma MARK: std::shared_ptr<Promise<TextResult>>
   /**
    * Specialized version of `std::shared_ptr<Promise<TextResult>>`.
@@ -580,6 +592,15 @@ namespace margelo::nitro::myazakyc::bridge::swift {
   }
   inline Result_TextResult_ create_Result_TextResult_(const std::exception_ptr& error) noexcept {
     return Result<TextResult>::withError(error);
+  }
+  
+  // pragma MARK: Result<TurnedTextResult>
+  using Result_TurnedTextResult_ = Result<TurnedTextResult>;
+  inline Result_TurnedTextResult_ create_Result_TurnedTextResult_(const TurnedTextResult& value) noexcept {
+    return Result<TurnedTextResult>::withValue(value);
+  }
+  inline Result_TurnedTextResult_ create_Result_TurnedTextResult_(const std::exception_ptr& error) noexcept {
+    return Result<TurnedTextResult>::withError(error);
   }
   
   // pragma MARK: Result<std::shared_ptr<Promise<TextResult>>>

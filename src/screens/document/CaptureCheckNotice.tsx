@@ -16,9 +16,9 @@ import type { DocumentCaptureSide } from '../../services/api-types';
 
 // ─── The review footer when a document photo will not read ───────────────────
 //
-// Shown in place of Continue after the server's capture check found no face on
-// the printed photo or no readable barcode (lib/documentCaptureCheck). The
-// words come from that module so they stay in lockstep with the web and
+// Shown in place of Continue after the server's capture check found the
+// document cut off at the frame, no face on the printed photo or no readable
+// barcode (lib/documentCaptureCheck). The words come from that module so they stay in lockstep with the web and
 // Flutter SDKs.
 //
 // A notice, never a gate: the detectors can miss, so "Continue anyway" is

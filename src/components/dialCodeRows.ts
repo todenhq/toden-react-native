@@ -33,20 +33,30 @@ export function filterDialCodeOptions(options: DialCodeOption[], query: string):
 }
 
 /**
- * The sheet's items over the ALREADY-FILTERED options: where they appear to be
- * first (lifted out of the alphabet, still subject to the search), then the
- * rest — flat in the given order, or under region headers when `grouped`.
+ * The sheet's items over the ALREADY-FILTERED options: the current answer
+ * first when `selectedCountry` asks for it pinned (the country summary row's
+ * "Selected"), then where they appear to be (lifted out of the alphabet,
+ * still subject to the search), then the rest — flat in the given order, or
+ * under region headers when `grouped`. A pinned country is not repeated
+ * below.
  */
 export function buildDialCodeItems(
   visible: DialCodeOption[],
   geoCountry: string | null | undefined,
   grouped: boolean,
-): { geo: DialCodeOption | null; items: DialCodeItem[] } {
-  const { pinned: geo, rest } = pinGeoRow(visible, geoCountry, (o) => o.code);
-  const items: DialCodeItem[] = geo ? [{ kind: 'row', option: geo }] : [];
+  selectedCountry?: string | null,
+): { geo: DialCodeOption | null; selected: DialCodeOption | null; items: DialCodeItem[] } {
+  const own = pinGeoRow(visible, selectedCountry, (o) => o.code);
+  const pinnedGeo = pinGeoRow(own.rest, geoCountry, (o) => o.code);
+  const selected = own.pinned;
+  const geo = pinnedGeo.pinned;
+  const rest = pinnedGeo.rest;
+  const items: DialCodeItem[] = [];
+  if (selected) items.push({ kind: 'row', option: selected });
+  if (geo) items.push({ kind: 'row', option: geo });
   if (!grouped) {
     for (const option of rest) items.push({ kind: 'row', option });
-    return { geo, items };
+    return { geo, selected, items };
   }
   const byCode = new Map(rest.map((o) => [o.code.toUpperCase(), o]));
   for (const group of groupCountriesByRegion(rest.map((o) => o.code))) {
@@ -56,7 +66,7 @@ export function buildDialCodeItems(
       if (option) items.push({ kind: 'row', option });
     }
   }
-  return { geo, items };
+  return { geo, selected, items };
 }
 
 export function dialCodeItemKey(item: DialCodeItem): string {

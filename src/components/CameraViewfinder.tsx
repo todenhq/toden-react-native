@@ -1,27 +1,45 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, View } from 'react-native';
-import { Camera, useCameraDevice, useCameraDevices, usePhotoOutput, useVideoOutput, type CameraRef } from 'react-native-vision-camera';
+import { Camera, usePhotoOutput, useVideoOutput } from 'react-native-vision-camera';
 
 import { radius, spacing } from '../config/theme';
 import { FRAMED_VIEW_AR } from '../services/cardCrop';
 import { DOCUMENT_VIDEO_BITRATE, VIDEO_CAPTURE_RESOLUTION } from '../config/captureSettings';
 import { useTheme } from './runtime';
-import { documentHintIsAction, documentHintText, useAutoCapture } from '../capture';
-import { shortDocumentLabel } from '../config/idTypes';
+import { documentHintIsAction, documentHintText, useAutoCapture, type AutoCaptureState, type CornerFraming } from '../capture';
+import { shortDocumentLabel, specimenTitle } from '../config/idTypes';
+import { useTurnOverHold } from './viewfinder/TurnOverPrompt';
+import { regionCountryName } from '../config/regions';
 import type { MrzScan } from '../mrz/parse';
 import { useVideoRecorder } from './useVideoRecorder';
 import { CardGuide } from './viewfinder/CardGuide';
 import { HintBanner, OverlayButton, Shutter } from './viewfinder/ViewfinderControls';
 import { ImmersiveOverlay } from './viewfinder/ImmersiveOverlay';
+import { immersiveHintTone } from './viewfinder/immersiveGlass';
 import { Spinner } from './Spinner';
+import { useTorch } from './viewfinder/useTorch';
+import { useBackCamera } from './viewfinder/useBackCamera';
+import { cameraTopInset } from './viewfinder/cameraInsets';
+import { guideFractions, guideRect, immersiveBand, screenGuideAspect, turnsDocument, type GuideRect } from '../capture/documentTurn';
 
 // Back-camera viewfinder for document capture — the RN mirror of the Flutter
 // SDK's _DocumentViewfinder. Shows a VisionCamera preview with an ID-card guide
-// overlay + manual shutter. This component is only rendered once a camera device
+// overlay + shutter. This component is only rendered once a camera device
 // exists (or while it's still resolving — a brief spinner); the "Camera not
 // available" error (no device / init failure) is owned by the parent step, which
-// shows a prominent error + upload fallback. Capture is manual (no edge detection).
+// shows a prominent error + upload fallback. Capture, auto or manual, waits for
+// the document's four corners to be in view with space past each (the corner
+// gate in capture/useCornerGate.ts), and the photo is cropped to those corners.
 
+/**
+ * Which way the camera's outputs are turned upright on Android: the SCREEN's
+ * way, as the preview is. VisionCamera's default follows the accelerometer, so
+ * a phone held near flat over a slip and tipped sideways streamed landscape
+ * frames under a portrait preview, and the corners were judged in a space the
+ * user was not looking at (a corner off the screen could pass). iOS measures in
+ * the portrait frame whatever the accelerometer says, so it keeps the default.
+ */
+const DOCUMENT_ORIENTATION_SOURCE = Platform.OS === 'android' ? 'interface' : undefined;
 
 export interface CameraViewfinderProps {
   active: boolean;
@@ -33,6 +51,14 @@ export interface CameraViewfinderProps {
     videoPath: string | null,
     /** Aspect (w÷h) of the box the preview rendered in — what the crop must match. */
     viewAr: number,
+    /** The document's detected corners, when the corner gate had them: crop to these. */
+    framing: CornerFraming | null,
+    /**
+     * Set when the document was framed upright (documentTurn.ts): the guide's
+     * shares of the preview box, for the crop, and the quarter turns that last
+     * read it (or null), to turn the capture back to landscape.
+     */
+    turn: { guide: GuideRect; readTurn: number | null } | null,
   ) => void;
   /** Card-guide aspect (width ÷ height): 1.586 for ID cards, 1.42 for passports. */
   guideAspect?: number;
@@ -60,6 +86,11 @@ export interface CameraViewfinderProps {
   onUpload?: (() => void) | null;
   /** Safe-area bottom inset; the full-bleed camera runs under the indicator. */
   bottomInset?: number;
+  /** Record sound on the side's video. Fixed when the output is created. */
+  recordAudio?: boolean;
+  /** This side followed the last with nothing tapped between them, so the person
+   *  is still holding up the other side. The camera waits and says so. */
+  turnOver?: boolean;
 }
 
 export function CameraViewfinder({
@@ -77,28 +108,19 @@ export function CameraViewfinder({
   onBack,
   onUpload,
   bottomInset = 0,
+  recordAudio = false,
+  turnOver,
 }: CameraViewfinderProps): React.ReactElement {
   const { colors } = useTheme();
-  // Prefer a back camera that CAN torch, then fall back to the library's
-  // default ranking. On multi-camera phones (seen live on a Galaxy S24) the
-  // default pick can land on a flashless back device — CameraX then rejects
-  // enableTorch with "No flash unit" — while a flash-capable back camera sits
-  // right next to it in the list. `hasTorch` is trustworthy on the logical
-  // device objects (it reads CameraX's hasFlashUnit()); only the
-  // physical-device wrappers stub it, and those lose this find() either way.
-  const allDevices = useCameraDevices();
-  const defaultBack = useCameraDevice('back');
-  const device = useMemo(
-    () => allDevices.find((d) => d.position === 'back' && d.hasTorch) ?? defaultBack,
-    [allDevices, defaultBack],
-  );
+  // A back camera that can torch, when there is one (useBackCamera.ts).
+  const device = useBackCamera();
   // v5: document-conservative still (OCR). Capture via the photo output, not a
   // camera ref. Quality is prioritised so small text stays legible.
   const photoOutput = usePhotoOutput({ qualityPrioritization: 'quality' });
   // A short, bitrate-capped document video recorded alongside the still (uploaded
   // best-effort as document_front_video / document_back_video). Mirrors Flutter.
   const videoOutput = useVideoOutput({
-    enableAudio: false,
+    enableAudio: recordAudio,
     fileType: 'mp4',
     targetBitRate: DOCUMENT_VIDEO_BITRATE,
     targetResolution: VIDEO_CAPTURE_RESOLUTION,
@@ -120,10 +142,41 @@ export function CameraViewfinder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, ready, side]);
 
+  // Immersive insets its own controls (there is no header to sit under).
+  //
+  // The guide is sized from the MEASURED container, not the window: on iOS the
+  // modal is a pageSheet, which is inset from the top of the screen, so window
+  // dimensions overshoot — the frame would sit low and the bottom bar would run
+  // off the edge. onLayout gives the box this actually renders into.
+  const [box, setBox] = useState({ width: 0, height: 0 });
+  const boxRef = useRef(box);
+  boxRef.current = box;
+
+  // A long document (a NIN slip) is framed upright on a phone held upright, so
+  // it uses the screen's height (documentTurn.ts). Full screen only: the framed
+  // in-sheet viewfinder keeps today's frame.
+  const viewArNow = fill && box.width > 0 && box.height > 0 ? box.width / box.height : FRAMED_VIEW_AR;
+  const turned = fill && turnsDocument(guideAspect, viewArNow);
+  const screenAspect = screenGuideAspect(guideAspect, turned);
+  const turnedRef = useRef(turned);
+  turnedRef.current = turned;
+  const topInset = cameraTopInset();
+  const band = immersiveBand(topInset, bottomInset);
+  const bandRef = useRef(band);
+  bandRef.current = band;
+  // The drawn upright guide, so a slip held too close is told to move back.
+  const turnedGuide = useMemo(
+    () => (turned ? guideFractions(guideRect(box.width, box.height, screenAspect, band), box.width, box.height) : undefined),
+    [turned, box.width, box.height, screenAspect, band.topReserve, band.bottomReserve],
+  );
 
   const capturingRef = useRef(false);
+  // Read at press time: the corner gate's state can move between renders.
+  const autoRef = useRef<AutoCaptureState | null>(null);
   const capture = useCallback(async () => {
     if (busy || !ready || capturingRef.current) return;
+    if (autoRef.current?.shutterBlocked()) return;
+    const framing = autoRef.current?.cornerFraming() ?? null;
     // Guarded because auto-capture and the manual shutter can now both fire —
     // two concurrent captures contend for the camera and one of them fails.
     capturingRef.current = true;
@@ -137,19 +190,29 @@ export function CameraViewfinder({
       // framed 3:4 box did; the crop must be told which one the user saw.
       const b = boxRef.current;
       const viewAr = b.width > 0 && b.height > 0 ? b.width / b.height : FRAMED_VIEW_AR;
-      onCapture(`file://${file.filePath}`, videoPath, viewAr);
+      const turn = turnedRef.current
+        ? {
+            guide: guideFractions(guideRect(b.width, b.height, 1 / guideAspect, bandRef.current), b.width, b.height),
+            readTurn: autoRef.current?.readTurn() ?? null,
+          }
+        : null;
+      onCapture(`file://${file.filePath}`, videoPath, viewAr, framing, turn);
     } catch {
       /* a failed shutter is a no-op — the user can tap again */
     } finally {
       capturingRef.current = false;
     }
-  }, [busy, ready, recorder, photoOutput, onCapture]);
+  }, [busy, ready, recorder, photoOutput, onCapture, guideAspect]);
+
+  // Only over the full-screen camera, where the prompt can be drawn.
+  const turnedOver = !!turnOver && !!fill && side === 'back';
+  const { turning, finish: finishTurn } = useTurnOverHold(turnedOver);
 
   // ── Auto-capture ──────────────────────────────────────────────────────────
   // Runs only with a document to check against; without one there is nothing to
   // identify the frame as, and firing on "some text" would shoot anything.
   const auto = useAutoCapture({
-    enabled: active && ready && !busy && !!country && !!idType,
+    enabled: active && ready && !busy && !turning && !!country && !!idType,
     country: country ?? '',
     idType: idType ?? '',
     // The back has no branding to identify itself by — the gate relaxes its
@@ -157,42 +220,19 @@ export function CameraViewfinder({
     side,
     mrzAlreadyCaptured,
     onMrz,
-    guideAspect,
+    guideAspect: screenAspect,
+    turned,
+    guide: turnedGuide,
     // Front and back are the same idType; without this the gate stays latched
     // from the front and the back never auto-captures.
     resetKey: side,
     onFire: () => void capture(),
+    viewAr: viewArNow,
+    cameraActive: active && ready,
   });
+  autoRef.current = auto;
 
-  // Torch — a document under glass or in a dim room is the commonest reason a
-  // capture reads badly, and it is the one thing the user can fix instantly.
-  const [torch, setTorch] = useState(false);
-  const cameraRef = useRef<CameraRef>(null);
-
-  // IMPERATIVE, verified toggling — not the declarative `torchMode` prop.
-  // The prop path fires the controller call and drops the promise, so a
-  // rejection (CameraX refuses enableTorch when the bound camera reports no
-  // flash unit) leaves the button lit and the scene dark, with nothing in any
-  // log. Await the call, read the REAL state back off the controller (its
-  // getter reads CameraX TorchState, unlike the device object, whose
-  // `hasTorch` is a hardcoded stub for physical devices in this VisionCamera
-  // version), and keep UI state honest either way.
-  const toggleTorch = useCallback(async () => {
-    const controller = cameraRef.current?.controller;
-    if (!controller) return;
-    const next = !torch;
-    try {
-      await controller.setTorchMode(next ? 'on' : 'off');
-      const actual = controller.torchMode === 'on';
-      setTorch(actual);
-      if (actual !== next && __DEV__) {
-        console.warn('[kyc.camera] torch state did not follow the request');
-      }
-    } catch (err) {
-      if (__DEV__) console.warn('[kyc.camera] torch toggle failed:', err);
-      setTorch(false);
-    }
-  }, [torch]);
+  const { torch, cameraRef, toggleTorch } = useTorch();
   // Honest again: the device SELECTION above prefers a torch-capable camera,
   // so when this is false there genuinely is no back camera with a flash unit
   // and the button would be a lie. (An earlier fix trusted Android blindly,
@@ -200,25 +240,17 @@ export function CameraViewfinder({
   // rejected every toggle with "No flash unit".)
   const hasTorch = device?.hasTorch ?? false;
 
-  const hintText = documentHintText(auto.guidance.hint, documentLabel);
+  // While the corner gate holds the shutter, its instruction is the one to show.
+  const blockedHint = auto.cornerHint ? documentHintText(auto.cornerHint, documentLabel) : null;
+  const hintText = blockedHint ?? documentHintText(auto.guidance.hint, documentLabel);
   // The gate's live instruction once it has a document to judge; the static
   // prompt until then (it needs a country + ID type to say anything useful).
   const hint =
-    country && idType
+    (country && idType) || blockedHint
       ? hintText
       : `Align the ${side === 'back' ? 'BACK' : 'FRONT'} of your ${documentLabel}`;
-  const hintIsAction = documentHintIsAction(auto.guidance.hint);
+  const hintIsAction = !!blockedHint || documentHintIsAction(auto.guidance.hint);
 
-  // Immersive insets its own controls (there is no header to sit under).
-  //
-  // The guide is sized from the MEASURED container, not the window: on iOS the
-  // modal is a pageSheet, which is inset from the top of the screen, so window
-  // dimensions overshoot — the frame would sit low and the bottom bar would run
-  // off the edge. onLayout gives the box this actually renders into.
-  const [box, setBox] = useState({ width: 0, height: 0 });
-  const boxRef = useRef(box);
-  boxRef.current = box;
-  const topInset = Platform.OS === 'ios' ? 56 : 32;
 
   return (
     <View
@@ -248,6 +280,7 @@ export function CameraViewfinder({
           device={device}
           isActive={active}
           outputs={[photoOutput, videoOutput, auto.frameOutput]}
+          orientationSource={DOCUMENT_ORIENTATION_SOURCE}
         />
       ) : (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -260,15 +293,22 @@ export function CameraViewfinder({
           side={side}
           country={country ?? ''}
           documentLabel={shortDocumentLabel(idType ?? null, documentLabel)}
-          guideAspect={guideAspect}
+          guideAspect={screenAspect}
           hint={hint}
           hintIsAction={hintIsAction}
+          hintTone={immersiveHintTone({
+            hint: auto.guidance.hint,
+            framing: auto.guidance.framing,
+            hintIsAction,
+            blocked: !!blockedHint,
+          })}
           progress={auto.progress}
           busy={busy}
           torch={torch}
           hasTorch={hasTorch}
           onToggleTorch={() => void toggleTorch()}
           onCapture={capture}
+          blockedHint={blockedHint}
           onBack={onBack ?? null}
           onUpload={onUpload ?? null}
           bottomInset={bottomInset}
@@ -276,7 +316,15 @@ export function CameraViewfinder({
           height={box.height}
           topInset={topInset}
           framing={auto.guidance.framing}
-          showMrzBand={idType === 'passport'}
+          turnedOver={turnedOver}
+          turning={turning}
+          onTurned={finishTurn}
+          subject={{
+            idType: idType ?? null,
+            title: specimenTitle(idType ?? null, documentLabel),
+            country: country ? regionCountryName(country) : null,
+            side,
+          }}
         />
       ) : null}
 
@@ -306,7 +354,7 @@ export function CameraViewfinder({
       {/* Immersive draws its own shutter inside BottomBar (with the torch and
           the upload escape), so only the framed variant needs this one. */}
       {fill ? null : (
-        <Shutter onPress={capture} ready={ready} busy={busy} progress={auto.progress} />
+        <Shutter onPress={capture} ready={ready} busy={busy} progress={auto.progress} blockedHint={blockedHint} />
       )}
     </View>
   );

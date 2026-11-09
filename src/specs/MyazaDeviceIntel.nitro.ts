@@ -34,6 +34,14 @@ export interface MyazaDeviceIntel extends HybridObject<{ ios: 'swift'; android: 
   stableId(): string;
 
   /**
+   * Whether the host app declared the microphone: the usage string on iOS, the
+   * manifest permission on Android. Asked before requesting it, because iOS
+   * kills an app that requests the microphone without the usage string and
+   * JavaScript cannot catch that. Never prompts.
+   */
+  declaresMicrophone(): boolean;
+
+  /**
    * The root / jailbreak / instrumentation heuristics that FIRED, as contract
    * tokens (su_binary, magisk, …, frida, debugger). Async because a couple of
    * them touch the filesystem or a local socket. Never prompts, never needs a

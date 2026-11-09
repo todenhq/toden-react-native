@@ -10,6 +10,7 @@
 
 export { looksCorporate } from './keyPeopleCorporate';
 import { ownersPayload } from './keyPeopleOwners';
+import { rowMissingStake } from './keyPersonStake';
 export { emptyKeyPersonOwner } from './keyPeopleOwnerTypes';
 export type { KeyPersonOwnerEntry } from './keyPeopleOwnerTypes';
 import type { KeyPersonOwnerEntry } from './keyPeopleOwnerTypes';
@@ -65,6 +66,16 @@ export interface KeyPersonEntry {
    * route to the humans above a parent no register we serve can be asked about.
    */
   owners: KeyPersonOwnerEntry[];
+  /**
+   * The company documents that put this person in the list (mediaIds), and
+   * the row as it was when added, so removing the documents removes the
+   * person unless the applicant changed them (config/documentPeopleSources.ts).
+   * Absent on rows the applicant or the register added. Never sent.
+   */
+  sourceDocuments?: string[];
+  documentSnapshot?: string;
+  /** Its documents were removed after the applicant changed it: asked to check it. */
+  documentRemoved?: boolean;
 }
 
 export function emptyKeyPerson(role: KeyPersonRole = 'director'): KeyPersonEntry {
@@ -125,12 +136,15 @@ export function rowNeedsEmail(
 export function isKeyPersonRowValid(
   row: KeyPersonEntry,
   emailRequiredFor: ReadonlySet<KeyPersonRole> = EMPTY_ROLES,
+  stakeRequired = false,
 ): boolean {
   if (row.name.trim().length < 2) return false;
   const roles = row.roles && row.roles.length > 0 ? row.roles : [row.role];
   if (!roles.every((r) => KEY_PERSON_ROLES.includes(r))) return false;
   if (rowNeedsEmail(row, emailRequiredFor) && row.email.trim() === '') return false;
   if (row.email.trim() !== '' && !isValidContactEmail(row.email.trim())) return false;
+  // Who is a beneficial owner is decided from the stake (keyPersonStake.ts).
+  if (rowMissingStake(row, stakeRequired)) return false;
   if (row.ownershipPct.trim() !== '') {
     const pct = Number(row.ownershipPct);
     if (!Number.isFinite(pct) || pct < 0 || pct > 100) return false;
@@ -155,10 +169,11 @@ export function isKeyPersonRowBlank(row: KeyPersonEntry): boolean {
 export function invalidKeyPersonRows(
   rows: KeyPersonEntry[],
   emailRequiredFor: ReadonlySet<KeyPersonRole> = EMPTY_ROLES,
+  stakeRequired = false,
 ): number[] {
   return rows
     .map((row, i) =>
-      !isKeyPersonRowBlank(row) && !isKeyPersonRowValid(row, emailRequiredFor) ? i : -1,
+      !isKeyPersonRowBlank(row) && !isKeyPersonRowValid(row, emailRequiredFor, stakeRequired) ? i : -1,
     )
     .filter((i) => i >= 0);
 }

@@ -9,10 +9,11 @@ import { precisePositionOutcome } from '../services/location';
 // classifier is exercised against a stubbed expo-location, one branch each.
 
 jest.mock('expo-location', () => ({
-  Accuracy: { High: 4, BestForNavigation: 6 },
+  Accuracy: { Balanced: 3, High: 4, BestForNavigation: 6 },
   requestForegroundPermissionsAsync: jest.fn(),
   hasServicesEnabledAsync: jest.fn(),
-  getCurrentPositionAsync: jest.fn(),
+  getCurrentPositionAsync: jest.fn(() => new Promise(() => undefined)),
+  getLastKnownPositionAsync: jest.fn(async () => null),
   watchPositionAsync: jest.fn(),
 }));
 
@@ -20,6 +21,8 @@ jest.mock('expo-location', () => ({
 const Location = require('expo-location') as {
   requestForegroundPermissionsAsync: jest.Mock;
   hasServicesEnabledAsync: jest.Mock;
+  getCurrentPositionAsync: jest.Mock;
+  getLastKnownPositionAsync: jest.Mock;
   watchPositionAsync: jest.Mock;
 };
 
@@ -86,16 +89,57 @@ describe('precisePositionOutcome', () => {
     expect('fix' in outcome && outcome.fix).toMatchObject({ lat: 4.9, lng: 8.3, accuracy: 10, mocked: false });
   });
 
-  it('a silent watch is a timeout once the window elapses', async () => {
+  const settleProbes = async (): Promise<void> => {
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+  };
+
+  it('keeps waiting past the window while no reading has arrived', async () => {
+    jest.useFakeTimers();
+    Location.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    let deliver: (pos: unknown) => void = () => undefined;
+    Location.watchPositionAsync.mockImplementation(async (_opts: unknown, cb: (pos: unknown) => void) => {
+      deliver = cb;
+      return { remove: jest.fn() };
+    });
+    const pending = precisePositionOutcome();
+    await settleProbes();
+    jest.advanceTimersByTime(20_000);
+    deliver({ coords: { latitude: 4.9, longitude: 8.3, accuracy: 10 }, timestamp: 1, mocked: false });
+    expect(await pending).toMatchObject({ fix: { lat: 4.9, lng: 8.3 } });
+  });
+
+  it('takes a coarse reading while the GPS is still cold', async () => {
     jest.useFakeTimers();
     Location.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
     Location.watchPositionAsync.mockResolvedValue({ remove: jest.fn() });
+    Location.getCurrentPositionAsync.mockResolvedValueOnce({
+      coords: { latitude: 4.9, longitude: 8.3, accuracy: 900 },
+      timestamp: 1,
+      mocked: false,
+    });
     const pending = precisePositionOutcome();
-    // Let the permission + services probes settle before the clock moves.
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    jest.advanceTimersByTime(8_100);
-    expect(await pending).toEqual({ failure: 'timeout' });
+    await settleProbes();
+    jest.advanceTimersByTime(3_100);
+    expect(await pending).toMatchObject({ fix: { accuracy: 900 } });
+  });
+
+  it('falls back to where the phone last was, then says it timed out', async () => {
+    jest.useFakeTimers();
+    Location.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    Location.watchPositionAsync.mockResolvedValue({ remove: jest.fn() });
+    Location.getLastKnownPositionAsync.mockResolvedValueOnce({
+      coords: { latitude: 4.9, longitude: 8.3, accuracy: 40 },
+      timestamp: 1,
+      mocked: false,
+    });
+    const known = precisePositionOutcome();
+    await settleProbes();
+    jest.advanceTimersByTime(30_100);
+    expect(await known).toMatchObject({ fix: { accuracy: 40 } });
+
+    const none = precisePositionOutcome();
+    await settleProbes();
+    jest.advanceTimersByTime(30_100);
+    expect(await none).toEqual({ failure: 'timeout' });
   });
 });

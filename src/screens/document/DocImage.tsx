@@ -7,7 +7,18 @@ import { UiText } from '../../components/Typography';
 import { UiPulseLoader } from '../../components/UiPulseLoader';
 
 /** One captured side as a card-shaped photo, e.g. the two-sided front preview. */
-export function DocImage({ uri, label, uploading }: { uri: string; label?: string; uploading?: boolean }): React.ReactElement {
+export function DocImage({
+  uri,
+  label,
+  uploading,
+  aspect = 1.586,
+}: {
+  uri: string;
+  label?: string;
+  uploading?: boolean;
+  /** Width over height of the document; a NIN slip is longer than a card. */
+  aspect?: number;
+}): React.ReactElement {
   const { colors } = useTheme();
   return (
     <View>
@@ -17,7 +28,7 @@ export function DocImage({ uri, label, uploading }: { uri: string; label?: strin
         </UiText>
       ) : null}
       <View style={{ borderRadius: radius.md, overflow: 'hidden', borderWidth: 1, borderColor: colors.border }}>
-        <Image source={{ uri }} style={{ width: '100%', aspectRatio: 1.586 }} resizeMode="cover" />
+        <Image source={{ uri }} style={{ width: '100%', aspectRatio: aspect }} resizeMode="cover" />
         {/* Standard upload loader — a dark scrim + the pulse-ring/spinner loader
             rendered INSIDE the preview frame, mirroring the web/Flutter SDKs (and
             the liveness selfie review). */}

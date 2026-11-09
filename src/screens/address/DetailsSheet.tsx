@@ -86,20 +86,18 @@ export function DetailsSheet({
   const showStreetSection = on('propertyNumber') || on('street') || on('unit') || on('propertyName');
 
   return (
-    <FloatingSheet visible onClose={onClose} maxHeight={maxHeight} bottomOffset={keyboard} closeLabel="Close">
-      <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.xs, paddingBottom: spacing.sm }}>
-        {/* One close control, not two: FloatingSheet already carries its own
-            in the same corner, and the pair read as a mis-render. */}
-        <UiText variant="body" style={{ fontWeight: '700' }}>
-          {t('address.details.title')}
-        </UiText>
-        <UiText variant="bodySmall" color={colors.textSecondary} style={{ marginTop: 2 }}>
-          {anyRequired
-            ? 'Correct anything the map got wrong. Fields marked * are required.'
-            : t('address.details.hint')}
-        </UiText>
-      </View>
-
+    <FloatingSheet
+      visible
+      onClose={onClose}
+      maxHeight={maxHeight}
+      bottomOffset={keyboard}
+      closeLabel="Close"
+      // The house sheet header: "Edit your address", the hint, the close.
+      title={t('address.details.title')}
+      description={
+        anyRequired ? 'Correct anything the map got wrong. Fields marked * are required.' : t('address.details.hint')
+      }
+    >
       <ScrollView
         bounces={false}
         keyboardShouldPersistTaps="handled"

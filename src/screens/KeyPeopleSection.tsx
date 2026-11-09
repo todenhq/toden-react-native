@@ -31,6 +31,7 @@ export function KeyPeopleSection({
   onRemove,
   onQuickAdd,
   children,
+  notice,
 }: {
   section: SectionKey;
   title: string;
@@ -46,6 +47,8 @@ export function KeyPeopleSection({
   onRemove: (index: number) => void;
   onQuickAdd: (index: number) => void;
   children?: React.ReactNode;
+  /** A note shown under the definition (shareholders still on their way). */
+  notice?: React.ReactNode;
 }): React.ReactElement {
   const { colors } = useTheme();
   return (
@@ -54,6 +57,7 @@ export function KeyPeopleSection({
       <UiText variant="bodyMedium" color={colors.textSecondary} style={{ marginTop: 2 }}>
         {description}
       </UiText>
+      {notice}
 
       {members.length > 0 ? (
         <View style={{ marginTop: spacing.sm + 4 }}>

@@ -96,7 +96,8 @@ describeInMonorepo('addressPayload with the flow config', () => {
 
 describe('the submission passes the flow config to the payload builder', () => {
   it('is pinned at the source: a bare addressPayload(state.address) would drop every required prefill', () => {
-    const submit = readFileSync(join(__dirname, '../store/submit.ts'), 'utf8');
+    // The address block is built in store/address-submission.ts (split from submit.ts).
+    const submit = readFileSync(join(__dirname, '../store/address-submission.ts'), 'utf8');
     expect(submit).toMatch(/addressPayload\(state\.address,\s*state\.config\.addressCollection\)/);
   });
 });

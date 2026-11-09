@@ -29,6 +29,9 @@ export interface AwaitRow {
   /** A company on the list completes a KYB application, not a KYC. It gets a
    *  Company tag and its pending pill reads "KYB PENDING". */
   isCorporate?: boolean;
+  /** Added from the company's own documents: says why someone the applicant
+   *  never typed is on the list. */
+  foundInDocuments?: boolean;
 }
 
 /** Ownership as the list renders it: a whole number where that is honest. */
@@ -48,6 +51,7 @@ export function rowsFromServer(people: AwaitingPersonPayload[]): AwaitRow[] {
     ...(p.inviteUrl ? { inviteUrl: p.inviteUrl } : {}),
     isApplicant: p.isApplicant,
     isCorporate: p.isCorporate ?? false,
+    foundInDocuments: p.foundInDocuments ?? false,
   }));
 }
 

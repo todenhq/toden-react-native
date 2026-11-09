@@ -1,6 +1,7 @@
 import type { IconSvgElement } from '@hugeicons/react-native';
 
 import Add01Icon from '@hugeicons/core-free-icons/Add01Icon';
+import Alert01Icon from '@hugeicons/core-free-icons/Alert01Icon';
 import AlertCircleIcon from '@hugeicons/core-free-icons/AlertCircleIcon';
 import BadgeCheckIcon from '@hugeicons/core-free-icons/BadgeCheckIcon';
 import BellRingIcon from '@hugeicons/core-free-icons/BellRingIcon';
@@ -10,6 +11,7 @@ import Building02Icon from '@hugeicons/core-free-icons/Building02Icon';
 import BulbIcon from '@hugeicons/core-free-icons/BulbIcon';
 import Calendar01Icon from '@hugeicons/core-free-icons/Calendar01Icon';
 import Camera01Icon from '@hugeicons/core-free-icons/Camera01Icon';
+import Mic01Icon from '@hugeicons/core-free-icons/Mic01Icon';
 import CameraOff01Icon from '@hugeicons/core-free-icons/CameraOff01Icon';
 import Cancel01Icon from '@hugeicons/core-free-icons/Cancel01Icon';
 import CancelCircleIcon from '@hugeicons/core-free-icons/CancelCircleIcon';
@@ -41,12 +43,10 @@ import Image01Icon from '@hugeicons/core-free-icons/Image01Icon';
 import InformationCircleIcon from '@hugeicons/core-free-icons/InformationCircleIcon';
 import LandmarkIcon from '@hugeicons/core-free-icons/LandmarkIcon';
 import Link02Icon from '@hugeicons/core-free-icons/Link02Icon';
-import Location02Icon from '@hugeicons/core-free-icons/Location02Icon';
 import LocationCheck01Icon from '@hugeicons/core-free-icons/LocationCheck01Icon';
 import LockIcon from '@hugeicons/core-free-icons/LockIcon';
 import Mail01Icon from '@hugeicons/core-free-icons/Mail01Icon';
 import MapPinHouseIcon from '@hugeicons/core-free-icons/MapPinHouseIcon';
-import MapPinIcon from '@hugeicons/core-free-icons/MapPinIcon';
 import Message01Icon from '@hugeicons/core-free-icons/Message01Icon';
 import MinusSignIcon from '@hugeicons/core-free-icons/MinusSignIcon';
 import MoonIcon from '@hugeicons/core-free-icons/MoonIcon';
@@ -100,6 +100,7 @@ export const ICONS: Record<IconName, IconSvgElement> = {
   check: CheckIcon,
   lock: LockIcon,
   alert: AlertCircleIcon,
+  'triangle-alert': Alert01Icon,
   // The environment banner's mark, shared with the web SDK (same lucide glyph)
   // and mirrored by Flutter's Icons.science_outlined.
   flask: FlaskConicalIcon,
@@ -149,10 +150,12 @@ export const ICONS: Record<IconName, IconSvgElement> = {
   'file-text': File02Icon,
   house: Home01Icon,
   landmark: LandmarkIcon,
-  'map-pin': MapPinIcon,
+  // One location icon everywhere: the pin with a house. All three names draw it.
+  'map-pin': MapPinHouseIcon,
   'map-pin-house': MapPinHouseIcon,
   'map-pin-check': LocationCheck01Icon,
-  'map-pinned': Location02Icon,
+  'map-pinned': MapPinHouseIcon,
+  'book-user': BookUserIcon,
   radar: Radar01Icon,
   'bell-ring': BellRingIcon,
   sliders: SlidersHorizontalIcon,
@@ -162,6 +165,7 @@ export const ICONS: Record<IconName, IconSvgElement> = {
   contact: ContactIcon,
   passport: BookUserIcon,
   camera: Camera01Icon,
+  mic: Mic01Icon,
   'camera-off': CameraOff01Icon,
   'video-off': VideoOffIcon,
   upload: Upload01Icon,

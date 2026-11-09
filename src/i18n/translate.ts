@@ -1,5 +1,8 @@
 import { DEFAULT_TEXTS } from './defaults';
 import { CUSTOMISABLE_KEYS } from './customisable';
+import { BUSINESS_VARIANT_TEXTS, businessVariantBase } from './business-variants';
+import { ADDRESS_BOOK_TEXTS } from './address-book';
+import { STEP_TEXTS } from './step-texts';
 import type { TextFn, TextVars, WorkflowTexts } from './types';
 
 // ---------------------------------------------------------------------------
@@ -37,10 +40,14 @@ export function resolveText(
   const { texts, language = BASE_LANGUAGE, vars } = options;
   // Only the customisable texts take a workflow's words; everything else
   // always reads as the SDK wrote it.
-  const pick = (lang: string): string | undefined =>
-    CUSTOMISABLE_KEYS.has(key) ? usable(texts?.[lang]?.[key]) : undefined;
+  // A scoped business variant takes the org's words for the text it stands in
+  // for (i18n/business-variants.ts); otherwise only a customisable key reads them.
+  const base = businessVariantBase(key);
+  const source = CUSTOMISABLE_KEYS.has(key) ? key : base && CUSTOMISABLE_KEYS.has(base) ? base : null;
+  const pick = (lang: string): string | undefined => (source ? usable(texts?.[lang]?.[source]) : undefined);
   const own = language === BASE_LANGUAGE ? undefined : pick(language);
-  const template = own ?? usable(options.legacy) ?? pick(BASE_LANGUAGE) ?? DEFAULT_TEXTS[key] ?? key;
+  const template =
+    own ?? usable(options.legacy) ?? pick(BASE_LANGUAGE) ?? DEFAULT_TEXTS[key] ?? BUSINESS_VARIANT_TEXTS[key] ?? ADDRESS_BOOK_TEXTS[key] ?? STEP_TEXTS[key] ?? key;
   return fillPlaceholders(template, vars).replace(/[ \t]{2,}/g, ' ').trim();
 }
 

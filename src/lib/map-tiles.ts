@@ -9,6 +9,13 @@
 // A MIRROR of the web SDK's lib/map-tiles.ts — keep the two in lockstep.
 
 export const TILE_SIZE = 256;
+
+// OpenStreetMap's tile servers refuse generic client libraries: Android's
+// default okhttp and Dalvik agents are answered with an "Access blocked" tile,
+// at HTTP 200, so nothing can tell it from a real one and the applicant is left
+// looking at the block notice. Their usage policy asks an app to identify
+// itself. A browser needs none of this: it sends its own agent and a Referer.
+export const TILE_HEADERS = { 'User-Agent': 'TodenVerification/1.0 (+https://toden.co)' } as const;
 export const MIN_ZOOM = 3;
 export const MAX_ZOOM = 19;
 

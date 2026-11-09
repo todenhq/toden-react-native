@@ -59,6 +59,9 @@ export interface AutoReportOutcome {
 export async function autoReportPresence(
   config: AutoReportConfig,
   deps: AutoReportDeps = {},
+  /** `background: false` when the "allow all the time" screen makes the ask
+   *  itself (screens/SubmittedBackgroundAsk.tsx): only the report runs here. */
+  only: { background?: boolean } = {},
 ): Promise<AutoReportOutcome | null> {
   if (!shouldAutoReport(config)) return null;
   const options = {
@@ -69,7 +72,7 @@ export async function autoReportPresence(
   // Background first: its permission prompt belongs on the success screen,
   // not a minute later when the report has finished waiting for the watch.
   let background: EnableBackgroundResult | null = null;
-  if (wantsBackground(config)) {
+  if (wantsBackground(config) && only.background !== false) {
     try {
       background = await (deps.enableBackground ?? enableBackgroundPresence)(options);
     } catch {

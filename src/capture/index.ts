@@ -22,3 +22,14 @@ export { DocumentTextGate, type TextBounds, type TextGateOptions } from './docum
 export { documentHintText, documentHintIsAction } from './hints';
 export { useAutoCapture, type AutoCaptureState } from './useAutoCapture';
 export { hasRectDetector, rectFramingProblem, type RectGateOptions } from './rectDetector';
+export {
+  CORNER_BLEED,
+  bleedCropRect,
+  cornersProblem,
+  type CornersProblem,
+  type DocumentQuad,
+  type Point,
+  type VisibleRegion,
+} from './documentCorners';
+export { cornersHint, judgeCorners, readCorners, type CornerReading } from './cornerGate';
+export type { CornerFraming } from './useCornerGate';

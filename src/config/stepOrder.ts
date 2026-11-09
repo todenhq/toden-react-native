@@ -60,6 +60,9 @@ export interface StepOrderOptions {
    * Absent falls back to the default shape (no search, entrance offered).
    */
   addressFlow?: AddressFlowOptions;
+  /** A saved address was picked from the Toden address book: the capture
+   *  steps are not walked, and the address book step confirms the pick. */
+  addressBookReused?: boolean;
   hasQuestionnaire: boolean;
   /**
    * A reviewer sent this back to redo specific steps.
@@ -99,44 +102,25 @@ function openingSteps(o: StepOrderOptions): VerificationStep[] {
   return o.hasConsent === false ? [] : ['consent'];
 }
 
+/** The address flow's own steps for this flow's options. */
+function addressSteps(o: StepOrderOptions): VerificationStep[] {
+  if (o.addressBookReused) return ['address-book'];
+  return addressFlowSteps(
+    o.addressFlow ?? { searchAvailable: false, photoMode: 'optional', streetViewOffered: false },
+  );
+}
+
 /** The flow as configured, before any reviewer narrowing. */
 function fullStepOrder(o: StepOrderOptions): VerificationStep[] {
-  // Business (KYB) flow — the application section, then (when the workflow
-  // requires applicant verification) the ordinary individual capture leg.
-  if (o.isBusiness) {
-    // The questionnaire sits INSIDE the business section (before key people) —
-    // its questions are about the company, so it stays with the company form
-    // rather than trailing the applicant's own capture leg.
-    const steps: VerificationStep[] = [
-      ...openingSteps(o),
-      ...contactSteps(o),
-      ...businessSectionSteps(o.business, o.hasQuestionnaire, o.hasAddressCollection),
-    ];
-    if (hasApplicantVerification(o.business)) {
-      // The applicant may hold an ID issued anywhere the org can verify —
-      // more than one granted country (hasCountrySelect, derived from the
-      // server config for business flows) means they pick theirs first,
-      // exactly like a multi-region individual flow.
-      if (o.hasCountrySelect) steps.push('country-select');
-      steps.push('id-type', ...captureLeg(o));
-    }
-    steps.push('submitted');
-    return steps;
-  }
-
-  // Scoped flows: the scope's headline section IS the flow.
+  // Scoped flows: the scope's headline section IS the flow, whoever it is
+  // about. A scoped BUSINESS workflow (address, questionnaire, contact) runs
+  // these steps and never the KYB application below.
   if (o.scope === 'address') {
     const steps: VerificationStep[] = [...openingSteps(o), ...contactSteps(o)];
     if (o.hasPoa) steps.push('proof-of-address');
     // Gated like the full flow, and like Flutter has always done it: an
     // address flow that asks only for proof of address never opens a map.
-    if (o.hasAddressCollection) {
-      steps.push(
-        ...addressFlowSteps(
-          o.addressFlow ?? { searchAvailable: false, photoMode: 'optional', streetViewOffered: false },
-        ),
-      );
-    }
+    if (o.hasAddressCollection) steps.push(...addressSteps(o));
     if (o.hasQuestionnaire) steps.push('questionnaire');
     steps.push('submitted');
     return steps;
@@ -154,26 +138,42 @@ function fullStepOrder(o: StepOrderOptions): VerificationStep[] {
     return [...openingSteps(o), ...contactSteps(o), 'submitted'];
   }
 
+  // Business (KYB) flow — the application section, then (when the workflow
+  // requires applicant verification) the ordinary individual capture leg.
+  if (o.isBusiness) {
+    // The questionnaire sits INSIDE the business section (before key people) —
+    // its questions are about the company, so it stays with the company form
+    // rather than trailing the applicant's own capture leg.
+    const steps: VerificationStep[] = [
+      ...openingSteps(o),
+      ...contactSteps(o),
+      // The premises address is one unit in the business section; here it
+      // expands into its own steps, as on a person's flow (2026-10-18).
+      ...businessSectionSteps(o.business, o.hasQuestionnaire, o.hasAddressCollection).flatMap((s) =>
+        s === 'address-collection' ? addressSteps(o) : [s],
+      ),
+    ];
+    if (hasApplicantVerification(o.business)) {
+      // The applicant may hold an ID issued anywhere the org can verify —
+      // more than one granted country (hasCountrySelect, derived from the
+      // server config for business flows) means they pick theirs first,
+      // exactly like a multi-region individual flow.
+      if (o.hasCountrySelect) steps.push('country-select');
+      steps.push('id-type', ...captureLeg(o));
+    }
+    steps.push('submitted');
+    return steps;
+  }
+
   const middle: VerificationStep[] = [...captureLeg(o)];
   // Paperwork the org files comes BEFORE the address evidence the
   // verification is judged on (user decision 2026-09-22).
   if (o.hasSupportingDocuments) middle.push('supporting-documents');
   if (o.hasPoa) middle.push('proof-of-address');
-  // The address flow is FOUR real steps on an individual flow (find it, confirm
-  // it, show it, commit it), so the progress bar advances through them and back
-  // is ordinary step navigation. KYB keeps the single premises step, inserted
-  // by businessSectionSteps above.
-  if (o.hasAddressCollection) {
-    middle.push(
-      ...addressFlowSteps(
-        o.addressFlow ?? {
-          searchAvailable: false,
-          photoMode: 'optional',
-          streetViewOffered: false,
-        },
-      ),
-    );
-  }
+  // The address flow is FOUR real steps (find it, confirm it, show it, commit
+  // it), so the progress bar advances through them and back is ordinary step
+  // navigation. A KYB premises runs the same steps (see above).
+  if (o.hasAddressCollection) middle.push(...addressSteps(o));
   if (o.hasQuestionnaire) middle.push('questionnaire');
   return [
     ...openingSteps(o),

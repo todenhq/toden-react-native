@@ -1,5 +1,6 @@
 import type { BusinessCheckResult, VerificationState } from './state';
 import { EMPTY_BUSINESS_CHECK } from './state';
+import { selectOwnershipPending } from '../config/ownershipPending';
 
 // ---------------------------------------------------------------------------
 // The paid registry check at SELECTION, split from verificationStore.ts (200-line rule).
@@ -46,7 +47,12 @@ export async function runBusinessCheck(
   if (!s.sessionId) return { canContinue: true, company: null };
 
   set((cur) => ({
-    businessCheck: { ...cur.businessCheck, status: 'checking', checkedNumber: normalized },
+    businessCheck: {
+      ...cur.businessCheck,
+      status: 'checking',
+      checkedNumber: normalized,
+      ownershipPending: false,
+    },
   }));
   try {
     const res = await s.api.businessSelect({
@@ -87,13 +93,17 @@ export async function runBusinessCheck(
       return { canContinue: false, company: null };
     }
 
-    const { keyPeople, ...company } = res.business!;
+    // ownershipPending is about the owners, not the company record.
+    const { keyPeople, ownershipPending, ...company } = res.business!;
     set((cur) => ({
       businessCheck: {
         ...cur.businessCheck,
         status: 'found',
         company,
         officers: keyPeople ?? [],
+        // The register is still sending the shareholders: the prefill has no
+        // owners yet, and the key-people step says so.
+        ownershipPending: selectOwnershipPending({ ownershipPending }),
       },
     }));
     return { canContinue: true, company };

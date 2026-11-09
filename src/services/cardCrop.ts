@@ -4,6 +4,8 @@
 // box with the ID-card guide centred at 88% width and `aspect` height; this maps
 // that guide rectangle to pixel coordinates of the captured photo.
 
+import { bleedCropRect, type DocumentQuad, type Point, type VisibleRegion } from '../capture/documentCorners';
+
 /** A crop rectangle in source-image pixels. */
 export interface CropRect {
   originX: number;
@@ -64,4 +66,90 @@ export function cardCropRect(
     width: GUIDE_WIDTH_FRACTION * visW,
     height: heightFraction * visH,
   };
+}
+
+/**
+ * The photo pixels behind a guide drawn at `guide` (shares of the preview box,
+ * as documentTurn's guideFractions gives them). Used for an upright guide,
+ * which is not the centred 88%-wide frame `cardCropRect` assumes.
+ */
+export function guideCropRect(
+  imageW: number,
+  imageH: number,
+  viewAr: number,
+  guide: { x: number; y: number; width: number; height: number },
+): CropRect {
+  const photoAR = imageW / imageH;
+  const visW = photoAR > viewAr ? imageH * viewAr : imageW;
+  const visH = photoAR > viewAr ? imageH : imageW / viewAr;
+  const offX = (imageW - visW) / 2;
+  const offY = (imageH - visH) / 2;
+  return {
+    originX: offX + guide.x * visW,
+    originY: offY + guide.y * visH,
+    width: guide.width * visW,
+    height: guide.height * visH,
+  };
+}
+
+// ── Corner-based crop ─────────────────────────────────────────────────────────
+//
+// When the document's corners were detected, the crop follows the DOCUMENT
+// rather than the painted guide, so the saved photo keeps space past every
+// corner and a passport's machine-readable zone is never cut off.
+
+/** Which part of a frame a cover-fit preview shows (normalised 0..1). */
+export function coverVisibleRegion(frameAr: number, viewAr: number): VisibleRegion {
+  if (!(frameAr > 0) || !(viewAr > 0)) return { left: 0, top: 0, right: 1, bottom: 1 };
+  if (frameAr > viewAr) {
+    // The frame is wider than the view: its sides are cropped off.
+    const w = viewAr / frameAr;
+    return { left: (1 - w) / 2, top: 0, right: (1 + w) / 2, bottom: 1 };
+  }
+  const h = frameAr / viewAr;
+  return { left: 0, top: (1 - h) / 2, right: 1, bottom: (1 + h) / 2 };
+}
+
+/** Phone sensors are 4:3; upright, the long side runs the way the frame's does. */
+function sensorAr(frameAr: number): number {
+  return frameAr > 1 ? 4 / 3 : 3 / 4;
+}
+
+/** A centred rectangle of aspect `ar`, as large as fits the sensor: its share of each side. */
+function inscribed(ar: number, sensor: number): { w: number; h: number } {
+  return ar < sensor ? { w: ar / sensor, h: 1 } : { w: 1, h: sensor / ar };
+}
+
+/**
+ * Re-express a quad measured in the camera FRAME in the captured PHOTO.
+ *
+ * The frame-processor stream and the still can differ in aspect (a 16:9 stream
+ * beside a 4:3 photo). Both are cut from one sensor about its centre, each as
+ * large as its aspect allows, so a point is carried frame → sensor → photo.
+ * Equal aspects are the identity.
+ */
+export function quadInImage(quad: DocumentQuad, frameAr: number, imageAr: number): DocumentQuad {
+  if (!(frameAr > 0) || !(imageAr > 0) || Math.abs(frameAr - imageAr) < 1e-3) return quad;
+  const sensor = sensorAr(frameAr);
+  const f = inscribed(frameAr, sensor);
+  const i = inscribed(imageAr, sensor);
+  const axis = (v: number, fs: number, is: number): number => ((1 - fs) / 2 + v * fs - (1 - is) / 2) / is;
+  const map = (p: Point): Point => ({ x: axis(p.x, f.w, i.w), y: axis(p.y, f.h, i.h) });
+  return {
+    topLeft: map(quad.topLeft),
+    topRight: map(quad.topRight),
+    bottomRight: map(quad.bottomRight),
+    bottomLeft: map(quad.bottomLeft),
+  };
+}
+
+/** The bleed crop of a detected document, in the photo's pixels. */
+export function cornerCropRect(
+  imageW: number,
+  imageH: number,
+  quad: DocumentQuad,
+  frameAr: number,
+): CropRect {
+  const r = bleedCropRect(quadInImage(quad, frameAr, imageW / imageH), { width: imageW, height: imageH });
+  return { originX: r.x, originY: r.y, width: r.width, height: r.height };
 }

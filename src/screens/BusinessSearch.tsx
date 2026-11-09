@@ -1,17 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { UiAlert } from '../components/UiAlert';
 import { UiButton } from '../components/UiButton';
 import { UiInput } from '../components/UiInput';
-import { UiSelect } from '../components/UiSelect';
 import { UiText } from '../components/Typography';
 import { useText } from '../i18n/useText';
 import { Icon } from '../components/Icon';
 import { BusinessSearchResults } from './BusinessSearchResults';
 import { useFlowState, useVerificationStore, useTheme } from '../components/runtime';
-import { spacing } from '../config/theme';
 import type { BusinessSearchHit } from '../services/api';
+import { businessSearchRefusal } from '../config/businessSearch';
+import { BusinessRegionField, useBusinessRegions } from './BusinessRegionField';
 
 // ─── Finding the company by name, because that is what people know ───────────
 //
@@ -20,8 +20,9 @@ import type { BusinessSearchHit } from '../services/api';
 // into a search of their own filing cabinet, which is where KYB applications
 // are abandoned.
 //
-// The search itself is FREE and read-only; only picking a result leads to the
-// paid register check. It fires on an explicit submit, never on keystroke: a
+// The search is read-only and free on most registers; where a register charges
+// per search the org pays, so the attempt session rides along. Picking a
+// result leads to the register check. It fires on an explicit submit, never on keystroke: a
 // debounce spends the register's small, uncontracted rate-limit budget on
 // every prefix nobody asked for. Sizes and rhythm mirror the web SDK's
 // BusinessSearch (12px block gaps, 48px input/button) — keep them in lockstep.
@@ -36,15 +37,20 @@ export function BusinessSearch({
   country,
   onPicked,
   onManualEntry,
+  onRefused,
 }: {
   country: string;
   onPicked: (hit: BusinessSearchHit) => void;
   onManualEntry: () => void;
+  /** The server refused search by name for this attempt (its message, or
+   *  null): the step moves to registration-number entry. */
+  onRefused: (message: string | null) => void;
 }): React.ReactElement {
   const store = useVerificationStore();
   const { colors } = useTheme();
   const t = useText();
   const region = useFlowState((s) => s.business.subdivisionCode);
+  const sessionId = useFlowState((s) => s.sessionId);
   const [query, setQuery] = useState('');
   // Narrows what came back; it never replaces the search. Matches the name AND
   // the number — a box inviting either that answered only one looked broken.
@@ -53,25 +59,7 @@ export function BusinessSearch({
   // Four countries file companies per state or emirate, and the provider
   // searches ONE register at a time. Without the region it fails closed —
   // a company filed a state away would otherwise come back "not registered".
-  const [regions, setRegions] = useState<{ code: string; name: string }[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setRegions([]);
-    if (!country) return undefined;
-    store
-      .getState()
-      .api.businessRegions(country)
-      .then((r) => {
-        if (!cancelled) setRegions(r.regions ?? []);
-      })
-      // An empty list means "do not ask" — also the safe answer when the
-      // catalogue is unreachable: the search itself says so on its own.
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [country, store]);
+  const regions = useBusinessRegions(country);
 
   const run = async (): Promise<void> => {
     const q = query.trim();
@@ -84,11 +72,20 @@ export function BusinessSearch({
         query: q,
         limit: 50,
         ...(region ? { subdivisionCode: region } : {}),
+        sessionId,
       });
       const hits = res.results ?? [];
       setFilter('');
       setState({ phase: 'results', hits, truncated: hits.length >= 50 });
-    } catch {
+    } catch (err) {
+      // Search by name is not coming back for this attempt (switched off, no
+      // session, the org cannot pay, too many searches): straight to the number.
+      const refusal = businessSearchRefusal(err);
+      if (refusal) {
+        setState({ phase: 'idle' });
+        onRefused(refusal.message);
+        return;
+      }
       // Deliberately NOT an empty result list. "No matches" reads as "this
       // business is not registered", a claim an outage has not earned.
       setState({ phase: 'unavailable' });
@@ -109,20 +106,7 @@ export function BusinessSearch({
 
   return (
     <View>
-      {regions.length > 0 && (
-        <View style={{ marginBottom: 12 }}>
-          <UiText variant="label" style={{ marginBottom: spacing.sm }}>
-            State or region of registration
-          </UiText>
-          <UiSelect
-            value={region || undefined}
-            sheetTitle="State or region"
-            searchable
-            options={regions.map((r) => ({ value: r.code, label: r.name }))}
-            onChange={(code) => store.getState().setBusinessField('subdivisionCode', code)}
-          />
-        </View>
-      )}
+      <BusinessRegionField regions={regions} region={region} />
 
       {/* No label: the placeholder says it, and the magnifier says what kind
           of field this is — the web SDK's exact arrangement. */}

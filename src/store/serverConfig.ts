@@ -39,6 +39,9 @@ export interface ServerConfigState {
    * page never reports ready.
    */
   mapsFrameUrl?: string | null;
+  /** The Toden address book on this organisation (save + reuse switches).
+   *  The server already narrows `reuse` by the workflow. */
+  addressBook?: { save: boolean; reuse: boolean };
   /**
    * The Google Cloud project Play Integrity tokens are requested for
    * (`deviceAttestation.playIntegrityCloudProjectNumber`). Null or absent ⇒

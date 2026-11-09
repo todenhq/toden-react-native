@@ -8,38 +8,11 @@ import { UiText } from '../components/Typography';
 import { Icon } from '../components/Icon';
 import { CountryFlag } from '../components/CountryFlag';
 import { regionCountryName } from '../config/regions';
-import { KEY_PERSON_ROLE_LABELS } from '../config/keyPeople';
 import type { AwaitRow } from './KeyPeopleAwaitList';
+import { ROLE_LABELS, statusView } from './KeyPeopleAwaitStatus';
 
 // One person's card on the KYB "awaiting users" list — split from
 // KeyPeopleAwaitList per the 200-line rule.
-
-const ROLE_LABELS: Record<string, string> = {
-  ...KEY_PERSON_ROLE_LABELS,
-  authorized_representative: 'Authorized representative',
-};
-
-function statusView(
-  row: AwaitRow,
-  colors: ReturnType<typeof useTheme>['colors'],
-): { label: string; bg: string; fg: string } {
-  switch (row.status) {
-    case 'verified':
-      return { label: 'VERIFIED', bg: colors.successBg, fg: colors.success };
-    case 'submitted':
-      return { label: 'SUBMITTED', bg: colors.successBg, fg: colors.success };
-    case 'failed':
-      return { label: 'CHECK FAILED', bg: colors.errorBg, fg: colors.error };
-    case 'not_needed':
-      return { label: 'NOT NEEDED', bg: colors.border, fg: colors.textMuted };
-    default:
-      return {
-        label: row.isCorporate ? 'KYB PENDING' : 'KYC PENDING',
-        bg: colors.primary100,
-        fg: colors.primary,
-      };
-  }
-}
 
 export function AwaitCard({ row }: { row: AwaitRow }): React.ReactElement {
   const { colors } = useTheme();
@@ -128,6 +101,14 @@ export function AwaitCard({ row }: { row: AwaitRow }): React.ReactElement {
               </>
             ) : null}
           </View>
+          {row.foundInDocuments ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+              <Icon name="file-text" size={13} color={colors.textMuted} />
+              <UiText variant="bodySmall" color={colors.textMuted} style={{ fontSize: 12, marginLeft: 4 }}>
+                Found in your company documents
+              </UiText>
+            </View>
+          ) : null}
         </View>
         <View
           style={{

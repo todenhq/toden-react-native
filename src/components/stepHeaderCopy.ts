@@ -1,4 +1,5 @@
 import { defaultText } from '../i18n/translate';
+import { businessKey } from '../i18n/business-variants';
 import type { TextFn } from '../i18n/types';
 import type { DocumentCapturePhase } from '../store/state';
 import { supportingDocumentsIntro } from '../lib/supportingDocumentsIntro';
@@ -59,10 +60,12 @@ export function questionnaireMeta(
   title: string | undefined,
   description: string | undefined,
   t: TextFn = defaultText,
+  /** A scoped business workflow asks about the company. */
+  scopedBusiness = false,
 ): HeaderCopy {
   return {
-    title: t('questionnaire.title', undefined, title),
-    description: t('questionnaire.description', undefined, description),
+    title: t(businessKey('questionnaire.title', scopedBusiness), undefined, title),
+    description: t(businessKey('questionnaire.description', scopedBusiness), undefined, description),
   };
 }
 
@@ -74,10 +77,16 @@ export function proofOfAddressMeta(
    *  document they do not have. */
   nameNeeded = true,
   t: TextFn = defaultText,
+  /** A scoped business workflow: the document shows the company's address. */
+  scopedBusiness = false,
 ): HeaderCopy {
   return {
     title: t('proofOfAddress.title'),
-    description: `Upload a document that shows your ${nameNeeded ? 'name and home address' : 'home address'}, issued within the last ${maxAgeDays} days.`,
+    description: scopedBusiness
+      ? t(nameNeeded ? 'proofOfAddress.description.business' : 'proofOfAddress.description.noName.business', {
+          days: maxAgeDays,
+        })
+      : `Upload a document that shows your ${nameNeeded ? 'name and home address' : 'home address'}, issued within the last ${maxAgeDays} days.`,
   };
 }
 
@@ -96,6 +105,9 @@ export function documentCaptureMeta(
   const upload = mode === 'upload';
   // A two-sided document's front and review have texts of their own, as on web.
   switch (phase) {
+    case 'checking':
+      // The loading screen carries its own title (stepHeaderMeta blanks this).
+      return { title: '', description: '' };
     case 'front':
       if (twoSided) {
         return upload

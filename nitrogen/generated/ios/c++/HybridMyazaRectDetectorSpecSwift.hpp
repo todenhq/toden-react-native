@@ -79,6 +79,12 @@ namespace margelo::nitro::myazakyc {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline void setExpectUpright(bool upright) override {
+      auto __result = _swiftPart.setExpectUpright(std::forward<decltype(upright)>(upright));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
 
   private:
     KycSdkReactNative::HybridMyazaRectDetectorSpec_cxx _swiftPart;

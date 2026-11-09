@@ -24,6 +24,32 @@ export type PoaDocumentType =
  *  server; read here only to word the step. */
 export type PoaNameRule = 'required' | 'optional' | 'off';
 
+/** The documents inside each kind (lib/poa-subtypes.ts); add-only. */
+export type PoaDocumentSubtype =
+  | 'electricity_bill'
+  | 'water_bill'
+  | 'gas_bill'
+  | 'internet_bill'
+  | 'phone_bill'
+  | 'waste_bill'
+  | 'bank_statement'
+  | 'credit_card_statement'
+  | 'mortgage_statement'
+  | 'loan_statement'
+  | 'tenancy_agreement'
+  | 'lease_agreement'
+  | 'property_title'
+  | 'tax_document'
+  | 'property_rates_bill'
+  | 'voter_registration'
+  | 'voter_id'
+  | 'benefits_letter'
+  | 'government_letter'
+  | 'insurance_document'
+  | 'employer_letter'
+  | 'education_letter'
+  | 'other_document';
+
 /**
  * One requested supporting document. There is no catalogue: the organisation
  * names its own, so the SDK renders the title and guidance the workflow sent.
@@ -54,9 +80,10 @@ export interface SupportingDocumentRequest {
   alwaysAsk?: boolean;
   /**
    * How it is provided: a file (`upload`, the default), a signature drawn on
-   * screen (`draw`), or either (`draw_or_upload`).
+   * screen (`draw`), or either (`draw_or_upload`); `camera` opens the camera
+   * straight away rather than offering a source.
    */
-  capture?: 'upload' | 'draw' | 'draw_or_upload';
+  capture?: 'upload' | 'draw' | 'draw_or_upload' | 'camera' | 'file';
 }
 
 export interface SupportingDocumentsConfig {
@@ -88,6 +115,16 @@ export interface ProofOfAddressConfig {
    * REPLACES `documentTypes` for that country.
    */
   countryDocuments?: Record<string, PoaDocumentType[]>;
+  /** The documents accepted inside the kinds. A kind none of these belong to
+   *  accepts all of its own (lib/poa-subtypes.ts); absent = all. */
+  documentSubtypes?: PoaDocumentSubtype[];
+  /** Days a recognised document stays valid, over its kind's window. The
+   *  server applies it; the SDK states the kind's window. */
+  documentSubtypeValidity?: Partial<Record<PoaDocumentSubtype, number>>;
+  /** How the applicant provides the document (absent = both). */
+  capture?: 'both' | 'camera' | 'file';
+  /** Per-kind recency window in days, over `maxAgeDays` (0 = no limit). */
+  documentValidity?: Partial<Record<PoaDocumentType, number>>;
   /** The default name rule for every country and kind (absent = required). */
   nameMatch?: PoaNameRule;
   /** Per-country, per-kind exceptions to `nameMatch` (ISO-2 → kind → rule). */
@@ -215,6 +252,8 @@ export interface PhoneVerificationConfig {
   channels?: Array<'sms' | 'whatsapp'>;
   /** Default dial-code country (falls back to the flow's country). */
   defaultCountry?: string;
+  /** The dial-code countries the phone input offers (ISO-2; absent = all). One country is shown fixed, with no picker. */
+  countries?: string[];
 }
 
 // ── Questionnaire (compliance declarations) ─────────────────────────────────

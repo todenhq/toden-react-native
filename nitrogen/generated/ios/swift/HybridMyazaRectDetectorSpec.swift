@@ -15,6 +15,7 @@ public protocol HybridMyazaRectDetectorSpec_protocol: HybridObject {
 
   // Methods
   func detectRect(frame: (any HybridFrameSpec)) throws -> DetectedRect
+  func setExpectUpright(upright: Bool) throws -> Void
 }
 
 public extension HybridMyazaRectDetectorSpec_protocol {

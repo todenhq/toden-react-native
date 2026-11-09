@@ -2,9 +2,8 @@ import React, { useMemo } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { radius, spacing } from '../config/theme';
-import { ID_TYPES, resolveIdTypeDefinition } from '../config/idTypes';
 import { useMultiIdPlan } from '../lib/use-multi-id-plan';
-import type { IdType, IdTypeDefinition } from '../types/config';
+import type { IdType } from '../types/config';
 import {
   useEffectiveCountry,
   useFlowState,
@@ -15,17 +14,21 @@ import {
 import { UiText } from '../components/Typography';
 import { UiPulseLoader } from '../components/UiPulseLoader';
 import { Icon, type IconName } from '../components/Icon';
+import { countrySelectOptions, idCountryOnStep } from '../store/derive';
+import { IdCountryField } from './IdCountryField';
+import { useIdTypeOptions } from './useIdTypeOptions';
 
-// ID-type picker — 1:1 with the Flutter SDK's IdTypeScreen: a list of cards
-// (icon tile + label + forward chevron) that ADVANCE ON TAP.
+// ID-type picker — 1:1 with the web SDK's IdTypeStep and Flutter's
+// IdTypeScreen: a list of cards (icon + label) that ADVANCE ON TAP. On the
+// combined layout the country row sits above them (IdCountryField).
 //
 // No Continue button and no radio, matching Flutter and the web SDK. It is a
 // single-select list with nothing else on the step to confirm, so Continue only
 // restated a decision already made; and country-select already advances on tap,
 // so a second list that behaved differently taught users one rule then broke
-// it. A mis-tap costs one Back. The affordance is therefore a "go to the next
-// step" chevron — a radio would imply a select-then-confirm this flow does not
-// have.
+// it. A mis-tap costs one Back. No radio, then — it would imply a
+// select-then-confirm this flow does not have — and no chevron either, as the
+// web card has none.
 //
 // The advance reads the TAPPED value through the store, never the
 // `selectedIdType` bound at render: that closure is a step behind inside the
@@ -37,6 +40,8 @@ const ICON_FOR: Record<string, IconName> = {
   bvn: 'landmark', // Bank Verification Number → bank/landmark
   nin: 'fingerprint',
   vnin: 'fingerprint',
+  'nin-phone': 'fingerprint',
+  'phone-number': 'smartphone',
   passport: 'passport',
   'drivers-license': 'id-card',
   pvc: 'contact', // Permanent Voter's Card
@@ -55,6 +60,14 @@ export function IdTypeStep(): React.ReactElement {
   const store = useVerificationStore();
   const serverConfig = useFlowState((s) => s.serverConfig);
   const selectedIdType = useFlowState((s) => s.selectedIdType);
+  // The combined layout picks the country here, above the IDs, rather than on
+  // a step of its own (lib/id-selection-layout.ts). One rule for this and the
+  // header: store/derive.ts idCountryOnStep.
+  const countryHere = useFlowState(idCountryOnStep);
+  const countryOptions = useMemo(
+    () => countrySelectOptions({ config, serverConfig }),
+    [config, serverConfig],
+  );
   // Multi-ID: this picker is for ONE check of several. It may only offer picks
   // that leave every later check something to offer — the server validates the
   // same rule, so an unsafe pick would be a submission it rejects.
@@ -68,85 +81,50 @@ export function IdTypeStep(): React.ReactElement {
     store.getState().nextStep();
   };
 
-  const available = useMemo<IdTypeDefinition[]>(() => {
-    // In a multi-region flow the PICKED country's own `idTypes` narrow the
-    // list; otherwise the top-level prop applies. Absent or empty means every
-    // granted type, which is the server's own "unset = all" semantic.
-    const perCountry = (config.countries ?? []).find(
-      (e) => e.country.toUpperCase() === country.toUpperCase(),
-    )?.idTypes;
-    const keys = (perCountry?.length ? perCountry : config.idTypes) as
-      | readonly string[]
-      | undefined;
-    const allowed = (key: string): boolean => !keys?.length || keys.includes(key);
+  // What this country offers, after every narrowing (screens/useIdTypeOptions.ts).
+  const visible = useIdTypeOptions(country, plan);
 
-    // Built from the SERVER rows, not the curated table. The curated table only
-    // knows the five gov-DB countries; a Global-Documents flow offers ~240, and
-    // filtering against the table rendered an empty list — "no ID types are
-    // enabled" — for every country outside it. The row carries the label and
-    // capture shape, so an uncurated country renders correctly from it.
-    if (serverConfig.status === 'ready') {
-      return serverConfig.idTypes
-        .filter((row) => row.country === country && allowed(row.idType))
-        .map((row) =>
-          resolveIdTypeDefinition(country, row.idType, {
-            label: row.label,
-            requiresDocumentCapture: row.requiresDocumentCapture,
-            scanSides: row.scanSides,
-            supportsNfc: row.supportsNfc,
-          }),
-        );
-    }
-    if (serverConfig.status === 'loading') return [];
-    // Config failed to load: fall back to the curated list. The server still
-    // rejects anything actually disabled, so this is permissive, not unsafe.
-    const table = ID_TYPES as Record<string, readonly IdTypeDefinition[] | undefined>;
-    return (table[country.toUpperCase()] ?? []).filter((t) => allowed(t.key));
-  }, [country, config.idTypes, config.countries, serverConfig]);
-
-  // Document Intelligence off ⇒ number-only IDs only (there is no document
-  // capture step), so drop every document-scanned ID from the picker. This is
-  // what makes the disabled step actually disappear from the live flow rather
-  // than still offering passports and licences that then have nowhere to be
-  // captured. Mirrors the web SDK's IdTypeStep.
-  const visible = useMemo<IdTypeDefinition[]>(() => {
-    const base =
-      config.enableDocumentCapture === false
-        ? available.filter((t) => !t.requiresDocumentCapture)
-        : available;
-    // Multi-ID: only the picks that are still free AND leave every later check
-    // an option. An ID already used earlier in the run is simply not offered.
-    return plan ? base.filter((t) => plan.safeOptions.includes(t.key)) : base;
-  }, [available, config.enableDocumentCapture, plan]);
+  const countryField = countryHere ? (
+    <View style={{ marginBottom: spacing.lg }}>
+      <IdCountryField options={countryOptions} />
+    </View>
+  ) : null;
 
   if (serverConfig.status === 'loading') {
     return (
-      <View style={{ paddingVertical: spacing.xl, alignItems: 'center' }}>
-        <UiPulseLoader />
+      <View>
+        {countryField}
+        <View style={{ paddingVertical: spacing.xl, alignItems: 'center' }}>
+          <UiPulseLoader />
+        </View>
       </View>
     );
   }
 
   if (serverConfig.status === 'ready' && visible.length === 0) {
     return (
-      <View
-        style={{
-          padding: spacing.md,
-          borderRadius: radius.md,
-          backgroundColor: colors.errorBg,
-          borderWidth: 1,
-          borderColor: `${colors.error}4D`,
-        }}
-      >
-        <UiText variant="bodyMedium" color={colors.error}>
-          No ID types are enabled for your organization. Contact your administrator to request access.
-        </UiText>
+      <View>
+        {countryField}
+        <View
+          style={{
+            padding: spacing.md,
+            borderRadius: radius.md,
+            backgroundColor: colors.errorBg,
+            borderWidth: 1,
+            borderColor: `${colors.error}4D`,
+          }}
+        >
+          <UiText variant="bodyMedium" color={colors.error}>
+            No ID types are enabled for your organization. Contact your administrator to request access.
+          </UiText>
+        </View>
       </View>
     );
   }
 
   return (
     <View>
+      {countryField}
       {visible.map((t) => {
         const selected = selectedIdType === t.key;
         return (
@@ -156,10 +134,12 @@ export function IdTypeStep(): React.ReactElement {
             accessibilityRole="button"
             accessibilityLabel={t.label}
             style={{
-              marginBottom: spacing.sm,
-              borderRadius: radius.md,
+              // The web card: gap-3 between cards, rounded-xl, p-4, a 1px
+              // border that turns primary when chosen.
+              marginBottom: 12,
+              borderRadius: radius.sm,
               backgroundColor: selected ? colors.primary50 : colors.background,
-              borderWidth: selected ? 1.5 : 1,
+              borderWidth: 1,
               borderColor: selected ? colors.primary : colors.border,
               padding: spacing.md,
               flexDirection: 'row',
@@ -171,30 +151,12 @@ export function IdTypeStep(): React.ReactElement {
               elevation: 1,
             }}
           >
-            <View
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: radius.sm,
-                backgroundColor: selected ? colors.primary100 : colors.primary50,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Icon name={ICON_FOR[t.key] ?? 'credit-card'} size={22} color={selected ? colors.primary : colors.textSecondary} />
-            </View>
-            <View style={{ width: spacing.md }} />
-            <UiText variant="label" style={{ flex: 1, fontWeight: '600' }}>
+            {/* The glyph alone, no tile behind it: the card is the frame. */}
+            <Icon name={ICON_FOR[t.key] ?? 'file-text'} size={40} color={selected ? colors.primary : colors.textSecondary} />
+            <View style={{ width: 12 }} />
+            <UiText variant="label" style={{ flex: 1, fontSize: 18, lineHeight: 24, fontWeight: '500' }}>
               {t.label}
             </UiText>
-            <View style={{ width: spacing.md }} />
-            {/* Forward chevron, not a radio: the tap advances, so the icon has
-                to promise the next step rather than a pending confirmation. */}
-            <Icon
-              name="chevron-right"
-              size={20}
-              color={selected ? colors.primary : colors.gray400}
-            />
           </Pressable>
         );
       })}

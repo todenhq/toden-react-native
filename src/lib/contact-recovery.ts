@@ -42,3 +42,17 @@ export function stepAfterContactVerified(opts: {
   const remaining = opts.expired.find((c) => c !== opts.channel);
   return remaining ? contactStepFor(remaining) : 'submitted';
 }
+
+/**
+ * Whether the contact step hides Back: while it is recovering from a refused
+ * submission (its channel is among the expired ones), which returns to the
+ * end of the flow rather than walking back through it. Otherwise Back is the
+ * step order's (config/stepOrder.ts): phone into email when the flow has an
+ * email check, else consent; email into consent; none on a consent-less
+ * flow's opening step. Mirrors the web SDK's ContactVerificationStep.
+ */
+export function contactBackHidden(step: VerificationStep, expired: readonly ContactChannel[] | undefined): boolean {
+  if (step === 'email-verification') return (expired ?? []).includes('email');
+  if (step === 'phone-verification') return (expired ?? []).includes('phone');
+  return false;
+}

@@ -55,6 +55,7 @@ namespace margelo::nitro::myazakyc {
   public:
     // Methods
     std::string stableId() override;
+    bool declaresMicrophone() override;
     std::shared_ptr<Promise<std::vector<std::string>>> integritySignals() override;
     bool appAttestSupported() override;
     std::string appAttestKeyId() override;

@@ -36,6 +36,8 @@ namespace margelo::nitro::myazakyc { class HybridMyazaTextRecognizerSpec; }
 namespace margelo::nitro::myazakyc { class HybridMyazaTouchGuardSpec; }
 // Forward declaration of `TextResult` to properly resolve imports.
 namespace margelo::nitro::myazakyc { struct TextResult; }
+// Forward declaration of `TurnedTextResult` to properly resolve imports.
+namespace margelo::nitro::myazakyc { struct TurnedTextResult; }
 
 // Include C++ defined types
 #include "AppAttestKey.hpp"
@@ -51,6 +53,7 @@ namespace margelo::nitro::myazakyc { struct TextResult; }
 #include "HybridMyazaTextRecognizerSpec.hpp"
 #include "HybridMyazaTouchGuardSpec.hpp"
 #include "TextResult.hpp"
+#include "TurnedTextResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/Result.hpp>
 #include <VisionCamera/HybridFrameSpec.hpp>

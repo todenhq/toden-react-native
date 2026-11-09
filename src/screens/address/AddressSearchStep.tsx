@@ -20,7 +20,7 @@ export function AddressSearchStep(): React.ReactElement {
   const { colors } = useTheme();
   const flow = useAddressFlow();
   const autocomplete = useFlowState((s) => s.serverConfig.addressSearchMode === 'autocomplete');
-  const gate = useAddressIntroGate('address-search', flow.steps[0]!);
+  const gate = useAddressIntroGate('address-search', flow.firstCaptureStep);
 
   // Warm the GPS and its reverse geocode from the moment the flow is reached,
   // UNDER the primer too: by the time "Continue" is tapped the fix is usually

@@ -20,11 +20,14 @@ export function businessDetailsValid(input: {
   numberValid: boolean;
   nameRequired: boolean;
   showContactEmail: boolean;
+  /** A register asked one region at a time, with no region picked yet. */
+  regionMissing?: boolean;
 }): boolean {
   const { business, modes } = input;
   const pickValid =
     !!input.product &&
     input.numberValid &&
+    !input.regionMissing &&
     (!input.nameRequired || business.registrationName.trim() !== '');
   if (input.phase === 'pick') return pickValid;
 

@@ -4,12 +4,14 @@ import { useFlowState, useVerificationConfig, useVerificationStore } from '../..
 import { addressFlowFor } from '../../config/addressCollection';
 import { webViewAvailable } from '../../lib/webview-available';
 import { isBusinessFlow } from '../../config/business';
-import { addressFlowSteps, addressVendorsStubbed, isAddressStep } from '../../lib/address-flow';
-import { addressExitStep, recoverAddressStep } from '../../lib/address-step-recovery';
+import { addressFlowSteps, addressVendorsStubbed, firstAddressCaptureStep } from '../../lib/address-flow';
+import { addressBookOffer } from '../../lib/address-book';
+import { addressExitStep } from '../../lib/address-step-recovery';
+import { useRecoverAddressStep } from './use-recover-address-step';
 import { defaultMapView } from '../../lib/map-tiles';
 import { buildStepOrder, nextStepInOrder } from '../../config/stepOrder';
 import { geoDefaultCountry } from '../../lib/country-adoption';
-import { configScope } from '../../lib/scope';
+import { configScope, isScopedBusiness } from '../../lib/scope';
 import { stepOrderOptions } from '../../store/verificationStore';
 import { deviceFixFields } from '../../services/location';
 import { savePresencePin } from '../../presence/store';
@@ -45,47 +47,34 @@ export function useAddressFlow() {
   const [error, setError] = useState<string | null>(null);
 
   const cfg = config.addressCollection;
-  const isBusiness = isBusinessFlow(config);
+  // The KYB application's premises step (its country is the register's) vs
+  // the wording: a scoped business address check reads "the premises" too,
+  // but runs the address scope's own steps and declared country.
+  const kybPremises = isBusinessFlow(config);
+  const isBusiness = kybPremises || isScopedBusiness(config);
   const vendorEnvironment = useFlowState((s) => s.serverConfig.environment ?? null);
   const mapsFrameUrl = useFlowState((s) => s.serverConfig.mapsFrameUrl ?? null);
+  const serverConfig = useFlowState((s) => s.serverConfig);
+  const bookOffer = addressBookOffer({ ...config, serverConfig });
   const flow = addressFlowFor(
     config,
     serverSearch,
     addressVendorsStubbed({ environment: vendorEnvironment }),
     Boolean(mapsFrameUrl) && webViewAvailable(),
   );
-  // KYB: the premises pin + directions ARE the capture, so the flow is that
-  // single step and its Continue commits.
-  //
   // Memoised on the three flags it derives from, so `steps` — and the two
   // navigation callbacks that close over it — keep a stable identity. A fresh
   // array on every render would make `goNext` a new function each time, and
   // the entrance step depends on that identity inside an effect.
   const { searchAvailable, photoMode, streetViewOffered } = flow;
   const steps: VerificationStep[] = useMemo(
-    () =>
-      isBusiness
-        ? ['address-collection']
-        : addressFlowSteps({ searchAvailable, photoMode, streetViewOffered }),
-    [isBusiness, searchAvailable, photoMode, streetViewOffered],
+    () => addressFlowSteps({ searchAvailable, photoMode, streetViewOffered }),
+    [searchAvailable, photoMode, streetViewOffered],
   );
+  // The presence primer's home.
+  const firstCaptureStep = firstAddressCaptureStep(steps) ?? steps[0]!;
 
-  // A resumed attempt restores the step it was saved on, and the flow may have
-  // changed shape since: `searchAvailable` is a SERVER flag that lands after the
-  // restore, and a republish can drop the entrance photo. Left alone the
-  // applicant sits on a screen the order does not contain, where Continue has
-  // nothing to advance to and Back has no predecessor. Gated on the config
-  // having settled: until then the order is not the real one.
-  const configSettled = useFlowState((s) => s.serverConfig.status !== 'loading');
-  const currentStep = useFlowState((s) => s.currentStep);
-  useEffect(() => {
-    if (!configSettled || !isAddressStep(currentStep)) return;
-    const options = stepOrderOptions(store.getState());
-    const inFlow = buildStepOrder(options).filter(isAddressStep);
-    const exit = addressExitStep(buildStepOrder({ ...options, hasAddressCollection: true }));
-    const recovered = recoverAddressStep(currentStep, inFlow, exit);
-    if (recovered) store.getState().goToStep(recovered);
-  }, [configSettled, currentStep, store]);
+  useRecoverAddressStep(store);
 
   // The address scope declares the visitor's IP country by default, ONCE,
   // while nothing is declared; a geocode or a picked address then corrects
@@ -103,16 +92,19 @@ export function useAddressFlow() {
   }, [geoCountry, store]);
 
   const pin = address ? { lat: address.lat, lng: address.lng } : null;
-  const country = isBusiness ? (businessCountry ?? undefined) : (selectedCountry ?? config.country);
+  const country = kybPremises ? (businessCountry ?? undefined) : (selectedCountry ?? config.country);
   const view = defaultMapView(country);
 
   const pinActions = usePinActions(store, setError);
 
-  /** Leave the address flow forwards: after the review, a KYB commit, a skip. */
+  /** Leave the address flow forwards (after the review, a KYB commit, a skip,
+   *  a picked saved address), read off the CURRENT order: a picked saved
+   *  address drops the capture steps. */
   const exitForward = useCallback(() => {
     const state = store.getState();
-    const last = steps[steps.length - 1]!;
-    store.getState().goToStep(nextStepInOrder(last, stepOrderOptions(state)));
+    const order = buildStepOrder(stepOrderOptions(state));
+    const exit = addressExitStep(order);
+    store.getState().goToStep(exit ?? nextStepInOrder(steps[steps.length - 1]!, stepOrderOptions(state)));
   }, [steps, store]);
 
   /**
@@ -168,18 +160,31 @@ export function useAddressFlow() {
       savePresencePin(
         config.userId,
         { lat: committed.lat, lng: committed.lng },
-        { alwaysOn: cfg.presence.alwaysOn === true, background: cfg.presence.background !== false },
+        {
+          alwaysOn: cfg.presence.alwaysOn === true,
+          background: cfg.presence.background !== false,
+          playIntegrityProject: serverConfig.playIntegrityCloudProjectNumber ?? null,
+        },
       );
     }
     setConfirming(false);
     exitForward();
-  }, [cfg?.attestPresence, cfg?.presence?.enabled, config.userId, exitForward, store]);
+  }, [
+    cfg?.attestPresence,
+    cfg?.presence?.enabled,
+    config.userId,
+    exitForward,
+    serverConfig.playIntegrityCloudProjectNumber,
+    store,
+  ]);
 
   return {
     cfg,
     address,
     isBusiness,
     steps,
+    firstCaptureStep,
+    bookOffer,
     pin,
     view,
     country,

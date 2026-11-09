@@ -45,6 +45,26 @@ namespace margelo::nitro::myazakyc {
       double aspect = this->getFieldValue(fieldAspect);
       static const auto fieldConfidence = clazz->getField<double>("confidence");
       double confidence = this->getFieldValue(fieldConfidence);
+      static const auto fieldTopLeftX = clazz->getField<double>("topLeftX");
+      double topLeftX = this->getFieldValue(fieldTopLeftX);
+      static const auto fieldTopLeftY = clazz->getField<double>("topLeftY");
+      double topLeftY = this->getFieldValue(fieldTopLeftY);
+      static const auto fieldTopRightX = clazz->getField<double>("topRightX");
+      double topRightX = this->getFieldValue(fieldTopRightX);
+      static const auto fieldTopRightY = clazz->getField<double>("topRightY");
+      double topRightY = this->getFieldValue(fieldTopRightY);
+      static const auto fieldBottomRightX = clazz->getField<double>("bottomRightX");
+      double bottomRightX = this->getFieldValue(fieldBottomRightX);
+      static const auto fieldBottomRightY = clazz->getField<double>("bottomRightY");
+      double bottomRightY = this->getFieldValue(fieldBottomRightY);
+      static const auto fieldBottomLeftX = clazz->getField<double>("bottomLeftX");
+      double bottomLeftX = this->getFieldValue(fieldBottomLeftX);
+      static const auto fieldBottomLeftY = clazz->getField<double>("bottomLeftY");
+      double bottomLeftY = this->getFieldValue(fieldBottomLeftY);
+      static const auto fieldFrameWidth = clazz->getField<double>("frameWidth");
+      double frameWidth = this->getFieldValue(fieldFrameWidth);
+      static const auto fieldFrameHeight = clazz->getField<double>("frameHeight");
+      double frameHeight = this->getFieldValue(fieldFrameHeight);
       return DetectedRect(
         static_cast<bool>(found),
         x,
@@ -52,7 +72,17 @@ namespace margelo::nitro::myazakyc {
         width,
         height,
         aspect,
-        confidence
+        confidence,
+        topLeftX,
+        topLeftY,
+        topRightX,
+        topRightY,
+        bottomRightX,
+        bottomRightY,
+        bottomLeftX,
+        bottomLeftY,
+        frameWidth,
+        frameHeight
       );
     }
 
@@ -62,7 +92,7 @@ namespace margelo::nitro::myazakyc {
      */
     [[maybe_unused]]
     static jni::local_ref<JDetectedRect::javaobject> fromCpp(const DetectedRect& value) {
-      using JSignature = JDetectedRect(jboolean, double, double, double, double, double, double);
+      using JSignature = JDetectedRect(jboolean, double, double, double, double, double, double, double, double, double, double, double, double, double, double, double, double);
       static const auto clazz = javaClassStatic();
       static const auto create = clazz->getStaticMethod<JSignature>("fromCpp");
       return create(
@@ -73,7 +103,17 @@ namespace margelo::nitro::myazakyc {
         value.width,
         value.height,
         value.aspect,
-        value.confidence
+        value.confidence,
+        value.topLeftX,
+        value.topLeftY,
+        value.topRightX,
+        value.topRightY,
+        value.bottomRightX,
+        value.bottomRightY,
+        value.bottomLeftX,
+        value.bottomLeftY,
+        value.frameWidth,
+        value.frameHeight
       );
     }
   };

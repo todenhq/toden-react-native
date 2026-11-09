@@ -18,8 +18,8 @@ public extension DetectedRect {
   /**
    * Create a new instance of `DetectedRect`.
    */
-  init(found: Bool, x: Double, y: Double, width: Double, height: Double, aspect: Double, confidence: Double) {
-    self.init(found, x, y, width, height, aspect, confidence)
+  init(found: Bool, x: Double, y: Double, width: Double, height: Double, aspect: Double, confidence: Double, topLeftX: Double, topLeftY: Double, topRightX: Double, topRightY: Double, bottomRightX: Double, bottomRightY: Double, bottomLeftX: Double, bottomLeftY: Double, frameWidth: Double, frameHeight: Double) {
+    self.init(found, x, y, width, height, aspect, confidence, topLeftX, topLeftY, topRightX, topRightY, bottomRightX, bottomRightY, bottomLeftX, bottomLeftY, frameWidth, frameHeight)
   }
 
   @inline(__always)
@@ -55,5 +55,55 @@ public extension DetectedRect {
   @inline(__always)
   var confidence: Double {
     return self.__confidence
+  }
+  
+  @inline(__always)
+  var topLeftX: Double {
+    return self.__topLeftX
+  }
+  
+  @inline(__always)
+  var topLeftY: Double {
+    return self.__topLeftY
+  }
+  
+  @inline(__always)
+  var topRightX: Double {
+    return self.__topRightX
+  }
+  
+  @inline(__always)
+  var topRightY: Double {
+    return self.__topRightY
+  }
+  
+  @inline(__always)
+  var bottomRightX: Double {
+    return self.__bottomRightX
+  }
+  
+  @inline(__always)
+  var bottomRightY: Double {
+    return self.__bottomRightY
+  }
+  
+  @inline(__always)
+  var bottomLeftX: Double {
+    return self.__bottomLeftX
+  }
+  
+  @inline(__always)
+  var bottomLeftY: Double {
+    return self.__bottomLeftY
+  }
+  
+  @inline(__always)
+  var frameWidth: Double {
+    return self.__frameWidth
+  }
+  
+  @inline(__always)
+  var frameHeight: Double {
+    return self.__frameHeight
   }
 }

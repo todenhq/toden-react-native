@@ -52,9 +52,16 @@ import { faceWindowGuidance, type FaceWindow } from '../lib/faceWindow';
 import { HoldTimer, faceCentred } from './holdDetector';
 import { FlashReadyGate } from './flashReadyGate';
 import { FaceContinuityGuard } from './faceContinuity';
+import { recordingStart } from './flashTimeline';
+import { PromptTimeline } from './promptTimeline';
 import type { FlashResult } from './flashDetector';
 import { useFlashPhase } from './useFlashPhase';
 import { flashOutcome, flashUnmeasurable, FLASH_RETRY_GUIDANCE } from './flashOutcome';
+import { Platform } from 'react-native';
+import { SelfieCandidates, type SelfieShot } from '../lib/selfie-candidates';
+import { SelfieCaptureGate } from '../lib/selfie-capture-gate';
+import type { StillFace } from '../lib/selfie-pick';
+import { captureGuidanceText, facePlacement } from './captureGuidance';
 
 // State shape, options and guidance live in ./livenessState, re-exported here.
 export {
@@ -63,6 +70,7 @@ export {
   type PositionGuidance,
   type LightingGuidance,
   type LivenessUiState,
+  type SelfieChoice,
   type UseLivenessOptions,
   type UseLivenessReturn,
 } from './livenessState';
@@ -84,7 +92,11 @@ import {
 } from './livenessState';
 
 export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
-  const { config, voiceGuidance, onReadyToCapture, announce = true } = opts;
+  const { config, voiceGuidance, announce = true } = opts;
+  // The capture callbacks are read through a ref: they fire from frame
+  // handlers created long before the screen's latest render.
+  const callbacksRef = useRef(opts);
+  callbacksRef.current = opts;
   const tRef = useRef(opts.t);
   tRef.current = opts.t;
 
@@ -94,6 +106,8 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
   // Tracks that the face performing the challenges is the face still in frame.
   // Liveness without it proves a live human was present, not WHICH human.
   const continuityRef = useRef<FaceContinuityGuard>(new FaceContinuityGuard());
+  // When each prompt appeared and passed, for the claim (promptTimeline.ts).
+  const promptsRef = useRef(new PromptTimeline());
   // Flash-only has no challenges to act as a buffer, so it needs its own
   // "framed, lit and held still" gate before the screen lights up.
   const flashGateRef = useRef<FlashReadyGate | null>(null);
@@ -126,7 +140,12 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
   const processingRef = useRef(false); // true between pass and next-challenge start
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const passTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const readyFiredRef = useRef(false);
+  // The selfie is CHOSEN, not snapped (lib/selfie-pick.ts): frames are scored
+  // all through the run and the best front-on still is held; the final
+  // capture's shutter waits for a frame that could be the selfie. On iPhone
+  // pitch and roll are read from the run's own resting pose (SelfieAngleZero).
+  const selfiesRef = useRef(new SelfieCandidates({ poseZeroFromRun: Platform.OS === 'ios' }));
+  const captureGateRef = useRef(new SelfieCaptureGate());
 
   const [state, setState] = useState<LivenessUiState>(() => ({
     phase: 'positioning',
@@ -233,6 +252,7 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
     earHistoryRef.current = [];
     holdRef.current.reset();
     processingRef.current = false;
+    promptsRef.current.shown(current.config.type, Date.now());
     const timeout = config?.timeoutPerChallenge ?? current.config.timeoutSeconds;
     setState((s) => ({
       ...s,
@@ -250,6 +270,7 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
   const onChallengePassed = useCallback(() => {
     processingRef.current = true;
     cancelTimer();
+    promptsRef.current.passed(Date.now());
     trackerRef.current!.markCurrentPassed();
     trackerRef.current!.advance();
     setState((s) => ({
@@ -347,6 +368,30 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
     });
   }, []);
 
+  // ── The final capture's shutter (lib/selfie-capture-gate.ts) ───────────────
+  // A frame counts only if it could be the selfie; short of that the
+  // instruction says what to fix. The continuity guard has already run on it.
+  const onCaptureFrame = useCallback((data: LivenessFaceData) => {
+    const s = stateRef.current;
+    if (s.multipleFaces) return;
+    const placed = facePlacement(data, faceWindowRef.current) == null;
+    const decision = captureGateRef.current.frame({
+      verdict: selfiesRef.current.latest,
+      placed,
+      hasBest: selfiesRef.current.best != null,
+      now: Date.now(),
+    });
+    if (decision.fire !== null) {
+      const best = selfiesRef.current.best;
+      callbacksRef.current.onReadyToCapture?.(
+        decision.fire === 'best' && best ? { source: 'best', selfie: best } : { source: 'live', face: data },
+      );
+      return;
+    }
+    const text = captureGuidanceText(decision.guidance, data, faceWindowRef.current, tRef.current);
+    if (text && text !== s.instruction) setState((st) => (st.phase === 'capturing' ? { ...st, instruction: text } : st));
+  }, []);
+
   // ── Per-frame entry point ──────────────────────────────────────────────────
   /**
    * A different face is in frame, or one returned after an absence.
@@ -365,6 +410,8 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
       const phase = stateRef.current.phase;
       if (isTerminal(phase)) return;
       integrityBrokenRef.current = true;
+      // The selfie must come from one unbroken run of one face.
+      selfiesRef.current.clear();
       // Counted whether or not it is shown: a session with several
       // discontinuities is worth flagging even when each one was recoverable.
       flash.recordGlitch();
@@ -378,6 +425,7 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
 
       // Re-acquired: start again from positioning with a fresh challenge set.
       trackerRef.current = new ChallengeTracker(pickChallenges(config));
+      captureGateRef.current.reset();
       // The returning face has to earn the hold again — otherwise a face that
       // left and came back would flash immediately on a gate that is still
       // holding the departed face's dwell.
@@ -473,8 +521,24 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
       }
 
       checkPosition(data);
+      // Every face feeds the resting pose and the stillness check, whatever
+      // the phase: the person rests while positioning and during the flash.
+      selfiesRef.current.observe(data, Date.now());
 
       const s = stateRef.current;
+      // Score the frame as the selfie, all through the gestures and the final
+      // capture. During the gestures a new best asks the screen for a still.
+      if (s.phase === 'challenge' || s.phase === 'capturing') {
+        const { verdict, score } = selfiesRef.current.consider(data);
+        if (s.phase === 'challenge' && s.positionGuidance == null && s.lightingGuidance == null) {
+          const shot = selfiesRef.current.shoot(verdict, score, Date.now());
+          if (shot) callbacksRef.current.onSelfieShot?.(data, shot);
+        }
+        if (s.phase === 'capturing') {
+          onCaptureFrame(data);
+          return;
+        }
+      }
       if (s.phase === 'positioning') {
         const gate = flashGateRef.current;
         if (gate) {
@@ -610,10 +674,21 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
   const onNoFace = useCallback(() => {
     continuityRef.current.reportNoFace();
     holdRef.current.reset(); // a hold needs an unbroken face
+    // Gone for ~1s on the final capture, the run is broken: the selfie must
+    // come from the same live run as the gestures, not whatever comes back.
+    if (
+      stateRef.current.phase === 'capturing' &&
+      captureGateRef.current.noFace(lastFaceSeenRef.current, Date.now())
+    ) {
+      selfiesRef.current.clear();
+      cancelTimer();
+      setState((s) => ({ ...s, phase: 'failed', failureReason: 'face_lost', activeChallenge: null, positionGuidance: null }));
+      return;
+    }
     if (!stateRef.current.faceDetected) return;
     if (isTerminal(stateRef.current.phase)) return;
     setState((s) => ({ ...s, faceDetected: false, positionGuidance: null, multipleFaces: false }));
-  }, []);
+  }, [cancelTimer]);
 
   const setLighting = useCallback(
     (guidance: LightingGuidance | null) => {
@@ -672,11 +747,13 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
     cancelTimer();
     if (passTimeoutRef.current) clearTimeout(passTimeoutRef.current);
     trackerRef.current = new ChallengeTracker(pickChallenges(config));
+    promptsRef.current.reset();
     xHistoryRef.current = [];
     earHistoryRef.current = [];
     holdRef.current.reset();
     processingRef.current = false;
-    readyFiredRef.current = false;
+    selfiesRef.current.reset();
+    captureGateRef.current.reset();
     speakerRef.current?.reset();
     // A retry is a fresh session: whoever is in frame now becomes the reference.
     continuityRef.current.reset();
@@ -704,13 +781,9 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
     });
   }, [cancelTimer, config]);
 
-  // Fire onReadyToCapture once when we enter `capturing`.
-  useEffect(() => {
-    if (state.phase === 'capturing' && !readyFiredRef.current) {
-      readyFiredRef.current = true;
-      onReadyToCapture?.();
-    }
-  }, [state.phase, onReadyToCapture]);
+  const landSelfieShot = useCallback((shot: SelfieShot, uri: string | null, face: StillFace | null) => {
+    selfiesRef.current.land(shot, uri, face);
+  }, []);
 
   /**
    * Surfaces a failure detected during `capturing` and deliberately withheld.
@@ -759,6 +832,8 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
         trackerRef.current!.all.map((e) => e.config.type),
         fellBack,
       ),
+      // Read through a function: the times live in a ref, like integrity below.
+      promptTimes: () => promptsRef.current.report(recordingStart()),
       flashResult: flash.result(),
       faceGlitches: flash.glitches(),
       // The flash IS a step, so it gets a dot. Without this the indicator
@@ -774,8 +849,9 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
       // is precisely the window a substitution happens in.
       isCompromised: () => integrityBrokenRef.current,
       reportIntegrityFailure,
+      landSelfieShot,
     }),
-    [state, onFace, onNoFace, awaitFreshFace, setLighting, markComplete, setFaceWindow, reset, reportIntegrityFailure, flash, completeFlash, flashAttempt, fellBack, config?.mode],
+    [state, onFace, onNoFace, awaitFreshFace, setLighting, markComplete, setFaceWindow, reset, reportIntegrityFailure, landSelfieShot, flash, completeFlash, flashAttempt, fellBack, config?.mode],
   );
 }
 

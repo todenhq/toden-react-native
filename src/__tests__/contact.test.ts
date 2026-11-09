@@ -1,5 +1,6 @@
 import {
   contactCodeLength,
+  sentCodeLength,
   contactIsRequired,
   hasEmailVerificationStep,
   hasPhoneVerificationStep,
@@ -164,5 +165,24 @@ describe('attempts remaining', () => {
   it('is absent when the server did not say', () => {
     expect(attemptsRemaining(new VerificationApiError('x', 400, 'invalid_code'))).toBeUndefined();
     expect(attemptsRemaining(new Error('boom'))).toBeUndefined();
+  });
+});
+
+describe('sentCodeLength', () => {
+  it('takes the length the server says it sent', () => {
+    expect(sentCodeLength(8, 6)).toBe(8);
+    expect(sentCodeLength(4, 6)).toBe(4);
+  });
+
+  it('keeps the configured length when an older server says nothing', () => {
+    expect(sentCodeLength(undefined, 5)).toBe(5);
+    expect(sentCodeLength(null, 5)).toBe(5);
+  });
+
+  it('ignores a length no code could have', () => {
+    expect(sentCodeLength(3, 6)).toBe(6);
+    expect(sentCodeLength(9, 6)).toBe(6);
+    expect(sentCodeLength(5.5, 6)).toBe(6);
+    expect(sentCodeLength('6', 5)).toBe(5);
   });
 });

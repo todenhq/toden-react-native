@@ -1,11 +1,16 @@
 import { compactDrawing, type SignatureDrawing } from '../lib/signature';
 import { SDK_VERSION } from './deviceMetadata';
+import { businessSearchQuery, type BusinessSearchParams } from '../config/businessSearch';
 import type {
+  AddressBookAddressesResponse,
+  AddressBookCodeResponse,
+  AddressBookLookupResponse,
   AddressReverseResult,
   AddressSearchHit,
   BusinessRegionsResponse,
   BusinessSearchResponse,
   BusinessSelectResponse,
+  RegistryOfficer,
   ContactCheckResponse,
   DocumentCaptureCheckRequest,
   DocumentCaptureCheckResponse,
@@ -288,6 +293,8 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
       codeLength?: number;
       /** Org-configured attempt budget (server clamps 1–5). */
       maxAttempts?: number;
+      /** The attempt, so the server reads these settings from its pinned workflow. */
+      sessionId?: string;
     }): Promise<ContactSendResponse> {
       return request<ContactSendResponse>('/contact/send', {
         method: 'POST',
@@ -301,6 +308,31 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
       return request<ContactCheckResponse>('/contact/check', {
         method: 'POST',
         body: JSON.stringify(body),
+      });
+    },
+
+    /** Whether the email has a saved address this flow could take. */
+    async addressBookLookup(email: string, presence: boolean): Promise<AddressBookLookupResponse> {
+      return request<AddressBookLookupResponse>('/address-book/lookup', {
+        method: 'POST',
+        body: JSON.stringify({ email, presence }),
+      });
+    },
+
+    /** Send a code to the email the person signs in to Toden with. */
+    async addressBookCode(email: string): Promise<AddressBookCodeResponse> {
+      return request<AddressBookCodeResponse>('/address-book/code', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+    },
+
+    /** Check the code: the person's saved addresses (street and area only) and
+     *  a one-time grant the submission spends. */
+    async addressBookAddresses(challengeId: string, code: string): Promise<AddressBookAddressesResponse> {
+      return request<AddressBookAddressesResponse>('/address-book/addresses', {
+        method: 'POST',
+        body: JSON.stringify({ challengeId, code }),
       });
     },
 
@@ -396,16 +428,10 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
      * failure so the caller can show "unavailable" rather than an empty list,
      * which would read as "this business is not registered".
      */
-    async businessSearch(params: {
-      country: string;
-      subdivisionCode?: string;
-      query: string;
-      limit?: number;
-    }): Promise<BusinessSearchResponse> {
-      const qs = new URLSearchParams({ country: params.country, query: params.query });
-      if (params.subdivisionCode) qs.set('subdivisionCode', params.subdivisionCode);
-      if (params.limit) qs.set('limit', String(params.limit));
-      return request<BusinessSearchResponse>(`/business/search?${qs.toString()}`);
+    async businessSearch(params: BusinessSearchParams): Promise<BusinessSearchResponse> {
+      // The attempt session rides along (config/businessSearch.ts): registers
+      // that charge per search scope the charge to it.
+      return request<BusinessSearchResponse>(`/business/search?${businessSearchQuery(params)}`);
     },
 
     /** Registry regions for a country. Empty when it has a single register. */
@@ -435,6 +461,23 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
         method: 'POST',
         body: JSON.stringify(body),
       });
+    },
+
+    /**
+     * Read an uploaded company document for the people it names, so the
+     * key-people step opens with them filled in. Never blocks the flow:
+     * `read: false` (with a reason) is a normal answer the caller ignores.
+     */
+    async businessDocumentPeople(body: {
+      sessionId: string;
+      mediaId: string;
+      group?: string;
+      type?: string;
+      country: string;
+      registrationNumber?: string;
+      registrationName?: string;
+    }): Promise<{ read: boolean; reason?: string; documentType?: string; people?: RegistryOfficer[] }> {
+      return request('/business/documents/people', { method: 'POST', body: JSON.stringify(body) });
     },
 
     /**

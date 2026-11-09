@@ -7,13 +7,12 @@
 export const WELCOME_TEXTS: Record<string, string> = {
   'welcome.title': 'Identity Verification',
   'welcome.description':
-    'We need to verify your identity to comply with regulatory requirements. This process is quick and secure.',
-  'welcome.process.heading': 'DURING THIS PROCESS WE WILL',
-  'welcome.process.verifyId': 'Verify your government-issued ID',
-  'welcome.process.personalInfo': 'Collect basic personal information',
+    "We're required to confirm who you are, and we'll guide you at every step.",
+  'welcome.process.heading': 'During this process we will',
+  'welcome.process.verifyId': 'Check that your ID is genuine',
   'welcome.process.businessDetails': 'Collect your business registration details',
   'welcome.process.businessRegistry': 'Verify your business against the official registry',
-  'welcome.process.addressPin': 'Pin your home address on a map',
+  'welcome.process.addressPin': 'Verify your home address',
   'welcome.process.addressDetails': 'Confirm the details only you can know',
   'welcome.process.faceSelfie': 'Take a quick selfie with liveness checks',
   'welcome.process.faceMatch': 'We match it against your enrolled face',
@@ -22,11 +21,11 @@ export const WELCOME_TEXTS: Record<string, string> = {
   'welcome.process.contactEmailAndPhone': 'Confirm your email and phone number with a one-time code',
   'welcome.process.contactEmail': 'Confirm your email with a one-time code',
   'welcome.process.contactPhone': 'Confirm your phone number with a one-time code',
-  'welcome.process.captureDocument': 'Capture a photo of your ID document',
+  'welcome.process.captureDocument': 'Scan your ID document',
   'welcome.process.selfie': 'Take a selfie for facial verification',
-  'welcome.process.supportingDocuments': 'Upload supporting documents',
+  'welcome.process.supportingDocuments': 'Share any extra documents we need',
   'welcome.process.proofOfAddress': 'Upload a proof of address document',
-  'welcome.process.addressMap': 'Pin your address on a map',
+  'welcome.process.addressMap': 'Verify your home address',
   'welcome.process.questions': 'Answer a few short questions',
   'welcome.process.keyPeople': "List the company's directors and owners",
   'welcome.process.businessDocuments': 'Upload supporting business documents',
@@ -36,5 +35,5 @@ export const WELCOME_TEXTS: Record<string, string> = {
 
 export const WELCOME_NOT_SHOWN: Record<string, string> = {
   'welcome.process.uploadDocument':
-    'The consent list has one document bullet, "Capture a photo of your ID document"; there is no upload-only variant.',
+    'The consent list has one document bullet, "Scan your ID document"; there is no upload-only variant.',
 };

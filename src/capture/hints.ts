@@ -20,18 +20,30 @@ export function documentHintText(hint: DocumentHint, label: string): string {
     case 'searching':
       return `Point the camera at your ${label}`;
     case 'moreLight':
-      return 'Too dark — move somewhere brighter';
+      return 'Too dark. Move somewhere brighter';
     case 'wrongDocument':
-      return `That doesn't look like a ${label}`;
+      // "your", not "a": an article chosen by letter misreads labels said as
+      // letters or acronyms ("an SSNIT", "a NIN").
+      return `That doesn't look like your ${label}`;
     case 'showMrz':
       return 'Include the code strip along the bottom of the page';
     case 'moveCloser':
       return 'Move closer';
     case 'moveBack':
       // The one users don't reach for on their own.
-      return `Move back a little — fit the whole ${label} in view`;
+      return `Move back a little. Fit the whole ${label} in view`;
     case 'centre':
       return `Centre your ${label} in the frame`;
+    // The four-corner gate. Fixed wording (no label) so all three SDKs say
+    // exactly the same thing.
+    case 'noDocument':
+      return 'Place your ID inside the frame';
+    case 'cornerCutOff':
+      return 'Fit all four corners of your ID inside the frame';
+    case 'tooClose':
+      return 'Move back a little so there is space around your ID';
+    case 'showBack':
+      return `That's still the front. Turn your ${label} over`;
     case 'holdStill':
       return 'Hold still…';
     case 'captured':
@@ -52,6 +64,10 @@ export function documentHintIsAction(hint: DocumentHint): boolean {
     hint === 'showMrz' ||
     hint === 'moveCloser' ||
     hint === 'moveBack' ||
-    hint === 'centre'
+    hint === 'centre' ||
+    hint === 'noDocument' ||
+    hint === 'cornerCutOff' ||
+    hint === 'tooClose' ||
+    hint === 'showBack'
   );
 }

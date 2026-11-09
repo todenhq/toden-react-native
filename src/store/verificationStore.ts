@@ -51,20 +51,25 @@ function multiIdPlanFor(s: VerificationState): ReturnType<typeof multiIdPlan> {
   return multiIdPlan(
     { ...s.config, country: s.selectedCountry ?? s.config.country },
     { multiIdSlotIndex: s.multiIdSlotIndex, multiIdSlots: s.multiIdSlots },
-    s.serverConfig.status === 'ready' ? s.serverConfig.idTypes : [],
+    s.serverConfig.status === 'ready' ? offeredIdTypeRows(s.serverConfig.idTypes, s.config) : [],
   );
 }
 import { recordStep, resetStepLog } from '../lib/step-log';
 import { resetAutoLocate, resetCurrentFix } from '../lib/address-current-location';
 import { multiIdPlan } from '../lib/multi-id';
+import { offeredIdTypeRows } from '../lib/offered-id-types';
 import { resolveIdTypeDefinition } from '../config/idTypes';
 import { buildVerifyRequest } from './submit';
 import { IDLE_SELFIE_UPLOAD } from '../lib/selfie-upload-wait';
 import { reserveSilentFrame, settleSilentFrame } from '../lib/silentCapture';
 import { resetBusinessCheck, runBusinessCheck } from './businessCheck';
+import { addressBookActions, EMPTY_ADDRESS_BOOK_FLOW } from './addressBook';
+import { reusedAddressStep } from '../lib/address-book';
 import { startAttemptSession, watchSessionProgress } from './session';
 import { applicantMediaCaptured, buildApplicantVerifyRequest } from './submitApplicant';
 import { keptIdType } from '../lib/resubmit';
+import { documentPeopleReducer } from '../config/documentPeople';
+import { keepPresenceToken } from '../presence/store';
 
 export * from './state';
 export {
@@ -141,9 +146,14 @@ export function createVerificationStore(
       chipData: null,
       poaDocumentType: null,
       poaFileName: null,
+      poaCountry: null,
       address: null,
+      addressBookReuse: null,
+      addressBookFlow: EMPTY_ADDRESS_BOOK_FLOW,
       addressPhotoPreview: null,
       addressIntroSeen: false,
+      businessDocumentGroup: null,
+      supportingDocumentIndex: null,
       addressEntranceFraming: false,
       addressSandboxOutcome: null,
       isLoading: false,
@@ -172,6 +182,7 @@ export function createVerificationStore(
               addressSearch: res.addressSearch,
               addressSearchMode: res.addressSearchMode,
               mapsFrameUrl: res.mapsFrameUrl ?? null,
+              addressBook: res.addressBook,
               playIntegrityCloudProjectNumber:
                 res.deviceAttestation?.playIntegrityCloudProjectNumber ?? null,
               environment: res.environment,
@@ -430,6 +441,20 @@ export function createVerificationStore(
         set((s) => ({ businessApplication: { ...s.businessApplication, keyPeople: rows } }));
       },
 
+      applyDocumentPeople(rows, applied) {
+        set((s) => ({
+          businessApplication: {
+            ...s.businessApplication,
+            keyPeople: rows,
+            documentPeopleApplied: applied,
+          },
+        }));
+      },
+
+      documentPeopleRead(action) {
+        set((s) => ({ businessApplication: documentPeopleReducer(s.businessApplication, action) }));
+      },
+
       setUboUnidentifiable(checked) {
         set((s) => ({
           businessApplication: { ...s.businessApplication, uboUnidentifiable: checked },
@@ -462,6 +487,18 @@ export function createVerificationStore(
         set((s) => ({
           supportingDocuments: s.supportingDocuments.filter((d) => d.type !== type),
         }));
+      },
+
+      setBusinessDocuments(docs) {
+        set((s) => ({ businessApplication: { ...s.businessApplication, documents: docs } }));
+      },
+
+      setBusinessDocumentGroup(index) {
+        set({ businessDocumentGroup: index });
+      },
+
+      setSupportingDocumentIndex(index) {
+        set({ supportingDocumentIndex: index });
       },
 
       removeBusinessDocument(type) {
@@ -510,6 +547,14 @@ export function createVerificationStore(
         }));
       },
 
+      setPoaDocumentType(docType) {
+        if (get().poaDocumentType !== docType) set({ poaDocumentType: docType });
+      },
+
+      setPoaCountry(country) {
+        if (get().poaCountry !== country) set({ poaCountry: country });
+      },
+
       clearProofOfAddress() {
         set((s) => {
           const { proofOfAddress: _dropped, ...rest } = s.mediaIds;
@@ -544,6 +589,8 @@ export function createVerificationStore(
       setAddressEntranceFraming(framing) {
         if (get().addressEntranceFraming !== framing) set({ addressEntranceFraming: framing });
       },
+
+      ...addressBookActions(set),
 
       clearAddress() {
         set((s) => {
@@ -636,6 +683,18 @@ export function createVerificationStore(
           emitStepChange(step);
           return;
         }
+        // The business-documents step walks its groups before leaving the step.
+        const group = get().businessDocumentGroup;
+        if (get().currentStep === 'business-documents' && group !== null && group > 0) {
+          set({ businessDocumentGroup: group - 1 });
+          return;
+        }
+        // So do the supporting documents.
+        const supporting = get().supportingDocumentIndex;
+        if (get().currentStep === 'supporting-documents' && supporting !== null && supporting > 0) {
+          set({ supportingDocumentIndex: supporting - 1 });
+          return;
+        }
         // A finished liveness step is landed on like any other: it opens on
         // its "already taken" screen, never on the camera again.
         const prev = previousStepBefore(get().currentStep, get());
@@ -645,7 +704,10 @@ export function createVerificationStore(
         }
       },
 
-      goToStep(step) {
+      goToStep(requested) {
+        // A picked saved address replaces the capture steps: anything landing
+        // on one goes to the address book step instead (lib/address-book.ts).
+        const step = reusedAddressStep(requested, get().addressBookReuse != null);
         if (step !== get().currentStep) {
           set({ currentStep: step });
           emitStepChange(step);
@@ -666,6 +728,9 @@ export function createVerificationStore(
         const request = buildVerifyRequest(state, fingerprint);
         try {
           const res = await withRetry(() => api.verify(request), { onRetry });
+          // Before anything can report: the first report starts when the
+          // submitted screen sees this result.
+          keepPresenceToken(state.config, res.presenceToken);
           const result: VerificationSubmissionResult = {
             verificationId: res.verificationId,
             status: 'processing',
@@ -755,9 +820,14 @@ export function createVerificationStore(
           chipData: null,
           poaDocumentType: null,
           poaFileName: null,
+          poaCountry: null,
           address: null,
+          addressBookReuse: null,
+          addressBookFlow: EMPTY_ADDRESS_BOOK_FLOW,
           addressPhotoPreview: null,
           addressIntroSeen: false,
+          businessDocumentGroup: null,
+          supportingDocumentIndex: null,
       addressEntranceFraming: false,
       addressSandboxOutcome: null,
           isLoading: false,

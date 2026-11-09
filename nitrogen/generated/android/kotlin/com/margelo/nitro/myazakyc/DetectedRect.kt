@@ -38,7 +38,37 @@ data class DetectedRect(
   val aspect: Double,
   @DoNotStrip
   @Keep
-  val confidence: Double
+  val confidence: Double,
+  @DoNotStrip
+  @Keep
+  val topLeftX: Double,
+  @DoNotStrip
+  @Keep
+  val topLeftY: Double,
+  @DoNotStrip
+  @Keep
+  val topRightX: Double,
+  @DoNotStrip
+  @Keep
+  val topRightY: Double,
+  @DoNotStrip
+  @Keep
+  val bottomRightX: Double,
+  @DoNotStrip
+  @Keep
+  val bottomRightY: Double,
+  @DoNotStrip
+  @Keep
+  val bottomLeftX: Double,
+  @DoNotStrip
+  @Keep
+  val bottomLeftY: Double,
+  @DoNotStrip
+  @Keep
+  val frameWidth: Double,
+  @DoNotStrip
+  @Keep
+  val frameHeight: Double
 ) {
   /* primary constructor */
 
@@ -52,6 +82,16 @@ data class DetectedRect(
       && Objects.deepEquals(this.height, other.height)
       && Objects.deepEquals(this.aspect, other.aspect)
       && Objects.deepEquals(this.confidence, other.confidence)
+      && Objects.deepEquals(this.topLeftX, other.topLeftX)
+      && Objects.deepEquals(this.topLeftY, other.topLeftY)
+      && Objects.deepEquals(this.topRightX, other.topRightX)
+      && Objects.deepEquals(this.topRightY, other.topRightY)
+      && Objects.deepEquals(this.bottomRightX, other.bottomRightX)
+      && Objects.deepEquals(this.bottomRightY, other.bottomRightY)
+      && Objects.deepEquals(this.bottomLeftX, other.bottomLeftX)
+      && Objects.deepEquals(this.bottomLeftY, other.bottomLeftY)
+      && Objects.deepEquals(this.frameWidth, other.frameWidth)
+      && Objects.deepEquals(this.frameHeight, other.frameHeight)
   }
 
   override fun hashCode(): Int {
@@ -62,7 +102,17 @@ data class DetectedRect(
       width,
       height,
       aspect,
-      confidence
+      confidence,
+      topLeftX,
+      topLeftY,
+      topRightX,
+      topRightY,
+      bottomRightX,
+      bottomRightY,
+      bottomLeftX,
+      bottomLeftY,
+      frameWidth,
+      frameHeight
     ).contentDeepHashCode()
   }
 
@@ -74,8 +124,8 @@ data class DetectedRect(
     @Keep
     @Suppress("unused")
     @JvmStatic
-    private fun fromCpp(found: Boolean, x: Double, y: Double, width: Double, height: Double, aspect: Double, confidence: Double): DetectedRect {
-      return DetectedRect(found, x, y, width, height, aspect, confidence)
+    private fun fromCpp(found: Boolean, x: Double, y: Double, width: Double, height: Double, aspect: Double, confidence: Double, topLeftX: Double, topLeftY: Double, topRightX: Double, topRightY: Double, bottomRightX: Double, bottomRightY: Double, bottomLeftX: Double, bottomLeftY: Double, frameWidth: Double, frameHeight: Double): DetectedRect {
+      return DetectedRect(found, x, y, width, height, aspect, confidence, topLeftX, topLeftY, topRightX, topRightY, bottomRightX, bottomRightY, bottomLeftX, bottomLeftY, frameWidth, frameHeight)
     }
   }
 }

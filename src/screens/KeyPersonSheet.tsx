@@ -108,20 +108,8 @@ export function KeyPersonSheet({
       // Ride above a raised keyboard — this sheet is a form.
       bottomOffset={keyboard}
       closeLabel="Close person editor"
+      title={mode === 'add' ? ADD_TITLES[section] : draft.isCorporate ? 'Edit company' : 'Edit person'}
     >
-      <UiText
-        variant="body"
-        style={{
-          fontWeight: '700',
-          paddingHorizontal: spacing.md,
-          // Tight under the handle, the way the system sheet titles sit.
-          paddingTop: spacing.xs,
-          paddingBottom: spacing.sm,
-        }}
-      >
-        {mode === 'add' ? ADD_TITLES[section] : draft.isCorporate ? 'Edit company' : 'Edit person'}
-      </UiText>
-
       <ScrollView
         bounces={false}
         keyboardShouldPersistTaps="handled"

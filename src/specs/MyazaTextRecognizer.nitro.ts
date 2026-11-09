@@ -24,6 +24,13 @@ export interface TextResult {
   lines: string[];
 }
 
+/** Lines read from a turned frame, and the turn that was used. */
+export interface TurnedTextResult {
+  lines: string[];
+  /** Extra clockwise quarter turns applied before reading: 1 or 3. */
+  quarterTurns: number;
+}
+
 export interface MyazaTextRecognizer extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   /**
    * Recognise text in a camera {@link Frame}. Called per-frame from the
@@ -35,6 +42,21 @@ export interface MyazaTextRecognizer extends HybridObject<{ ios: 'swift'; androi
    * above competing with the MRZ for the recogniser's attention.
    */
   recognizeText(frame: Frame, bottomFraction: number): TextResult;
+
+  /**
+   * Recognise the WHOLE frame with an extra quarter turn, for a long document
+   * framed upright on a phone held upright (a NIN slip). Read upright, its
+   * text runs sideways and comes back as confident nonsense.
+   *
+   * `quarterTurns` 1 or 3 reads with that many extra clockwise quarter turns.
+   * Any other value alternates between the two on each call, for while the
+   * direction is not yet known (the person may turn the slip either way); the
+   * result says which turn was used. A new
+   * method rather than a parameter on `recognizeText`: an app still running an
+   * older native build simply lacks it, and the caller falls back to the
+   * upright read instead of losing recognition for every document.
+   */
+  recognizeTextTurned(frame: Frame, quarterTurns: number): TurnedTextResult;
 
   /**
    * Recognise text in a STILL image at `uri` (a local `file://` path).

@@ -55,6 +55,7 @@ namespace margelo::nitro::myazakyc {
   public:
     // Methods
     DetectedRect detectRect(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame) override;
+    void setExpectUpright(bool upright) override;
 
   private:
     jni::global_ref<JHybridMyazaRectDetectorSpec::JavaPart> _javaPart;

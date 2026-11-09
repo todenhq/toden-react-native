@@ -55,6 +55,11 @@ namespace margelo::nitro::myazakyc {
     auto __result = method(_javaPart);
     return __result->toStdString();
   }
+  bool JHybridMyazaDeviceIntelSpec::declaresMicrophone() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jboolean()>("declaresMicrophone");
+    auto __result = method(_javaPart);
+    return static_cast<bool>(__result);
+  }
   std::shared_ptr<Promise<std::vector<std::string>>> JHybridMyazaDeviceIntelSpec::integritySignals() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("integritySignals");
     auto __result = method(_javaPart);

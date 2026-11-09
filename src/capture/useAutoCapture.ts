@@ -2,21 +2,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFrameOutput } from 'react-native-vision-camera';
 import { runOnJS } from 'react-native-worklets';
 
-import { hasTextRecognizer, primeTextModel, recognizeAllLines } from '../mrz/textRecognizer';
+import { hasTextRecognizer, primeTextModel, recognizeAllLines, recognizeTurnedLines } from '../mrz/textRecognizer';
 import { extractMrz } from '../mrz/extract';
-import type { MrzScan } from '../mrz/parse';
 import { DocumentTextGate } from './documentTextGate';
+import { readProvesTurn } from './documentTurn';
 import { documentCarriesMrz, type DocumentGuidance } from './documentIdentity';
-import { detectRectOnFrame, hasRectDetector } from './rectDetector';
+import { detectRectOnFrame, hasRectDetector, setRectDetectorUpright, type RectReading } from './rectDetector';
 import { rectFramingProblem } from './rectGate';
-import type { DetectedRect } from '../specs/MyazaRectDetector.nitro';
+import { stillSameFace, wordsOf } from './sameFace';
+import { useCornerGate } from './useCornerGate';
+import type { AutoCaptureOptions, AutoCaptureState } from './autoCaptureTypes';
+
+export type { AutoCaptureOptions, AutoCaptureState } from './autoCaptureTypes';
 
 // ---------------------------------------------------------------------------
 // Auto-capture: shoot when the document is identified, framed and still.
 //
 // Detection is an ACCELERATOR, never the only route — the manual shutter stays
-// live throughout, and a build without the native recogniser simply never fires
-// this, leaving the manual flow exactly as it was.
+// live, and a build without the native recogniser simply never fires this. The
+// one thing both routes wait for is the four-corner gate (useCornerGate): a
+// document is captured only with all four corners in view and space past them.
 //
 // Reading text per frame also banks the MRZ ahead of the shutter, so the chip
 // step needs no second scan of the same passport. That is the main reason the
@@ -26,51 +31,8 @@ import type { DetectedRect } from '../specs/MyazaRectDetector.nitro';
 /** How often a frame is actually recognised. OCR is far slower than 30fps. */
 const DETECT_INTERVAL_MS = 250;
 
-export interface AutoCaptureOptions {
-  /** Off while capturing/uploading, on a preview, or when there is no camera. */
-  enabled: boolean;
-  country: string;
-  idType: string;
-  /**
-   * Which face is up. The back of a card carries none of the front's identity
-   * keywords (a PVC back is barcode and small print), so the gate must not
-   * demand them there — the front capture moments earlier established what
-   * document this is.
-   */
-  side?: 'front' | 'back';
-  /** The chip step wants the MRZ, so hold out for a check-digit-valid read. */
-  requireMrz?: boolean;
-  /** An MRZ is already stored from an earlier frame or a previous side. */
-  mrzAlreadyCaptured?: boolean;
-  /** Called once per fresh MRZ read — bank it for the chip step. */
-  onMrz?: (scan: MrzScan) => void;
-  /** Called once when the gate decides to shoot. */
-  onFire: () => void;
-  /** Expected width ÷ height, for the geometry check where it is available. */
-  guideAspect?: number;
-  /**
-   * Changing this starts a fresh dwell.
-   *
-   * Load-bearing for two-sided documents: the front and the back are the same
-   * `idType`, and the viewfinder does not remount between them — so without a
-   * key that actually changes, the gate stays LATCHED from the front and the
-   * back never auto-captures. Pass the side (or anything else that identifies
-   * "this is a new thing to look at").
-   */
-  resetKey?: string;
-}
-
-export interface AutoCaptureState {
-  /** Attach to `<Camera outputs={[...]}>`. */
-  frameOutput: ReturnType<typeof useFrameOutput>;
-  guidance: DocumentGuidance;
-  /** 0..1 through the stability dwell — drives the scan ring. */
-  progress: number;
-  /** Whether a check-digit-valid MRZ has been read this session. */
-  hasMrz: boolean;
-  /** Start a fresh dwell (new side, or a retake). */
-  reset: () => void;
-}
+/** A turned read that stops finding the document lets go of its direction after this. */
+const TURN_RELEASE_MS = 2000;
 
 const INITIAL: DocumentGuidance = { framing: 'none', hint: 'searching' };
 
@@ -85,6 +47,10 @@ export function useAutoCapture({
   onFire,
   guideAspect = 1.586,
   resetKey,
+  viewAr,
+  cameraActive,
+  turned = false,
+  guide,
 }: AutoCaptureOptions): AutoCaptureState {
   // RESOLVE FIRST, synchronously, before `useFrameOutput` below builds the
   // worklet. Both modules hand the worklet a BOXED handle that only the JS
@@ -96,7 +62,7 @@ export function useAutoCapture({
   // a useEffect is too late (it runs after the worklet exists). The component
   // body is the one place that is both.
   hasTextRecognizer();
-  hasRectDetector();
+  const rectPresent = hasRectDetector();
   // Android fetches the text model through Play Services, so start it here too.
   // The flow primes at open and this is normally a no-op, but the document step
   // can be reached directly in a resumed session. Auto-capture deliberately does
@@ -106,16 +72,29 @@ export function useAutoCapture({
   primeTextModel();
 
   const gate = useMemo(() => new DocumentTextGate(), []);
+  const corners = useCornerGate(cameraActive, rectPresent);
+  // Stable across renders, so the frame callback below is created once.
+  const observeCorners = corners.observe;
   const [guidance, setGuidance] = useState<DocumentGuidance>(INITIAL);
   const [progress, setProgress] = useState(0);
   const [hasMrz, setHasMrz] = useState(false);
 
   const lastDetectRef = useRef(0);
+  // What the front said, kept across the side change so the back can be told
+  // from it. A frame with little on it does not replace a good reading.
+  const frontWordsRef = useRef<Set<string> | null>(null);
   const firedRef = useRef(false);
+  // Turned reads: the direction that read the document is kept (a miss resets
+  // the gate's hold, so alternating would never let it fire), and let go after
+  // TURN_RELEASE_MS without a read, in case the slip was turned the other way.
+  const [lockedTurn, setLockedTurn] = useState(0);
+  const readTurnRef = useRef<number | null>(null);
+  const lastReadAtRef = useRef(0);
   // Refs, not deps: the worklet callback is created once, and re-creating it on
   // every guidance change would tear down the frame output mid-stream.
-  const optsRef = useRef({ enabled, country, idType, side, requireMrz, mrzAlreadyCaptured, onMrz, onFire, guideAspect });
-  optsRef.current = { enabled, country, idType, side, requireMrz, mrzAlreadyCaptured, onMrz, onFire, guideAspect };
+  const opts = { enabled, country, idType, side, requireMrz, mrzAlreadyCaptured, onMrz, onFire, guideAspect, viewAr, guide };
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
 
   // Deliberately does NOT clear `hasMrz`: the MRZ belongs to the document, not
   // to the side being photographed, and clearing it would make the chip step
@@ -124,6 +103,8 @@ export function useAutoCapture({
     gate.reset();
     firedRef.current = false;
     lastDetectRef.current = 0;
+    readTurnRef.current = null;
+    setLockedTurn(0);
     setGuidance(INITIAL);
     setProgress(0);
   }, [gate]);
@@ -136,13 +117,32 @@ export function useAutoCapture({
     reset();
   }, [idType, resetKey, reset]);
 
-  const handleFrame = useCallback((lines: string[], rect: DetectedRect) => {
-    const o = optsRef.current;
-    if (!o.enabled || firedRef.current) return;
+  useEffect(() => {
+    frontWordsRef.current = null;
+  }, [idType]);
 
+  // Android's edge search looks for one orientation at a time: an upright slip
+  // is never found by the landscape search, so auto-capture never fired.
+  useEffect(() => {
+    setRectDetectorUpright(turned);
+    return () => setRectDetectorUpright(false);
+  }, [turned]);
+
+  const handleFrame = useCallback((lines: string[], rect: RectReading, quarterTurns: number) => {
+    const o = optsRef.current;
     const now = Date.now();
     if (now - lastDetectRef.current < DETECT_INTERVAL_MS) return;
     lastDetectRef.current = now;
+
+    if (o.side === 'front') {
+      const words = wordsOf(lines);
+      if (words.size >= (frontWordsRef.current?.size ?? 0) * 0.7) frontWordsRef.current = words;
+    }
+
+    // The corner gate is judged even while auto-capture is off: it also holds
+    // the MANUAL shutter, which has to know whether the corners are in view.
+    const cornerHint = observeCorners(rect, o.viewAr, o.guide);
+    if (!o.enabled || firedRef.current) return;
 
     // Bank the MRZ whenever one validates — this is what spares the user
     // scanning the same passport again at the chip step.
@@ -154,13 +154,29 @@ export function useAutoCapture({
       o.onMrz?.(scan);
     }
 
-    // GEOMETRY first, where the platform has it. A shape complaint is
+    // CORNERS first: all four in view, with space past each, before anything
+    // else is worth judging. A passport whose MRZ runs off the edge stops here.
+    if (cornerHint) {
+      setGuidance({ framing: 'adjust', hint: cornerHint });
+      setProgress(0);
+      return;
+    }
+
+    // GEOMETRY next, where the platform has it. A shape complaint is
     // actionable on its own ("move back"), and letting it through would mean
     // running out a stability dwell on a document whose corners are cut off.
     // Absent a detector this is null and the text gate decides alone.
     const shapeProblem = rectFramingProblem(rect, { expectedAspect: o.guideAspect });
     if (shapeProblem) {
       setGuidance({ framing: 'adjust', hint: shapeProblem });
+      setProgress(0);
+      return;
+    }
+
+    // Asked for the back and still shown the front: say so rather than shoot it.
+    if (o.side === 'back' && stillSameFace(frontWordsRef.current, lines)) {
+      gate.reset();
+      setGuidance({ framing: 'adjust', hint: 'showBack' });
       setProgress(0);
       return;
     }
@@ -177,12 +193,21 @@ export function useAutoCapture({
     });
     setGuidance(verdict);
     setProgress(gate.progress(now));
+    if (quarterTurns === 1 || quarterTurns === 3) {
+      if ((verdict.framing === 'holding' || verdict.framing === 'ready') && readProvesTurn(lines, o.country, o.idType)) {
+        readTurnRef.current = quarterTurns;
+        lastReadAtRef.current = now;
+        setLockedTurn(quarterTurns);
+      } else if (now - lastReadAtRef.current > TURN_RELEASE_MS) {
+        setLockedTurn(0);
+      }
+    }
 
     if (verdict.framing === 'ready' && !firedRef.current) {
       firedRef.current = true;
       o.onFire();
     }
-  }, [gate]);
+  }, [gate, observeCorners]);
 
   const frameOutput = useFrameOutput({
     pixelFormat: 'yuv',
@@ -191,15 +216,21 @@ export function useAutoCapture({
     dropFramesWhileBusy: true,
     onFrame: (frame) => {
       'worklet';
-      const lines = recognizeAllLines(frame);
+      const read = turned ? recognizeTurnedLines(frame, lockedTurn) : { lines: recognizeAllLines(frame), quarterTurns: 0 };
       const rect = detectRectOnFrame(frame);
       frame.dispose();
-      runOnJS(handleFrame)(lines, rect);
+      runOnJS(handleFrame)(read.lines, rect, read.quarterTurns);
     },
     onFrameDropped: () => {
       'worklet';
     },
   });
 
-  return { frameOutput, guidance, progress, hasMrz, reset };
+  return {
+    frameOutput, guidance, progress, hasMrz, reset,
+    cornerHint: corners.hint,
+    shutterBlocked: corners.isBlocked,
+    cornerFraming: corners.latest,
+    readTurn: () => (turned ? readTurnRef.current : null),
+  };
 }

@@ -1,22 +1,29 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { initialWindowMetrics } from 'react-native-safe-area-context';
+import { cameraBottomInset } from '../components/viewfinder/cameraInsets';
 
 import { spacing } from '../config/theme';
 import { ID_TYPES, documentGuideAspect, getScanSides } from '../config/idTypes';
 import { withRetry } from '../services/retry';
 import { mapToVerificationError, safeReportError } from '../services/errors';
-import { compressDocumentImage, compressVideo, cropCardRegion } from '../services/mediaCompress';
+import { compressDocumentImage, compressVideo, cropCardRegion, cropGuideRegion, cropToDocumentCorners, rotateImage } from '../services/mediaCompress';
+import { undoDegrees } from '../capture/documentTurn';
+import type { CornerFraming } from '../capture/useCornerGate';
 import { MAX_VIDEO_BYTES } from '../config/captureSettings';
 import type { DocumentCapturePhase } from '../store/verificationStore';
-import { documentCaptureMethods } from '../config/documentCaptureMethods';
+import {
+  afterDocumentCapture,
+  documentCaptureMethods,
+  recordsDocumentAudio,
+  type DocumentSideSource,
+} from '../config/documentCaptureMethods';
 import { useEffectiveCountry, useFlowState, useVerificationConfig, useVerificationStore, useTheme } from '../components/runtime';
 import { UiText } from '../components/Typography';
 import { UiButton } from '../components/UiButton';
 import { useToast } from '../components/toast';
 import { UiPulseLoader } from '../components/UiPulseLoader';
-import { CameraPhase } from './document/CameraPhase';
+import { CameraPhase, type CaptureTurn } from './document/CameraPhase';
 import { CameraPermissionView, CameraUnavailableView, CameraPermissionPrimingView } from '../components/CameraPermissionView';
 import { ReadyPrimer } from '../components/ReadyPrimer';
 import { RequiredDocumentPill } from '../components/RequiredDocumentPill';
@@ -26,6 +33,8 @@ import { DocumentReview } from '../components/DocumentReview';
 import { scanMrzFromImage } from '../mrz/textRecognizer';
 import { Icon } from '../components/Icon';
 import { useDocumentCamera, type DocumentCamera } from './document/useDocumentCamera';
+import { useDocumentMicrophone, type DocumentMicrophone } from './document/useDocumentMicrophone';
+import { DocumentHandover } from './document/DocumentHandover';
 import { UploadPhase } from './document/UploadPhase';
 import { CaptureCheckNotice } from './document/CaptureCheckNotice';
 import { DocImage } from './document/DocImage';
@@ -57,13 +66,9 @@ import type { DocumentCaptureCheckRequest, DocumentCaptureSide } from '../servic
 
 /** Bound on how long Continue waits for the supplementary document video. */
 const DOC_VIDEO_WAIT_MS = 8000;
-
-/** Home-indicator / nav-bar clearance for the full-screen camera's controls. */
-function cameraBottomInset(): number {
-  const sa = initialWindowMetrics?.insets;
-  if (Platform.OS === 'android') return (sa?.bottom ?? 0) + 12;
-  return sa?.bottom || 34;
-}
+// How long the photo library takes to slide away on iOS before another screen
+// can open.
+const PICKER_CLOSE_MS = 450;
 
 export function DocumentCaptureStep(): React.ReactElement {
   const config = useVerificationConfig();
@@ -75,22 +80,25 @@ export function DocumentCaptureStep(): React.ReactElement {
   return methods.scan ? (
     <ScanningDocumentCapture allowUpload={methods.upload} />
   ) : (
-    <DocumentCapture camera={null} allowUpload />
+    <DocumentCapture camera={null} microphone={null} allowUpload />
   );
 }
 
 function ScanningDocumentCapture({ allowUpload }: { allowUpload: boolean }): React.ReactElement {
   const config = useVerificationConfig();
   const camera = useDocumentCamera(config.onError);
-  return <DocumentCapture camera={camera} allowUpload={allowUpload} />;
+  const microphone = useDocumentMicrophone();
+  return <DocumentCapture camera={camera} microphone={microphone} allowUpload={allowUpload} />;
 }
 
 function DocumentCapture({
   camera,
+  microphone,
   allowUpload,
 }: {
   /** Null in upload-only mode, where each side is a photo from the device. */
   camera: DocumentCamera | null;
+  microphone: DocumentMicrophone | null;
   allowUpload: boolean;
 }): React.ReactElement {
   const { colors } = useTheme();
@@ -127,6 +135,7 @@ function DocumentCapture({
   const guideAspect = documentGuideAspect(selectedIdType);
 
   const [phase, setPhase] = useState<DocumentCapturePhase>('front');
+  const [turnOver, setTurnOver] = useState(false); // the back follows the front untapped
   const [frontUri, setFrontUri] = useState<string | null>(null);
   const [backUri, setBackUri] = useState<string | null>(null);
   const [busy, setBusy] = useState(false); // compressing a fresh capture
@@ -134,6 +143,7 @@ function DocumentCapture({
   const [retryInfo, setRetryInfo] = useState<{ attempt: number; total: number } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [cropUri, setCropUri] = useState<string | null>(null); // gallery photo awaiting crop
+  const [picking, setPicking] = useState(false); // the photo library is open
   // What the server's capture check found wrong with the uploaded sides. Set
   // only when there is something to retake; any new capture clears it, so the
   // next Continue uploads and checks again.
@@ -142,11 +152,18 @@ function DocumentCapture({
   // document_front_video / document_back_video). Refs — they don't drive the UI.
   const frontVideoRef = useRef<string | null>(null);
   const backVideoRef = useRef<string | null>(null);
+  // How each side's photo arrived, for the review switch (afterDocumentCapture).
+  const sourcesRef = useRef<{ front: DocumentSideSource; back: DocumentSideSource }>({ front: null, back: null });
+  // The review is off and a scan is moving straight on. A problem brings the
+  // review back: that is where its Retake and Try Again live.
+  const [handingOver, setHandingOver] = useState(false);
+  const handoverStartedRef = useRef(false);
+  const showHandover = handingOver && phase === 'review' && !uploadError && !captureProblems;
 
   // Publish the sub-phase so the sheet header (VerificationFlow) shows the right title.
   useEffect(() => {
-    setDocumentCapturePhase(phase);
-  }, [phase, setDocumentCapturePhase]);
+    setDocumentCapturePhase(showHandover ? 'checking' : phase);
+  }, [phase, showHandover, setDocumentCapturePhase]);
 
   // ── Camera permission + availability ───────────────────────────────────────
   // Owned by `useDocumentCamera` (called by ScanningDocumentCapture), so
@@ -156,6 +173,14 @@ function DocumentCapture({
   // the step, not per side — repeating it before the back of a card would be
   // noise, not a warning.
   const [ready, setReady] = useState(false);
+  // Sound on the clip: asked for once the person has met the camera step, and
+  // settled before the viewfinder mounts, which fixes its audio when created.
+  const wantsAudio = !!camera && recordsDocumentAudio(config);
+  const waitingForMicrophone = wantsAudio && !microphone?.settled;
+  const askMicrophone = microphone?.ask;
+  useEffect(() => {
+    if (wantsAudio && ready && camera?.perm === 'granted') askMicrophone?.();
+  }, [wantsAudio, ready, camera?.perm, askMicrophone]);
   // Tell the shell when the full-bleed camera is on screen. Scoped tightly:
   // only the live preview earns the whole display — the ready primer, the
   // permission screens, the previews and the review all keep their chrome.
@@ -166,6 +191,7 @@ function DocumentCapture({
   const cameraLive =
     (phase === 'front' || phase === 'back') &&
     ready &&
+    !waitingForMicrophone &&
     !!camera &&
     camera.perm === 'granted' &&
     camera.hasDevice;
@@ -175,7 +201,7 @@ function DocumentCapture({
 
   // ── Capture → compress → store for the current side ────────────────────────
   const storeCapture = useCallback(
-    async (rawUri: string) => {
+    async (rawUri: string, source: 'camera' | 'upload') => {
       setBusy(true);
       setUploadError(null);
       setCaptureProblems(null);
@@ -197,18 +223,31 @@ function DocumentCapture({
             // — including a future change to the store setter.
             .catch(() => undefined);
         }
-        if (phase === 'back') {
-          setBackUri(compressed);
+        const side = phase === 'back' ? 'back' : 'front';
+        sourcesRef.current[side] = source;
+        if (side === 'back') setBackUri(compressed);
+        else setFrontUri(compressed);
+        const next = afterDocumentCapture(config, {
+          side,
+          twoSided: isTwoSided,
+          ...sourcesRef.current,
+          hasBack: side === 'back' || !!backUri,
+        });
+        if (next === 'preview-front') setPhase('front-preview');
+        else if (next === 'scan-back') {
+          // Nothing was tapped, so they are still holding up the front.
+          setTurnOver(true);
+          setPhase('back');
+        }
+        else {
           setPhase('review');
-        } else {
-          setFrontUri(compressed);
-          setPhase(isTwoSided ? 'front-preview' : 'review');
+          setHandingOver(next === 'hand-over');
         }
       } finally {
         setBusy(false);
       }
     },
-    [phase, isTwoSided, setMrzScan],
+    [phase, isTwoSided, setMrzScan, config, backUri],
   );
 
   // Gallery upload: pick the raw photo (no native editor), then open the SDK's
@@ -217,7 +256,7 @@ function DocumentCapture({
   // (mirrors Flutter's cropCardRegion), then store. Gallery photos skip this —
   // they're already cropped by the interactive cropper.
   const captureFromCamera = useCallback(
-    async (rawUri: string, videoPath: string | null, viewAr: number) => {
+    async (rawUri: string, videoPath: string | null, viewAr: number, framing: CornerFraming | null, turn: CaptureTurn | null) => {
       setBusy(true);
       try {
         // Stash the side's video (best-effort) before cropping/storing the still.
@@ -226,8 +265,18 @@ function DocumentCapture({
         // viewAr is the MEASURED preview box — full-screen capture shows a far
         // taller slice than the framed 3:4 box the old constant assumed, which
         // is why reviews came back wider than what the user framed.
-        const carded = await cropCardRegion(rawUri, guideAspect, viewAr).catch(() => rawUri);
-        await storeCapture(carded);
+        // The detected corners when the corner gate had them (the photo keeps
+        // space past every corner); the guide crop only without a detector.
+        const carded = await (framing
+          ? cropToDocumentCorners(rawUri, framing.quad, framing.frameAspect)
+          : turn
+            ? cropGuideRegion(rawUri, viewAr, turn.guide)
+            : cropCardRegion(rawUri, guideAspect, viewAr)
+        ).catch(() => rawUri);
+        // An upright slip is turned back to landscape, so the review, the upload
+        // and the server see the document the usual way round.
+        const upright = turn ? await rotateImage(carded, undoDegrees(turn.readTurn)).catch(() => carded) : carded;
+        await storeCapture(upright, 'camera');
       } finally {
         setBusy(false);
       }
@@ -236,13 +285,23 @@ function DocumentCapture({
   );
 
   const pickFromGallery = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: false,
-      quality: 1,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setCropUri(result.assets[0].uri);
+    // Auto-capture is paused while the library and the crop screen are up, so
+    // the camera underneath cannot take a photo of its own meanwhile.
+    setPicking(true);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 1,
+      });
+      if (!result.canceled && result.assets[0]) {
+        // iOS also refuses to open a screen while the library is still sliding
+        // away, so give it that moment first.
+        if (Platform.OS === 'ios') await new Promise((resolve) => setTimeout(resolve, PICKER_CLOSE_MS));
+        setCropUri(result.assets[0].uri);
+      }
+    } finally {
+      setPicking(false);
     }
   }, []);
 
@@ -363,9 +422,21 @@ function DocumentCapture({
     advance,
   ]);
 
+  // The scan that just landed uploads with no Continue to press. Once per
+  // capture: the review's own buttons take over if this one needs them.
+  useEffect(() => {
+    if (!handingOver || phase !== 'review' || handoverStartedRef.current) return;
+    handoverStartedRef.current = true;
+    void handleContinue();
+  }, [handingOver, phase, handleContinue]);
+
   const retake = (side: DocumentCaptureSide) => {
+    setHandingOver(false);
+    handoverStartedRef.current = false;
+    sourcesRef.current[side] = null;
     setUploadError(null);
     setCaptureProblems(null);
+    setTurnOver(false);
     if (side === 'back') {
       setBackUri(null);
       backVideoRef.current = null;
@@ -379,13 +450,19 @@ function DocumentCapture({
 
   // Interactive ID-card cropper for a gallery photo (Modal — overlays whatever
   // capture sub-screen triggered the upload, including the sim's "camera unavailable").
+  // With the camera open it is handed to CameraPhase, which opens it inside the
+  // camera's own full-screen modal: opened from the sheet below, iOS refused it.
   const cropper = cropUri ? (
     <DocumentCropper
       uri={cropUri}
+      // The document's own shape: the cropper stands a NIN slip's box upright
+      // on a phone, and hands back the crop already turned to landscape.
+      aspect={guideAspect}
+      documentLabel={selectedIdType ? documentLabel : undefined}
       onCancel={() => setCropUri(null)}
       onConfirm={(out) => {
         setCropUri(null);
-        void storeCapture(out);
+        void storeCapture(out, 'upload');
       }}
     />
   ) : null;
@@ -455,25 +532,38 @@ function DocumentCapture({
         </>
       );
     }
+    if (waitingForMicrophone) {
+      // The OS prompt is up, or about to be.
+      return (
+        <>
+          {cropper}
+          <View style={{ alignItems: 'center', paddingVertical: spacing.xl }}>
+            <UiPulseLoader size={48} />
+          </View>
+        </>
+      );
+    }
     const isBack = phase === 'back';
 
     return (
       <>
-        {cropper}
         <CameraPhase
+          overlay={cropper}
           isBack={isBack}
           cameraLive={cameraLive}
           active={camera.perm === 'granted'}
           documentLabel={documentLabel}
           guideAspect={guideAspect}
           isTwoSided={isTwoSided}
-          busy={busy}
+          busy={busy || picking || !!cropUri}
           allowUpload={allowUpload}
+          recordAudio={wantsAudio && !!microphone?.granted}
           country={country}
           idType={selectedIdType ?? undefined}
           mrzAlreadyCaptured={!!mrzScan}
+          turnOver={turnOver}
           onMrz={setMrzScan}
-          onCapture={(uri, videoPath, viewAr) => void captureFromCamera(uri, videoPath, viewAr)}
+          onCapture={(uri, videoPath, viewAr, framing, turn) => void captureFromCamera(uri, videoPath, viewAr, framing, turn)}
           onUpload={pickFromGallery}
           onBack={() => store.getState().previousStep()}
           // The camera is a TRUE full-screen modal now, so it runs under the
@@ -490,7 +580,7 @@ function DocumentCapture({
     return (
       <View>
         <View style={{ marginBottom: spacing.md }}>{requiredPill('front')}</View>
-        <DocImage uri={frontUri!} />
+        <DocImage uri={frontUri!} aspect={guideAspect} />
         <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.md }}>
           <View style={{ flex: 1 }}>
             <UiButton
@@ -516,6 +606,14 @@ function DocumentCapture({
     camera && camera.perm === 'granted' && silentCaptureEnabled(config) ? (
       <SilentFrontCapture key={`${frontUri ?? ''}|${backUri ?? ''}`} />
     ) : null;
+  if (showHandover) {
+    return (
+      <>
+        {silentFront}
+        <DocumentHandover retryInfo={uploading ? retryInfo : null} />
+      </>
+    );
+  }
   return (
     <>
       {silentFront}

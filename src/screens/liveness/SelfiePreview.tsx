@@ -7,6 +7,7 @@ import { UiText } from '../../components/Typography';
 import { UiPulseLoader } from '../../components/UiPulseLoader';
 import { StyleAbsFill } from './constants';
 import { Spinner } from '../../components/Spinner';
+import { SELFIE_ASPECT } from '../../lib/selfie-pick';
 
 // ---------------------------------------------------------------------------
 // The captured selfie, shown back while it uploads.
@@ -23,23 +24,27 @@ export function SelfiePreview({
   soft?: boolean;
 }): React.ReactElement {
   const { colors } = useTheme();
-  const S = 200;
+  // Passport-shaped, as the selfie is cut (lib/selfie-pick.ts): 3:4, head
+  // and shoulders, in a rounded rectangle rather than a circle.
+  const W = 176;
+  const H = Math.round(W / SELFIE_ASPECT);
+  const R = 16;
   return (
     <View style={{ alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' }}>
-      <View style={{ width: S, height: S, borderRadius: S / 2, borderWidth: 4, backgroundColor: uri ? '#111111' : `${colors.primary}14`, borderColor: `${colors.primary}33`, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: W, height: H, borderRadius: R, borderWidth: 4, backgroundColor: uri ? '#111111' : `${colors.primary}14`, borderColor: `${colors.primary}33`, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
         {/* borderRadius repeated on the Image — iOS doesn't reliably clip an Image
             child to a rounded parent (same fix as the header brand bar). A null
             uri is a restored session whose local file is gone: the uploaded
             selfie is the durable record, so show a completed state rather than
             a broken image. */}
         {uri ? (
-          <Image source={{ uri }} style={{ width: '100%', height: '100%', borderRadius: S / 2 }} resizeMode="cover" />
+          <Image source={{ uri }} style={{ width: '100%', height: '100%', borderRadius: R - 4 }} resizeMode="cover" />
         ) : (
           <UiText variant="bodySmall" color={colors.textSecondary} style={{ textAlign: 'center', paddingHorizontal: spacing.lg }}>
             Selfie already captured
           </UiText>
         )}
-        {/* Standard upload loader inside the preview circle (mirrors web/Flutter). */}
+        {/* Standard upload loader inside the preview (mirrors web/Flutter). */}
         {uploading ? (
           <View style={[StyleAbsFill, { backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' }]}>
             <UiPulseLoader size={64} />

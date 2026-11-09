@@ -94,6 +94,7 @@ export function QuestionnaireFieldView({
           value={typeof value === 'string' ? value : undefined}
           onChange={(iso) => onChange(iso)}
           placeholder={field.placeholder}
+          title={field.label}
           error={error ?? null}
         />
       ) : null}

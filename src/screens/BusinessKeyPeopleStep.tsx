@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View } from 'react-native';
 
 import { radius, spacing } from '../config/theme';
@@ -18,9 +18,13 @@ import {
   MAX_KEY_PEOPLE_ROWS,
   type KeyPersonEntry,
 } from '../config/keyPeople';
+import { keyPeopleRequireOwnership } from '../config/keyPersonStake';
 import { SECTION_ROLE, type KeyPeopleSection as SectionKey } from '../config/keyPeopleSections';
 import { defaultUboThreshold, keyPeopleSectionList } from '../config/keyPeopleSectionDefs';
-import { prefillKeyPeople, shouldPrefill } from '../config/keyPeoplePrefill';
+import { useKeyPeoplePrefill } from './useKeyPeoplePrefill';
+import { KeyPeopleDocumentsNote } from './KeyPeopleDocumentsNote';
+import { KeyPeopleReadingScreen } from './KeyPeopleReadingScreen';
+import { useReadingScreen } from './useReadingScreen';
 
 // ---------------------------------------------------------------------------
 // The key-people step, sectioned: Beneficial owners / Shareholders /
@@ -46,30 +50,19 @@ export function BusinessKeyPeopleStep(): React.ReactElement {
   const rows = useFlowState((s) => s.businessApplication.keyPeople);
   const uboUnidentifiable = useFlowState((s) => s.businessApplication.uboUnidentifiable);
   const registryCountry = useFlowState((s) => s.business.country);
-  const officers = useFlowState((s) => s.businessCheck.officers);
+  // Owners can still be added by hand; the register's arrive later.
+  const ownershipPending = useFlowState((s) => s.businessCheck.ownershipPending === true);
   const [sheet, setSheet] = useState<SheetState>(null);
-
-  // Start from the register's own officer list (fetched by the paid check at
-  // selection), so this is a confirmation rather than a memory test. Once
-  // only, and never over anything typed: an applicant who has already entered
-  // a name has told us something the register did not.
-  const prefilled = useRef(false);
-  useEffect(() => {
-    if (prefilled.current || officers.length === 0 || !shouldPrefill(rows)) return;
-    prefilled.current = true;
-    store.getState().setKeyPeople(prefillKeyPeople(officers, registryCountry ?? ''));
-    // rows is deliberately out of the dep list: this must run on the arrival
-    // of officers, not on every edit the applicant then makes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [officers, registryCountry]);
 
   const minEntries = keyPeopleMinEntries(config.business);
   // Roles whose email is mandatory (the ones actually sent a verification
   // link) — threaded into every validity read so the card, the sheet and the
   // Continue gate agree on what "complete" means.
   const emailRequiredFor = useMemo(() => keyPeopleRequireEmail(config.business), [config.business]);
-  const validCount = rows.filter((r) => isKeyPersonRowValid(r, emailRequiredFor)).length;
-  const invalidRows = invalidKeyPersonRows(rows, emailRequiredFor);
+  // Owners must give a stake unless the workflow turns that off.
+  const stakeRequired = keyPeopleRequireOwnership(config.business);
+  const validCount = rows.filter((r) => isKeyPersonRowValid(r, emailRequiredFor, stakeRequired)).length;
+  const invalidRows = invalidKeyPersonRows(rows, emailRequiredFor, stakeRequired);
   // The same line the server draws: the workflow's own threshold, else the
   // register's default (NG files significant control from a lower bar).
   const threshold =
@@ -94,6 +87,10 @@ export function BusinessKeyPeopleStep(): React.ReactElement {
   // details step) — most directors are local, and a foreign one just switches
   // theirs. Mirrors the web and Flutter SDKs.
   const defaultCountry = registryCountry ?? config.business?.country ?? '';
+  // The register's officers, then the people the company documents name.
+  const { fromDocuments, readingDocuments, merging, keptFromRemoved } = useKeyPeoplePrefill(rows, defaultCountry);
+  // A full-step screen while the documents are read, so the wait is explained.
+  const reading = useReadingScreen(readingDocuments || merging, fromDocuments);
   const sections = keyPeopleSectionList(config.business, threshold, t);
 
   const commit = (next: KeyPersonEntry[]): void => store.getState().setKeyPeople(next);
@@ -120,7 +117,7 @@ export function BusinessKeyPeopleStep(): React.ReactElement {
     if (!canContinue) return;
     // Half-typed rows are dropped rather than submitted: an entry the user
     // abandoned is not a person they disclosed.
-    commit(rows.filter((r) => isKeyPersonRowValid(r, emailRequiredFor)));
+    commit(rows.filter((r) => isKeyPersonRowValid(r, emailRequiredFor, stakeRequired)));
     store.getState().nextStep();
   };
 
@@ -136,97 +133,108 @@ export function BusinessKeyPeopleStep(): React.ReactElement {
 
   return (
     <View>
-      {hint ? (
-        <View
-          style={{
-            borderRadius: radius.sm,
-            backgroundColor: colors.backgroundSecondary,
-            padding: spacing.md,
-            marginBottom: spacing.lg,
-          }}
-        >
-          <DashedBorder color={colors.border} radius={radius.sm} strokeWidth={1} />
-          <UiText variant="bodyMedium" color={colors.textSecondary}>
-            {hint}
-          </UiText>
-        </View>
-      ) : null}
+      {reading.show ? (
+        <KeyPeopleReadingScreen found={reading.found} />
+      ) : (
+        <>
+        {hint ? (
+          <View
+            style={{
+              borderRadius: radius.sm,
+              backgroundColor: colors.backgroundSecondary,
+              padding: spacing.md,
+              marginBottom: spacing.lg,
+            }}
+          >
+            <DashedBorder color={colors.border} radius={radius.sm} strokeWidth={1} />
+            <UiText variant="bodyMedium" color={colors.textSecondary}>
+              {hint}
+            </UiText>
+          </View>
+        ) : null}
 
-      <KeyPeopleSectionsList
-        sections={sections}
-        rows={rows}
-        threshold={threshold}
-        emailRequiredFor={emailRequiredFor}
-        uboUnidentifiable={uboUnidentifiable}
-        canAdd={canAdd}
-        onRows={commit}
-        onSheet={setSheet}
-        onExemption={(next) => store.getState().setUboUnidentifiable(next)}
-      />
+        {readingDocuments || fromDocuments > 0 || keptFromRemoved > 0 ? (
+          <KeyPeopleDocumentsNote reading={readingDocuments} added={fromDocuments} kept={keptFromRemoved} />
+        ) : null}
 
-      {!canAdd ? (
-        <UiText
-          variant="bodyMedium"
-          color={colors.textMuted}
-          style={{ textAlign: 'center', marginTop: spacing.lg }}
-        >
-          {`You can list up to ${MAX_KEY_PEOPLE_ROWS} people here.`}
-        </UiText>
-      ) : null}
+        <KeyPeopleSectionsList
+          sections={sections}
+          rows={rows}
+          threshold={threshold}
+          emailRequiredFor={emailRequiredFor}
+          uboUnidentifiable={uboUnidentifiable}
+          ownershipPending={ownershipPending}
+          canAdd={canAdd}
+          onRows={commit}
+          onSheet={setSheet}
+          onExemption={(next) => store.getState().setUboUnidentifiable(next)}
+        />
 
-      {/* Total-ownership summary at the DECISION point — the disabled
-          Continue button always explains itself, wherever the offending
-          card is. */}
-      {totalPct > 0 ? (
-        <View
-          style={{
-            marginTop: spacing.lg,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            borderRadius: radius.sm,
-            backgroundColor: overAllocated ? colors.errorBg : colors.backgroundSecondary,
-            paddingHorizontal: spacing.md,
-            paddingVertical: spacing.sm + 4,
-          }}
-        >
-          <UiText variant="bodyMedium" color={overAllocated ? colors.error : colors.textMuted}>
-            Total ownership listed
-          </UiText>
+        {!canAdd ? (
           <UiText
             variant="bodyMedium"
-            color={overAllocated ? colors.error : colors.textDark}
-            style={{ fontWeight: '700' }}
+            color={colors.textMuted}
+            style={{ textAlign: 'center', marginTop: spacing.lg }}
           >
-            {`${fmtPct(totalPct)}%`}
+            {`You can list up to ${MAX_KEY_PEOPLE_ROWS} people here.`}
           </UiText>
-        </View>
-      ) : null}
-      {overAllocated ? (
-        <UiText variant="bodyMedium" color={colors.error} style={{ marginTop: spacing.xs }}>
-          {`Together the percentages can't exceed 100%, so reduce them by ${fmtPct(totalPct - 100)}%.`}
-        </UiText>
-      ) : null}
+        ) : null}
 
-      <View style={{ height: spacing.lg }} />
-      <UiButton label={t('common.continue')} onPress={handleContinue} disabled={!canContinue} />
+        {/* Total-ownership summary at the DECISION point — the disabled
+            Continue button always explains itself, wherever the offending
+            card is. */}
+        {totalPct > 0 ? (
+          <View
+            style={{
+              marginTop: spacing.lg,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderRadius: radius.sm,
+              backgroundColor: overAllocated ? colors.errorBg : colors.backgroundSecondary,
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.sm + 4,
+            }}
+          >
+            <UiText variant="bodyMedium" color={overAllocated ? colors.error : colors.textMuted}>
+              Total ownership listed
+            </UiText>
+            <UiText
+              variant="bodyMedium"
+              color={overAllocated ? colors.error : colors.textDark}
+              style={{ fontWeight: '700' }}
+            >
+              {`${fmtPct(totalPct)}%`}
+            </UiText>
+          </View>
+        ) : null}
+        {overAllocated ? (
+          <UiText variant="bodyMedium" color={colors.error} style={{ marginTop: spacing.xs }}>
+            {`Together the percentages can't exceed 100%, so reduce them by ${fmtPct(totalPct - 100)}%.`}
+          </UiText>
+        ) : null}
 
-      {sheet && (sheet.mode === 'add' || editEntry) ? (
-        <KeyPersonSheet
-          emailRequiredFor={emailRequiredFor}
-          mode={sheet.mode}
-          section={sheet.section}
-          corporateKyb={config.business?.keyPeople?.corporateKyb?.enabled === true}
-          initial={
-            editEntry ?? { ...emptyKeyPerson(SECTION_ROLE[sheet.section]), country: defaultCountry }
-          }
-          uboThreshold={threshold}
-          otherPctTotal={editEntry ? totalPct - pctOf(editEntry) : totalPct}
-          onSave={handleSave}
-          onRemove={sheet.mode === 'edit' ? handleRemove : undefined}
-          onClose={() => setSheet(null)}
-        />
-      ) : null}
+        <View style={{ height: spacing.lg }} />
+        <UiButton label={t('common.continue')} onPress={handleContinue} disabled={!canContinue} />
+
+        {sheet && (sheet.mode === 'add' || editEntry) ? (
+          <KeyPersonSheet
+            emailRequiredFor={emailRequiredFor}
+            mode={sheet.mode}
+            section={sheet.section}
+            corporateKyb={config.business?.keyPeople?.corporateKyb?.enabled === true}
+            initial={
+              editEntry ?? { ...emptyKeyPerson(SECTION_ROLE[sheet.section]), country: defaultCountry }
+            }
+            uboThreshold={threshold}
+            otherPctTotal={editEntry ? totalPct - pctOf(editEntry) : totalPct}
+            onSave={handleSave}
+            onRemove={sheet.mode === 'edit' ? handleRemove : undefined}
+            onClose={() => setSheet(null)}
+          />
+        ) : null}
+        </>
+      )}
     </View>
   );
 }

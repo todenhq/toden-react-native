@@ -16,6 +16,9 @@ export const PDF_MAX_BYTES = 15 * 1024 * 1024;
 /** The line under every drop zone: what is accepted, and how big. */
 export const UPLOAD_HINT = 'PDF, JPG, PNG · PDF max 15 MB, images max 5 MB';
 
+/** The same line in an app that cannot pick a PDF (no `expo-document-picker`). */
+export const UPLOAD_HINT_PHOTOS = 'JPG, PNG · images max 5 MB';
+
 export function isPdfMime(mime: string | null | undefined): boolean {
   return (mime?.split(';')[0] ?? '').trim().toLowerCase() === 'application/pdf';
 }

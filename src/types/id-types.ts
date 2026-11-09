@@ -9,7 +9,7 @@
 
 export type SupportedCountry = 'NG' | 'GH' | 'KE' | 'ZA' | 'CI';
 
-export type NigeriaIdType = 'bvn' | 'bvn-premium' | 'nin' | 'vnin' | 'tax-id' | 'passport' | 'drivers-license' | 'pvc';
+export type NigeriaIdType = 'bvn' | 'bvn-premium' | 'nin' | 'vnin' | 'tax-id' | 'phone-number' | 'nin-phone' | 'nin-slip' | 'passport' | 'drivers-license' | 'pvc';
 export type GhanaIdType = 'ghana-card' | 'voters' | 'drivers-license' | 'ssnit' | 'passport';
 export type KenyaIdType = 'national-id' | 'passport';
 export type SouthAfricaIdType = 'national-id';

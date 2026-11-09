@@ -10,7 +10,7 @@ const {
 } = plugin as {
   applyNfcInfoPlist: (p: Record<string, unknown>, msg?: string) => Record<string, unknown>;
   applyNfcEntitlements: (p: Record<string, unknown>) => Record<string, unknown>;
-  androidPermissionsFor: (o: { nfc: boolean; location: boolean; backgroundLocation: boolean }) => string[];
+  androidPermissionsFor: (o: { nfc: boolean; location: boolean; backgroundLocation: boolean; microphone?: boolean }) => string[];
   ensureNfcFeatureOptional: (manifest: Record<string, any>) => Record<string, any>;
   EMRTD_AID: string;
 };
@@ -89,6 +89,12 @@ describe('NFC config plugin', () => {
 // ---------------------------------------------------------------------------
 
 describe('Android permissions', () => {
+  it('asks for the microphone only when opted in, because Play reviews it', () => {
+    const base = { nfc: false, location: true, backgroundLocation: false };
+    expect(androidPermissionsFor(base)).not.toContain('android.permission.RECORD_AUDIO');
+    expect(androidPermissionsFor({ ...base, microphone: true })).toContain('android.permission.RECORD_AUDIO');
+  });
+
   it('declares only camera, internet and foreground location by default', () => {
     const perms = androidPermissionsFor({ nfc: false, location: true, backgroundLocation: false });
     expect(perms).toEqual([

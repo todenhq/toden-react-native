@@ -11,6 +11,10 @@ jest.mock('expo-location', () => ({
   requestBackgroundPermissionsAsync: requestBackground,
   stopGeofencingAsync: jest.fn(),
 }));
+let prompted = true;
+jest.mock('../presence/os-prompt', () => ({
+  withPromptWatch: async (request: () => Promise<unknown>) => ({ result: await request(), prompted }),
+}));
 jest.mock('../presence/store', () => ({ loadPresencePin: () => ({ lat: 6.5, lng: 3.3, savedAt: new Date().toISOString() }) }));
 jest.mock('../presence/foreground-service', () => ({ defineLocationTask: jest.fn() }));
 jest.mock('../presence/geofence', () => ({ PRESENCE_GEOFENCE_TASK: 'myaza-presence-geofence', armGeofence: jest.fn() }));
@@ -28,6 +32,7 @@ describe('backgroundPresenceRegistered', () => {
   beforeEach(() => {
     requestForeground.mockReset();
     requestBackground.mockReset();
+    prompted = true;
   });
 
   it('refuses, without prompting, when the task was never defined', async () => {
@@ -44,7 +49,16 @@ describe('backgroundPresenceRegistered', () => {
     requestForeground.mockResolvedValue({ status: 'denied' });
     expect(backgroundPresenceRegistered()).toBe(true);
     await expect(enableBackgroundPresence({ apiKey: 'pk_live_x', externalUserId: 'user_42' }))
-      .resolves.toEqual({ enabled: false, reason: 'foreground_denied' });
+      .resolves.toEqual({ enabled: false, reason: 'foreground_denied', osPrompted: true });
     expect(requestForeground).toHaveBeenCalledTimes(1);
+  });
+
+  it('says when iOS refused "always" without showing a prompt', async () => {
+    defined = true;
+    prompted = false;
+    requestForeground.mockResolvedValue({ status: 'granted' });
+    requestBackground.mockResolvedValue({ status: 'denied' });
+    await expect(enableBackgroundPresence({ apiKey: 'pk_live_x', externalUserId: 'user_42' }))
+      .resolves.toEqual({ enabled: false, reason: 'background_denied', osPrompted: false });
   });
 });

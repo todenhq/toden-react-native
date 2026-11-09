@@ -19,6 +19,8 @@ import { formatNationalNumber } from '../config/phone';
 // Names come from the generated table, NOT Intl.DisplayNames: Hermes may ship
 // without region data, and every row then reads as a bare ISO code.
 import { COUNTRY_NAMES } from '../config/countryNames.g';
+import { useText } from '../i18n/useText';
+import { offeredPhoneOptions, startingPhoneCountry } from '../lib/phone-countries';
 
 // ---------------------------------------------------------------------------
 // Phone field: a dial-code country picker beside a nationally-formatted number.
@@ -39,6 +41,7 @@ export function PhoneNumberInput({
   geoCountry,
   disabled,
   autoFocus = false,
+  countries,
   onChange,
 }: {
   /**
@@ -60,14 +63,22 @@ export function PhoneNumberInput({
   /** Focus + keyboard on mount. Opt-in: right for a single-field OTP screen,
    *  wrong for a row in a company-profile form. */
   autoFocus?: boolean;
+  /**
+   * The dial-code countries on offer (ISO-2), the workflow's choice; absent or
+   * empty offers every country. With one, its code is shown fixed, with no picker.
+   */
+  countries?: readonly string[];
   /** Fires on every edit with the E.164 value ('' until parseable) + validity. */
   onChange: (value: { e164: string; isValid: boolean; country: string }) => void;
 }): React.ReactElement {
   const { colors } = useTheme();
+  const t = useText();
 
+  const offered = countries?.length ? countries.map((c) => c.toUpperCase()).sort().join(',') : '';
   const options = useMemo<DialCodeOption[]>(
     () =>
-      getCountries()
+      offeredPhoneOptions(
+        getCountries()
         // Only countries the shared table can name. libphonenumber lists five
         // that it cannot (AC, CC, CX, IO, TA — dependencies with populations in
         // the hundreds, reachable on their parent country's code anyway), and a
@@ -80,8 +91,12 @@ export function PhoneNumberInput({
           dialCode: `+${getCountryCallingCode(code)}`,
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-    [],
+        offered ? offered.split(',') : undefined,
+      ),
+    [offered],
   );
+  // One country on offer: nothing to choose, so its code is shown fixed.
+  const fixed = options.length === 1;
 
   // A supplied number decides its OWN dial code — it is a fact, where the
   // country prop is a guess. Falls through to the guess when there is no
@@ -90,9 +105,15 @@ export function PhoneNumberInput({
   const seed = (supplied?.country ??
     defaultCountry?.toUpperCase() ??
     'NG') as CountryCode;
-  const [country, setCountry] = useState<CountryCode>(
-    options.some((o) => o.code === seed) ? seed : ('NG' as CountryCode),
-  );
+  // A seed outside the countries on offer gives way to one that is.
+  const [country, setCountry] = useState<CountryCode>(startingPhoneCountry(seed, options) as CountryCode);
+  // The list can arrive after the field (a workflow resolved late): keep the
+  // chosen code inside it.
+  const firstOffered = options[0]?.code;
+  const outside = !options.some((o) => o.code === country);
+  useEffect(() => {
+    if (outside && firstOffered) setCountry(firstOffered as CountryCode);
+  }, [outside, firstOffered]);
   const [national, setNational] = useState(() =>
     supplied ? formatNationalNumber(supplied.nationalNumber, seed) : '',
   );
@@ -143,6 +164,27 @@ export function PhoneNumberInput({
   return (
     <View>
       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+        {fixed ? (
+          // The one country the workflow offers: its flag and code, fixed.
+          <View
+            accessible
+            accessibilityLabel={`${selected?.name ?? country} ${selected?.dialCode ?? ''}`}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.xs,
+              paddingHorizontal: spacing.sm + 2,
+              height: sizing.inputHeight,
+              borderWidth: 1,
+              borderColor: colors.border,
+              borderRadius: radius.sm,
+              backgroundColor: colors.backgroundSecondary,
+            }}
+          >
+            <CountryFlag country={country} size={22} />
+            <UiText variant="body">{selected?.dialCode ?? ''}</UiText>
+          </View>
+        ) : (
         <Pressable
           onPress={disabled ? undefined : () => setOpen(true)}
           accessibilityRole="button"
@@ -164,6 +206,7 @@ export function PhoneNumberInput({
           <UiText variant="body">{selected?.dialCode ?? ''}</UiText>
           <Icon name="chevron-down" size={14} color={colors.textMuted} />
         </Pressable>
+        )}
 
         <View style={{ flex: 1 }}>
           <UiInput
@@ -182,6 +225,7 @@ export function PhoneNumberInput({
         options={options}
         selected={country}
         pinned={geoCountry}
+        title={t('contact.phone.codeTitle')}
         onPick={pickCountry}
         onClose={() => setOpen(false)}
       />

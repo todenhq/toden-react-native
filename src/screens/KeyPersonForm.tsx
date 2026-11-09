@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { radius, spacing } from '../config/theme';
-import { useTheme } from '../components/runtime';
+import { useTheme, useVerificationConfig } from '../components/runtime';
 import { UiText } from '../components/Typography';
 import { UiInput } from '../components/UiInput';
 import { Icon } from '../components/Icon';
@@ -12,6 +12,7 @@ import type { DialCodeOption } from '../components/DialCodePicker';
 import { ALL_REGION_CODES, regionCountryName } from '../config/regions';
 import { isValidContactEmail } from '../config/contact';
 import { rowNeedsEmail, type KeyPersonEntry } from '../config/keyPeople';
+import { keyPeopleRequireOwnership, rowNeedsStake } from '../config/keyPersonStake';
 import {
   primaryRole,
   rolesOf,
@@ -85,6 +86,7 @@ export function KeyPersonForm({
   // capability is one tap away, not one field more. Mirrors the web SDK.
   const [showOwners, setShowOwners] = useState((entry.owners?.length ?? 0) > 0);
   const pct = entry.ownershipPct.trim();
+  const stakeRequired = keyPeopleRequireOwnership(useVerificationConfig().business) && rowNeedsStake(entry);
   const pctNum = Number(pct);
   const pctInvalid = pct !== '' && (!Number.isFinite(pctNum) || pctNum < 0 || pctNum > 100);
   // Surface the regulatory consequence as feedback: at/above the threshold the
@@ -166,7 +168,7 @@ export function KeyPersonForm({
 
       <View style={{ height: spacing.sm }} />
       <UiInput
-        label="Ownership % (optional)"
+        label={stakeRequired ? 'Ownership % *' : 'Ownership % (optional)'}
         value={entry.ownershipPct}
         onChangeText={(ownershipPct) => onChange({ ownershipPct })}
         placeholder="0"
@@ -182,7 +184,9 @@ export function KeyPersonForm({
             ? `At ${uboThreshold}% or more, this person counts as a beneficial owner.`
             : belowThresholdNote
               ? `Below ${uboThreshold}% they will be recorded as a shareholder.`
-              : undefined
+              : stakeRequired && pct === ''
+                ? 'Required. The percentage decides who is a beneficial owner and must verify their identity.'
+                : undefined
         }
       />
       <View style={{ height: spacing.xs }} />

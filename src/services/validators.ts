@@ -27,6 +27,28 @@ function matchesPattern(value: string, pattern: RegExp, label: string, hint: str
   return { valid: true };
 }
 
+// A Nigerian mobile number, typed as 0803…, +234 803… or 803…. The server
+// brings it to the 11-digit local form (kyc-core lib/id-number-format/rules.ts);
+// this accepts exactly what that rule accepts.
+export function normaliseNgPhone(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  if (/^234[789]\d{9}$/.test(digits)) return `0${digits.slice(3)}`;
+  if (/^[789]\d{9}$/.test(digits)) return `0${digits}`;
+  return digits;
+}
+
+function ngPhone(value: string): ValidationResult {
+  if (/[A-Za-z]/.test(value)) return { valid: false, message: 'Phone number must contain only digits' };
+  return /^0[789]\d{9}$/.test(normaliseNgPhone(value))
+    ? { valid: true }
+    : { valid: false, message: 'Enter a Nigerian mobile number, for example 08031234567' };
+}
+
+/** The ID types looked up by a phone number, which take the phone keypad. */
+export function isPhoneIdType(idType: string | null | undefined): boolean {
+  return idType === 'phone-number' || idType === 'nin-phone';
+}
+
 // ---------------------------------------------------------------------------
 // Per-ID-type validators (country-prefixed where a key is shared across countries)
 // ---------------------------------------------------------------------------
@@ -38,6 +60,8 @@ const validators: Record<string, (value: string) => ValidationResult> = {
   // Tax ID lookups are keyed off the person's NIN — the typed number is a NIN.
   'tax-id': (v) => digitsExact(v, 11, 'NIN'),
   nin: (v) => digitsExact(v, 11, 'NIN'),
+  'phone-number': ngPhone,
+  'nin-phone': ngPhone,
   vnin: (v) => {
     if (v.length !== 16) {
       return { valid: false, message: 'vNIN must be exactly 16 characters' };

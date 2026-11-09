@@ -1,157 +1,126 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
 import { spacing } from '../config/theme';
-import { useFlowState, useVerificationConfig, useVerificationStore, useTheme } from '../components/runtime';
-import { UiText } from '../components/Typography';
+import { useFlowState, useVerificationConfig, useVerificationStore } from '../components/runtime';
 import { UiButton } from '../components/UiButton';
 import { useText } from '../i18n/useText';
-import { MediaSourceSheet } from '../components/MediaSourceSheet';
-import { BusinessDocumentSlot } from './BusinessDocumentSlot';
-import { withRetry } from '../services/retry';
-import { compressDocumentImage } from '../services/mediaCompress';
-import { resolveBusinessDocumentTypes, type ResolvedBusinessDocumentType } from '../config/businessSteps';
-import { useBusinessDocumentAttach } from './useBusinessDocumentAttach';
+import {
+  businessDocumentGroups,
+  canLeaveGroup,
+  firstOpenGroupIndex,
+  groupButtonLabel,
+} from '../config/businessDocumentGroups';
+import { GroupStack } from './business-documents/GroupStack';
+import { DocumentSourceSheet } from './business-documents/DocumentSourceSheet';
+import { PhotoCamera } from '../components/PhotoCamera';
+import { PHOTO_COPY } from '../components/viewfinder/photoMode';
+import { documentPickerAvailable } from '../services/documentPicker';
+import { BUSINESS_DOCUMENTS_COPY as COPY } from './business-documents/copy';
+import { useGroupUpload, type GroupSlot } from './business-documents/useGroupUpload';
 
 // ---------------------------------------------------------------------------
-// Supporting company documents (certificate of incorporation, MEMART, …).
+// Supporting company documents, one GROUP at a time (Didit's model): the
+// documents an organisation ticks in one group are alternatives, so the
+// applicant uploads one per group and never says which it is (the server
+// recognises it). The groups are a vertical carousel: the open group's card in
+// front, the next group's card tucked behind it at the top and the previous
+// group's at the bottom (press it to change it). Continue brings the next card
+// down into the middle (Back brings the previous one up), and the last group
+// moves on through the flow.
+// The button reads Next between groups and Continue on the last; an optional
+// group can be skipped (the button reads Skip while it holds nothing). Back walks the groups before leaving the step: the open group
+// lives in the store (`businessDocumentGroup`) because Back is the sheet's,
+// and previousStep reads it.
 //
 // The registry says a business exists; these are what say the applicant holds
-// its paperwork. The server OCRs each one and cross-checks it against the
-// registry record — a soft result that never fails the verification, so the
-// only thing blocking here is a REQUIRED slot left empty, which the server
-// would 422 anyway.
-//
-// Layout mirrors the web SDK 1:1: the header carries the description, each
-// document is a dashed upload slot (see BusinessDocumentSlot), and Continue is
-// disabled until every required slot is filled. Tapping a slot opens the
-// photo/file source sheet — the mobile stand-in for web's file input; the
-// pickers themselves live in useBusinessDocumentAttach.
+// its paperwork. The server reads each one and cross-checks it against the
+// registry record, a soft result that never fails the verification.
+// Mirrors the web SDK's BusinessDocumentsStep.
 // ---------------------------------------------------------------------------
 
 export function BusinessDocumentsStep(): React.ReactElement {
   const config = useVerificationConfig();
   const t = useText();
   const store = useVerificationStore();
-  const { colors } = useTheme();
-  const uploaded = useFlowState((s) => s.businessApplication.documents);
-  const [busySlot, setBusySlot] = useState<string | null>(null);
-  const [pickingSlot, setPickingSlot] = useState<ResolvedBusinessDocumentType | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const docs = useGroupUpload();
+  const [picking, setPicking] = useState<GroupSlot | null>(null);
+  // The sheet opened from the camera's Upload leaves the camera out.
+  const [sheetFromCamera, setSheetFromCamera] = useState(false);
+  const pick = (slot: GroupSlot): void => {
+    setSheetFromCamera(false);
+    setPicking(slot);
+  };
+  const uploadInstead = (slot: GroupSlot): void => {
+    if (!documentPickerAvailable()) {
+      void docs.choosePhoto(slot);
+      return;
+    }
+    setSheetFromCamera(true);
+    setPicking(slot);
+  };
 
-  const slots = useMemo(
-    () => resolveBusinessDocumentTypes(config.business),
-    [config.business],
-  );
-  const missing = slots.filter((s) => s.required && !uploaded.some((d) => d.type === s.key));
+  const groups = useMemo(() => businessDocumentGroups(config.business), [config.business]);
+  // Where the step opens, worked out once per visit.
+  const [initial] = useState(() => firstOpenGroupIndex(groups, docs.uploads));
+  const stored = useFlowState((s) => s.businessDocumentGroup);
+  useEffect(() => {
+    store.getState().setBusinessDocumentGroup(initial);
+    return () => store.getState().setBusinessDocumentGroup(null);
+  }, [store, initial]);
 
-  const attach = useCallback(
-    async (slot: ResolvedBusinessDocumentType, uri: string, mimeType: string | undefined, name: string) => {
-      setBusySlot(slot.key);
-      setError(null);
-      try {
-        // A PDF is passed through untouched — re-encoding would destroy the
-        // text the server reads off it.
-        const isPdf = (mimeType ?? '').toLowerCase().startsWith('application/pdf');
-        const finalUri = isPdf ? uri : await compressDocumentImage(uri).catch(() => uri);
-        const mediaId = await withRetry(() =>
-          store.getState().api.upload({ uri: finalUri, type: mimeType, name }, 'business_document'),
-        );
-        // Preview details ride the RECORD so the thumbnail survives leaving
-        // the step — screen-local state dies with the component.
-        store.getState().setBusinessDocument({
-          type: slot.key,
-          mediaId,
-          fileName: name,
-          ...(isPdf ? { isPdf: true } : { previewUri: finalUri }),
-        });
-      } catch {
-        setError(`We could not upload ${slot.label.toLowerCase()}. Please try again.`);
-      } finally {
-        setBusySlot(null);
-      }
-    },
-    [store],
-  );
+  const index = Math.min(stored ?? initial, Math.max(groups.length - 1, 0));
+  const group = groups[index];
+  const canContinue = group ? canLeaveGroup(group, docs.uploads) : true;
+  const button = group ? groupButtonLabel(group, docs.uploads, index, groups.length) : 'continue';
+  const skipping = button === 'skip';
 
-  const { takePhoto, choosePhoto, chooseFile } = useBusinessDocumentAttach(attach, setError);
+  const open = (next: number): void => {
+    docs.clearError();
+    store.getState().setBusinessDocumentGroup(next);
+  };
 
   const handleContinue = (): void => {
-    if (missing.length > 0 || busySlot !== null) return;
+    if (!canContinue || docs.uploading !== null) return;
+    if (index < groups.length - 1) {
+      open(index + 1);
+      return;
+    }
     store.getState().nextStep();
   };
 
   return (
     <View>
-      {slots.map((slot) => {
-        const doc = uploaded.find((d) => d.type === slot.key);
-        return (
-          <BusinessDocumentSlot
-            key={slot.key}
-            label={slot.label}
-            required={slot.required}
-            fileName={doc?.fileName ?? null}
-            uploading={busySlot === slot.key}
-            previewUri={doc?.previewUri ?? null}
-            isPdf={doc?.isPdf === true}
-            onPick={() => setPickingSlot(slot)}
-            onRemove={() => store.getState().removeBusinessDocument(slot.key)}
-          />
-        );
-      })}
-
-      {error ? (
-        <UiText variant="bodySmall" color={colors.error} style={{ marginBottom: spacing.sm }}>
-          {error}
-        </UiText>
+      {group ? (
+        <View style={{ marginBottom: spacing.lg }}>
+          <GroupStack groups={groups} active={index} docs={docs} onOpen={open} onPick={pick} />
+        </View>
       ) : null}
 
-      <View style={{ height: spacing.xs }} />
       <UiButton
-        label={t('common.continue')}
+        label={skipping ? COPY.skip : button === 'next' ? COPY.nextButton : t('common.continue')}
+        variant={skipping ? 'outline' : 'primary'}
         onPress={handleContinue}
-        disabled={missing.length > 0 || busySlot !== null}
+        disabled={!canContinue || docs.uploading !== null}
       />
 
-      {/* THE SAME sheet as the Proof of Address step — identical title,
-          options, icons and captions, so uploading a document feels the same
-          everywhere in the flow. */}
-      <MediaSourceSheet
-        open={pickingSlot !== null}
-        title="Upload your document"
-        onClose={() => setPickingSlot(null)}
-        options={[
-          {
-            icon: 'image',
-            label: 'Photo library',
-            caption: 'Pick a photo you already have',
-            onPress: () => {
-              const slot = pickingSlot;
-              setPickingSlot(null);
-              if (slot) void choosePhoto(slot);
-            },
-          },
-          {
-            icon: 'camera',
-            label: 'Take a photo',
-            caption: 'Photograph the document now',
-            onPress: () => {
-              const slot = pickingSlot;
-              setPickingSlot(null);
-              if (slot) void takePhoto(slot);
-            },
-          },
-          {
-            icon: 'file-text',
-            label: 'Choose a file',
-            caption: 'A PDF or image from your files',
-            onPress: () => {
-              const slot = pickingSlot;
-              setPickingSlot(null);
-              if (slot) void chooseFile(slot);
-            },
-          },
-        ]}
+      <DocumentSourceSheet
+        slot={picking}
+        onClose={() => setPicking(null)}
+        takePhoto={docs.takePhoto}
+        choosePhoto={docs.choosePhoto}
+        chooseFile={docs.chooseFile}
+        withCamera={!sheetFromCamera}
+      />
+
+      {/* "Take a photo": the SDK's own camera, without the scan. Its Upload
+          opens the same sheet without the camera, or the library when there
+          is no file picker. */}
+      <PhotoCamera
+        {...docs.photoCamera}
+        title={docs.cameraSlot?.label ?? ''}
+        instruction={PHOTO_COPY.fitDocument}
+        onUpload={docs.cameraSlot ? () => uploadInstead(docs.cameraSlot!) : null}
       />
     </View>
   );

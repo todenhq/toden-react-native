@@ -36,6 +36,10 @@ abstract class HybridMyazaTextRecognizerSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun recognizeTextTurned(frame: com.margelo.nitro.camera.HybridFrameSpec, quarterTurns: Double): TurnedTextResult
+  
+  @DoNotStrip
+  @Keep
   abstract fun recognizeTextInImage(uri: String, bottomFraction: Double): Promise<TextResult>
   
   @DoNotStrip

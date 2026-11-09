@@ -63,7 +63,7 @@ export function SupportingDocumentCard({
   onPick: () => void;
   onRemove: () => void;
   /** How it is provided: a file, a signature drawn on screen, or either. */
-  capture?: 'upload' | 'draw' | 'draw_or_upload';
+  capture?: 'upload' | 'draw' | 'draw_or_upload' | 'camera' | 'file';
   /** The provided document was signed on screen. */
   drawn?: boolean;
   onSign?: (drawing: SignatureDrawing) => void;
@@ -71,7 +71,8 @@ export function SupportingDocumentCard({
   const { colors } = useTheme();
   // Where the workflow offers both, the pad comes first: it is the shorter way.
   const [uploadInstead, setUploadInstead] = useState(false);
-  const signing = capture !== 'upload' && !uploadInstead && fileName === null && onSign !== undefined;
+  const signing =
+    (capture === 'draw' || capture === 'draw_or_upload') && !uploadInstead && fileName === null && onSign !== undefined;
   const done = fileName !== null && !uploading;
   // What was signed, kept so it can be shown once saved and reopened by Edit.
   // It lives only as long as this screen: a resumed session shows the pen mark.

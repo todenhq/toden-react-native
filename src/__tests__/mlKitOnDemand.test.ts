@@ -22,10 +22,18 @@ describe('the ML Kit artifacts are chosen together', () => {
   const gradle = read(GRADLE);
 
   it('one resolved flag drives the choice, not two independent reads', () => {
-    // A second `safeExtGet('myazaKycBundledMlKit', …)` is how one model ends up
+    // A second `safeExtGet('todenBundledMlKit', …)` (or of the legacy
+    // `myazaKycBundledMlKit` it falls back to) is how one model ends up
     // bundled and the other fetched — a build that is neither size nor offline.
+    expect((gradle.match(/safeExtGet\('todenBundledMlKit'/g) ?? []).length).toBe(1);
     expect((gradle.match(/safeExtGet\('myazaKycBundledMlKit'/g) ?? []).length).toBe(1);
     expect(gradle).toMatch(/def bundledMlKit = /);
+  });
+
+  it('the Toden name wins, and the legacy name is only its fallback', () => {
+    expect(gradle).toMatch(
+      /def bundledMlKit = safeExtGet\('todenBundledMlKit', safeExtGet\('myazaKycBundledMlKit', false\)\)/,
+    );
   });
 
   it('the bundled branch takes BOTH bundled artifacts', () => {

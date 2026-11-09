@@ -141,20 +141,8 @@ export function UiSelect<T extends string | number>({
         // Long option lists stay inside the sheet and scroll.
         maxHeight={windowHeight * 0.6}
         closeLabel={`Close ${sheetTitle ?? hint}`}
+        title={sheetTitle ?? hint}
       >
-            <UiText
-              variant="body"
-              style={{
-                fontWeight: '700',
-                paddingHorizontal: spacing.md,
-                // Tight under the handle, the way the system sheet titles sit.
-                paddingTop: spacing.xs,
-                paddingBottom: spacing.sm,
-              }}
-            >
-              {sheetTitle ?? hint}
-            </UiText>
-
             {searchable ? (
               // Pinned above the list, so it stays put while results scroll.
               <View

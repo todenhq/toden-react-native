@@ -55,6 +55,7 @@ namespace margelo::nitro::myazakyc {
   public:
     // Methods
     TextResult recognizeText(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame, double bottomFraction) override;
+    TurnedTextResult recognizeTextTurned(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame, double quarterTurns) override;
     std::shared_ptr<Promise<TextResult>> recognizeTextInImage(const std::string& uri, double bottomFraction) override;
     bool isModelReady() override;
     std::shared_ptr<Promise<bool>> prepareModel() override;

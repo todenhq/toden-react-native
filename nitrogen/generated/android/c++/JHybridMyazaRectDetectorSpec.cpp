@@ -56,5 +56,9 @@ namespace margelo::nitro::myazakyc {
     auto __result = method(_javaPart, std::dynamic_pointer_cast<margelo::nitro::camera::JHybridFrameSpec>(frame)->getJavaPart());
     return __result->toCpp();
   }
+  void JHybridMyazaRectDetectorSpec::setExpectUpright(bool upright) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jboolean /* upright */)>("setExpectUpright");
+    method(_javaPart, upright);
+  }
 
 } // namespace margelo::nitro::myazakyc

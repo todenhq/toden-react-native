@@ -27,7 +27,8 @@ export function EntrancePlaceholder({
 }): React.ReactElement {
   const { colors } = useTheme();
   const t = useText();
-  const height = mapSurfaceHeight(useWindowDimensions());
+  // Fills the spare height as the real panorama does.
+  const minHeight = mapSurfaceHeight(useWindowDimensions());
   return (
     <StickyActions
       actions={
@@ -45,7 +46,8 @@ export function EntrancePlaceholder({
     >
       <View
         style={{
-          height,
+          flexGrow: 1,
+          minHeight,
           alignItems: 'center',
           justifyContent: 'center',
           gap: spacing.sm,

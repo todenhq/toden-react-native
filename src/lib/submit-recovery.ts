@@ -23,6 +23,8 @@ const STEP_FOR_CODE: Readonly<Record<string, VerificationStep>> = {
   // 'address-collection' is the PIN step.
   address_collection_required: 'address-collection',
   missing_address_fields: 'address-collection',
+  address_book_reuse_invalid: 'address-collection',
+  address_book_reuse_stale: 'address-collection',
 };
 
 /** A capture the server could not accept, by the key it names. */
@@ -90,4 +92,14 @@ export function serverRefusalOf(err: unknown): { code: string; mediaKey: string 
         : err.code ?? 'unknown';
   const mediaKey = typeof err.body?.mediaKey === 'string' ? err.body.mediaKey : null;
   return { code, mediaKey };
+}
+
+/**
+ * The server refused the saved address picked from the Toden address book
+ * (its grant spent or expired, or its presence verdict too old for this
+ * check). Recovered in-flow: the offer comes back over the address step.
+ */
+export function addressBookReuseRefusal(err: unknown): boolean {
+  const code = serverRefusalOf(err)?.code;
+  return code === 'address_book_reuse_invalid' || code === 'address_book_reuse_stale';
 }

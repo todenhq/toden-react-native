@@ -15,6 +15,7 @@ public protocol HybridMyazaTextRecognizerSpec_protocol: HybridObject {
 
   // Methods
   func recognizeText(frame: (any HybridFrameSpec), bottomFraction: Double) throws -> TextResult
+  func recognizeTextTurned(frame: (any HybridFrameSpec), quarterTurns: Double) throws -> TurnedTextResult
   func recognizeTextInImage(uri: String, bottomFraction: Double) throws -> Promise<TextResult>
   func isModelReady() throws -> Bool
   func prepareModel() throws -> Promise<Bool>

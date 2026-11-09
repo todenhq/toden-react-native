@@ -183,3 +183,28 @@ export function recognizeAllLines(frame: Frame): string[] {
     return [];
   }
 }
+
+/**
+ * Recognise the WHOLE frame read a quarter turn round, for a long document
+ * framed upright (a NIN slip). A WORKLET — call it from `onFrame`.
+ *
+ * `quarterTurns` 1 or 3 keeps that direction; 0 tries the other of the two on
+ * each call. The result reports the turn used (1 or 3). An app whose native build predates the method gets
+ * the upright read instead (`quarterTurns` 0), so every other document keeps
+ * working exactly as before.
+ */
+export function recognizeTurnedLines(frame: Frame, quarterTurns: number): { lines: string[]; quarterTurns: number } {
+  'worklet';
+  if (boxed == null) return { lines: [], quarterTurns: 0 };
+  const recognizer = boxed.unbox();
+  try {
+    const r = recognizer.recognizeTextTurned(frame, quarterTurns);
+    return { lines: r.lines, quarterTurns: r.quarterTurns };
+  } catch {
+    try {
+      return { lines: recognizer.recognizeText(frame, 1).lines, quarterTurns: 0 };
+    } catch {
+      return { lines: [], quarterTurns: 0 };
+    }
+  }
+}

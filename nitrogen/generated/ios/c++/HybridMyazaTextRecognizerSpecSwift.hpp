@@ -16,12 +16,15 @@ namespace KycSdkReactNative { class HybridMyazaTextRecognizerSpec_cxx; }
 namespace margelo::nitro::myazakyc { struct TextResult; }
 // Forward declaration of `HybridFrameSpec` to properly resolve imports.
 namespace margelo::nitro::camera { class HybridFrameSpec; }
+// Forward declaration of `TurnedTextResult` to properly resolve imports.
+namespace margelo::nitro::myazakyc { struct TurnedTextResult; }
 
 #include "TextResult.hpp"
 #include <string>
 #include <vector>
 #include <memory>
 #include <VisionCamera/HybridFrameSpec.hpp>
+#include "TurnedTextResult.hpp"
 #include <NitroModules/Promise.hpp>
 
 #include "KycSdkReactNative-Swift-Cxx-Umbrella.hpp"
@@ -76,6 +79,14 @@ namespace margelo::nitro::myazakyc {
     // Methods
     inline TextResult recognizeText(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame, double bottomFraction) override {
       auto __result = _swiftPart.recognizeText(frame, std::forward<decltype(bottomFraction)>(bottomFraction));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline TurnedTextResult recognizeTextTurned(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame, double quarterTurns) override {
+      auto __result = _swiftPart.recognizeTextTurned(frame, std::forward<decltype(quarterTurns)>(quarterTurns));
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

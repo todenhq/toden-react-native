@@ -36,6 +36,16 @@ export type DocumentHint =
    * page is a passport), so a generic "move closer" sends the user the wrong way.
    */
   | 'showMrz'
+  /**
+   * The four-corner gate (documentCorners.ts): no document found, a corner
+   * outside the frame, or a corner without space past it. Capture waits for
+   * all four corners, so a passport is never saved with its MRZ cut off.
+   */
+  | 'noDocument'
+  | 'cornerCutOff'
+  | 'tooClose'
+  /** Asked for the back, and the frame still reads like the front just taken. */
+  | 'showBack'
   | 'holdStill'
   | 'captured';
 

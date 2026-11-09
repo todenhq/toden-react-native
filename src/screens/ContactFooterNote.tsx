@@ -2,7 +2,9 @@ import React from 'react';
 import { View } from 'react-native';
 
 import { spacing } from '../config/theme';
-import { useTheme } from '../components/runtime';
+import { useTheme, useVerificationConfig } from '../components/runtime';
+import { isScopedBusiness } from '../lib/scope';
+import { businessKey } from '../i18n/business-variants';
 import { UiText } from '../components/Typography';
 import { Icon } from '../components/Icon';
 import { useText } from '../i18n/useText';
@@ -16,6 +18,8 @@ import { useText } from '../i18n/useText';
 export function ContactFooterNote({ isEmail }: { isEmail: boolean }): React.ReactElement {
   const { colors } = useTheme();
   const t = useText();
+  // A scoped business workflow confirms the company's contact details.
+  const scopedBusiness = isScopedBusiness(useVerificationConfig());
   return (
     <View
       style={{
@@ -27,7 +31,7 @@ export function ContactFooterNote({ isEmail }: { isEmail: boolean }): React.Reac
     >
       <Icon name={isEmail ? 'mail' : 'smartphone'} size={12} color={colors.textMuted} />
       <UiText variant="bodySmall" color={colors.textMuted}>
-        {isEmail ? t('contact.email.footer') : t('contact.phone.footer')}
+        {isEmail ? t(businessKey('contact.email.footer', scopedBusiness)) : t('contact.phone.footer')}
       </UiText>
     </View>
   );

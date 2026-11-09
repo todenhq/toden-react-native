@@ -13,6 +13,8 @@ import {
 import type { KeyPeopleSectionDef } from '../config/keyPeopleSectionDefs';
 import { KeyPeopleSection } from './KeyPeopleSection';
 import { KeyPeopleUboExemption } from './KeyPeopleUboExemption';
+import { KeyPeopleOwnershipNote } from './KeyPeopleOwnershipNote';
+import { ownershipNoteSection } from '../config/ownershipPending';
 import type { KeyPersonEntry } from '../config/keyPeople';
 import type { KeyPersonRole } from '../types/business';
 
@@ -29,6 +31,7 @@ export function KeyPeopleSectionsList({
   threshold,
   emailRequiredFor,
   uboUnidentifiable,
+  ownershipPending = false,
   canAdd,
   onRows,
   onSheet,
@@ -39,6 +42,8 @@ export function KeyPeopleSectionsList({
   threshold: number;
   emailRequiredFor: ReadonlySet<KeyPersonRole>;
   uboUnidentifiable: boolean;
+  /** The register is still sending the shareholders (config/ownershipPending.ts). */
+  ownershipPending?: boolean;
   canAdd: boolean;
   onRows: (next: KeyPersonEntry[]) => void;
   onSheet: (sheet: { mode: 'add' | 'edit'; section: SectionKey; index?: number }) => void;
@@ -46,6 +51,7 @@ export function KeyPeopleSectionsList({
 }): React.ReactElement {
   const { colors } = useTheme();
   const members = sectionMembers(rows, threshold);
+  const noteIn = ownershipPending ? ownershipNoteSection(sections.map((d) => d.key)) : null;
 
   const removeFromSection = (section: SectionKey, index: number): void => {
     const next = withoutSection(rows[index]!, section, threshold);
@@ -79,6 +85,7 @@ export function KeyPeopleSectionsList({
               key === 'ubos' && uboUnidentifiable ? [] : quickAddCandidates(rows, key, threshold)
             }
             emailRequiredFor={emailRequiredFor}
+            notice={key === noteIn ? <KeyPeopleOwnershipNote where="step" /> : undefined}
             addLabel={addLabel}
             canAdd={canAdd && !(key === 'ubos' && uboUnidentifiable)}
             onAdd={() => onSheet({ mode: 'add', section: key })}

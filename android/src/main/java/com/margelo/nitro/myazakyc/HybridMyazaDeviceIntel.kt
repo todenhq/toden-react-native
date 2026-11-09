@@ -1,6 +1,8 @@
 package com.margelo.nitro.myazakyc
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.content.pm.PackageManager
 import android.provider.Settings
 import com.margelo.nitro.NitroModules
 import com.margelo.nitro.core.Promise
@@ -31,6 +33,19 @@ class HybridMyazaDeviceIntel : HybridMyazaDeviceIntelSpec() {
       Settings.Secure.getString(resolver, Settings.Secure.ANDROID_ID) ?: ""
     } catch (_: Throwable) {
       ""
+    }
+  }
+
+  /** Whether the host's manifest asks for RECORD_AUDIO. Never prompts. */
+  override fun declaresMicrophone(): Boolean {
+    val context = NitroModules.applicationContext ?: return false
+    return try {
+      context.packageManager
+        .getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+        .requestedPermissions
+        ?.contains(Manifest.permission.RECORD_AUDIO) == true
+    } catch (_: Throwable) {
+      false
     }
   }
 

@@ -9,7 +9,7 @@ export const BUSINESS_TEXTS: Record<string, string> = {
   'business.details.title': 'Business Details',
   'business.details.description': 'Provide your business registration details for verification against the official registry.',
   'business.documents.title': 'Business documents',
-  'business.documents.description': 'Upload the supporting documents for your business. Each one must clearly show the registered business name and registration number. Required documents are marked with *.',
+  'business.documents.description': 'Upload one document for each group, one group at a time. Each must clearly show the registered business name and registration number.',
   'business.applicant.title': 'Now verify your own identity',
   'business.applicant.description': 'Tell us your role at the business, then verify your identity with a government-issued ID.',
 

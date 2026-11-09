@@ -1,5 +1,105 @@
 # Changelog
 
+## 4.0.0
+
+The first release as `@toden/react-native`. The version moves to 4.0.0 to match `@toden/react` and because everyone upgrading changes their install and imports.
+
+**Native code changed: rebuild the app (`pod install` on iOS).**
+
+**Deploy note for Toden:** ship the matching server release first. Business documents sent one per group, address book reuse, `sessionId` on `/contact/send` and the cut-off document answer on the capture check need it. `sandbox-api.toden.co` and `api.toden.co` must be serving (both answer today).
+
+### Upgrading from `@myazahq/kyc-sdk-react-native`
+
+- Remove `@myazahq/kyc-sdk-react-native`, install `@toden/react-native`, and change your imports. The API is unchanged and the names from before 3.6.0 still work. The old package receives no further releases.
+- Rename `myazaKycBundledMlKit` to `todenBundledMlKit` in your root `build.gradle` when convenient; the old name still works.
+
+### Document capture
+
+- A redesigned full-screen camera: one top row (back, the document, the side), an instruction pill that shows its state, and Upload, the shutter and Light along the bottom.
+- "Take a photo" opens the SDK's own camera instead of the system one, for supporting and business documents, proof of address and the entrance photo: no scanning, the shutter always enabled.
+- The cropper: an upright box for a NIN slip, Rotate with a smooth quarter turn, and a clearer full-screen editor. Its button reads "Use photo".
+- A document that runs off the photo asks for a retake, beside the face and barcode checks.
+- Android: a slip whose edge runs off the screen is no longer captured from a box printed on it, and camera frames always follow the screen, so corners are judged where they are shown.
+- Driver's licences, the Ghana Card and Côte d'Ivoire documents are recognised from their text (LICENCE, ECOWAS, accented words).
+- iPhone photos no longer fail as too large: camera and library photos are shrunk before the size check (supporting documents, proof of address, entrance photo).
+
+### Liveness
+
+- A still, front-facing selfie is taken in about a second: the head pose is judged from how the person holds the phone, and only a steady face counts.
+- The instruction pill eases between prompts without wrapping.
+
+### Screens
+
+- The ID step and the country sheet match the web: bigger ID cards, the country rows, search and tags, and the selector's height and fonts. The business country of registration reads "Registered in".
+- Alerts have a new design, sheets stop below the status bar, and on Android a sheet's list scrolls again.
+
+### Toden name for the bundled ML Kit flag
+
+- Bundle the ML Kit models with `ext { todenBundledMlKit = true }` in your root `build.gradle`. The old name, `myazaKycBundledMlKit`, still works when the new one is not set.
+
+### API hosts
+
+- Each environment now has its own host, as the docs list them: `pk_test_` keys go to `https://sandbox-api.toden.co` and `pk_live_` keys to `https://api.toden.co`. Both used to go to `https://trust.myaza.app`.
+
+### Presence token and OTP settings from the session
+
+- Presence: the `presenceToken` from `POST /verify` is stored beside the on-device pin and sent on every report, so reports from the phone that captured the address keep their full weight. Pins saved before this have no token and report at the foreground tier until the person verifies again.
+- The contact step sends `sessionId` on `/contact/send` and sizes the code field from the `codeLength` the server returns.
+
+No native code changed.
+
+### Uploaded document row
+
+- On a narrow phone the file size no longer runs under the Replace and Remove buttons. It moves to its own line.
+
+### Document upload without the file picker
+
+- In an app built without `expo-document-picker`, the document steps no longer offer "Choose a file" and then show an error. The sheet offers the photo library and camera, and the line under the upload area no longer mentions PDFs. Install the package to accept PDFs.
+
+### Document review and audio
+
+- `documentReview` (default off): `true` shows the review screen after a document scan. Uploaded photos always get the review, and so does a scan that failed to upload or that the capture check could not read.
+- `livenessAudio` (default off): records sound on the liveness recording, and the consent screen says so. It needs the same microphone setup as `documentAudio`.
+- `documentAudio` (default off): records sound on the document capture video, and the consent screen says so. Add `microphone: true` to the config plugin and rebuild. Without it, or if the person refuses, the clip records without sound. The SDK checks first, because iOS closes an app that asks for the microphone without declaring it, and a native build older than this release reads as undeclared.
+
+### Liveness lighting judged on the face
+
+- The liveness step no longer tells a well-lit person to move to a brighter area because the room behind them is dark. With a face in view, the light check reads the centre of the frame where the face is held, instead of the whole frame. With no face in view it still judges the whole frame. No native change.
+
+### The Toden address book
+
+- When the organisation has it on, the address flow opens with a choice: use an address the person saved with Toden (an email, a six-digit code, then a pick) or enter one. A picked address skips the map, the entrance photo and the review, and is sent as `addressBookReuse` instead of a pin.
+- A flow with a presence check lists only saved addresses whose presence was confirmed in the last six months, and says why others are missing.
+- If the server refuses the picked address (the code expired or the address can no longer be used), the flow returns to the address book step instead of ending on an error.
+- The review step offers an unticked box to save the confirmed address to the person's own Toden address book, with the directions and the entrance photo each included only if they choose.
+- Never offered on business verifications.
+
+### Business documents, one group at a time
+
+- The business documents step groups what the organisation asks for (legal presence, company details, ownership structure, authority to represent the business, address, financial, tax, licences and permits). The applicant uploads one document per group, one group at a time, instead of facing a slot for every document.
+- The applicant never says which document they uploaded: the group lists the documents it accepts, and the server recognises which one it is from its text. Uploads are sent as `{ group, mediaId }`. An upload restored from an earlier session that named its document is still sent by its type.
+- Each accepted document shows how recent it must be ("From the last 3 months") when the workflow sets a validity window. The date is checked after submission.
+- A new screen: the groups are a vertical carousel. The open group's card is in front, the next group's card is tucked behind it at the top (showing its title and what it will ask for) and the previous group's card behind it at the bottom (its file, or Skipped, with Change to reopen it); a thin edge beyond each shows there are more groups that way. Continue brings the next card down into the middle; Back brings the previous one up. Reduced motion keeps only the fade, and a screen reader hears the position and title of the group that opens.
+- The open card shows its position ("2 of 5"), the documents the group accepts with how recent each must be on its own line, and a tall upload area that is itself the control: tap it to choose a photo, take one or pick a file (there is no separate Choose a file or Take a photo button, so Continue is the only primary button). Once uploaded, a card shows the file with Replace and Remove. A new upload replaces the group's earlier one.
+- The button reads Next on every group but the last and Continue on the last; an optional group with nothing uploaded reads Skip.
+- A finished group keeps its number, with a small tick on it, so the count stays visible. A file name that is a random id (as phone cameras often give) shows as Uploaded instead.
+- An optional group can be skipped: the button reads Skip while it holds nothing. Back steps through the groups before leaving the step.
+- Every document type has a readable label, and a refusal for missing documents names the groups (`missingGroups`) or documents instead of passing through raw keys.
+- Needs the matching server release, which accepts one document per group.
+
+### Scoped business workflows
+
+- A business workflow with the address, questionnaire or contact scope now runs that scope's own steps. It never opens the business application (company search, registry lookup, key people, documents or the applicant's own check).
+- Those screens name the business: the welcome screen and its list of steps, the email and phone code steps, proof of address, the address screens, the questionnaire and the success screen. A workflow's own wording for the person's version of a text still applies to the business version. Presence checks for a business count days at the premises only.
+- A business workflow with a face check scope shows "Unable to start verification" and never opens the camera. `onError` receives `invalid_workflow`.
+- A submission the server refuses with `entity_type_mismatch` (the reference names a person on a business workflow, or the reverse) is reported as `invalid_workflow` with a clear message, not as something to retry.
+
+- A document is captured only when all four of its corners are in the frame, with a little space past each. This applies to auto-capture and the shutter button, which stays disabled (and says why) until the corners are in view. A passport can no longer be photographed with its machine-readable zone cut off.
+- The saved photo is cropped to the document's detected corners plus that space, not to the on-screen guide.
+- New capture hints: "Place your ID inside the frame", "Fit all four corners of your ID inside the frame" and "Move back a little so there is space around your ID".
+- Android now detects the document's edges (it previously relied on text alone).
+- An app whose native code has not been rebuilt keeps the earlier behaviour.
+
 ## 3.6.0
 
 The entry point is now `Verification`, and the flow carries the Toden brand. The package name is unchanged.

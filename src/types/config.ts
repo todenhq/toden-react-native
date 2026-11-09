@@ -63,6 +63,9 @@ export type VerificationStep =
   // The address flow, in order: find it (search) → confirm it (the PIN step,
   // which keeps the original 'address-collection' wire name so older session
   // progress restores cleanly) → show it (entrance photo) → commit it.
+  // Picking a saved address from the person's Toden address book (offered
+  // only when the organisation has address book reuse on) leads it.
+  | 'address-book'
   | 'address-search'
   | 'address-collection'
   | 'address-entrance'
@@ -125,6 +128,13 @@ export interface VerificationConfig<C extends SupportedCountry = SupportedCountr
   idTypes?: IdTypeForCountry<C>[];
 
   /**
+   * On a multi-country flow, where the country is picked: the summary row on
+   * the ID-type step (`combined`, the default) or a country step of its own
+   * (`separate`). See lib/id-selection-layout.ts.
+   */
+  idSelectionLayout?: import('../lib/id-selection-layout').IdSelectionLayout;
+
+  /**
    * The org's own reference for the person being verified (e.g. your internal
    * user id). It is **not** matched during verification — it becomes
    * `Entity.externalUserId` at the KYC seam, so repeat checks of the same user
@@ -174,6 +184,26 @@ export interface VerificationConfig<C extends SupportedCountry = SupportedCountr
    * both off keeps the camera.
    */
   allowDocumentScan?: boolean;
+
+  /**
+   * Show the review screen, with Retake and Continue, after a document scan.
+   * Default `true`. When `false`, a scan moves straight on. Uploaded photos
+   * always get it, and so does a scan with a problem to fix.
+   */
+  documentReview?: boolean;
+
+  /**
+   * Record sound on the document capture video. Default `false`. Needs the
+   * Expo plugin's `microphone: true`, or `NSMicrophoneUsageDescription` and
+   * `RECORD_AUDIO` in a bare app. Without them, or if the person refuses, the
+   * clip records without sound and the flow continues.
+   */
+  documentAudio?: boolean;
+  /**
+   * Record sound on the liveness recording, on the same terms as
+   * `documentAudio`. Default `false`.
+   */
+  livenessAudio?: boolean;
 
   /** Enable liveness detection during selfie capture. Default `true`. */
   enableLiveness?: boolean;

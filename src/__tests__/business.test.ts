@@ -264,6 +264,7 @@ describe('requested documents', () => {
         key: 'incorporation_certificate',
         label: 'Certificate of incorporation',
         required: true,
+        maxAgeMonths: null,
       },
     ]);
   });
@@ -277,8 +278,15 @@ describe('requested documents', () => {
         },
       }),
     );
-    expect(types.map((t) => t.label)).toEqual(['MEMART / articles of association', 'Board minutes']);
+    expect(types.map((t) => t.label)).toEqual(['Memorandum and articles / company constitution', 'Board minutes']);
     expect(types.map((t) => t.required)).toEqual([false, true]);
+  });
+
+  it('reads how recent each document must be, null when no window is set', () => {
+    const types = resolveBusinessDocumentTypes(
+      business({ documents: { enabled: true, types: [{ key: 'proof_of_address', maxAgeMonths: 3 }, { key: 'memart' }] } }),
+    );
+    expect(types.map((t) => t.maxAgeMonths)).toEqual([3, null]);
   });
 });
 

@@ -26,6 +26,8 @@ export interface UiButtonProps {
   leadingIcon?: IconName;
   style?: StyleProp<ViewStyle>;
   fullWidth?: boolean;
+  /** Overrides the label colour: a ghost button set directly on a glass sheet. */
+  labelColor?: string;
   /** Screen reader label, when the visible label alone is ambiguous. */
   accessibilityLabel?: string;
   /** Screen reader hint describing what the press does. */
@@ -38,6 +40,7 @@ export function UiButton({
   variant = 'primary',
   disabled = false,
   loading = false,
+  labelColor,
   leadingIcon,
   style,
   fullWidth = true,
@@ -48,11 +51,12 @@ export function UiButton({
   const isDisabled = disabled || loading || !onPress;
 
   const fg =
-    variant === 'primary'
+    labelColor ??
+    (variant === 'primary'
       ? colors.onPrimary
       : variant === 'destructive'
         ? '#FFFFFF'
-        : colors.primary;
+        : colors.primary);
   const effectiveFg = isDisabled ? `${fg}80` : fg; // 50% alpha when disabled
 
   const bg =

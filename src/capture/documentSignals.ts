@@ -20,19 +20,30 @@
 export const DOCUMENT_SIGNALS: Record<string, Record<string, string[]>> = {
   NG: {
     passport: ['PASSPORT', 'TRAVEL DOCUMENT', 'P<NGA'],
+    // LICENCE: the licence itself is spelt the UK way ("NATIONAL DRIVER'S
+    // LICENCE"), so with LICENSE alone its front scored one hit and the camera
+    // held at "move closer" for good.
     'drivers-license': [
-      'DRIVER', 'LICENSE', 'FRSC', 'FEDERAL ROAD SAFETY', 'DRIVING LICENCE',
+      'DRIVER', 'LICENSE', 'FRSC', 'FEDERAL ROAD SAFETY', 'DRIVING LICENCE', 'LICENCE',
     ],
     pvc: [
       'VOTER', "VOTER'S CARD", 'PVC', 'INEC', 'INDEPENDENT NATIONAL ELECTORAL',
       'PERMANENT VOTER', 'ELECTORAL COMMISSION', 'VIN',
     ],
+    // Without its own list a NIN slip could not be told from any other
+    // document, so a voter's card held in its place was captured as the slip.
+    'nin-slip': [
+      'NATIONAL IDENTIFICATION NUMBER SLIP', 'NINS', 'NATIONAL IDENTITY MANAGEMENT',
+      'NIMC', 'TRACKING ID', 'DIGITAL NIN SLIP',
+    ],
   },
   GH: {
     passport: ['PASSPORT', 'REPUBLIC OF GHANA', 'P<GHA'],
-    'ghana-card': ['GHANA CARD', 'NATIONAL IDENTIFICATION AUTHORITY', 'NIA', 'GHA-'],
+    // ECOWAS: the card's front is headed "ECOWAS IDENTITY CARD" and names
+    // neither the card nor the authority, so GHA- was its only hit.
+    'ghana-card': ['GHANA CARD', 'NATIONAL IDENTIFICATION AUTHORITY', 'NIA', 'GHA-', 'ECOWAS'],
     voters: ['VOTER', 'ELECTORAL COMMISSION', 'EC OF GHANA'],
-    'drivers-license': ['DRIVER', 'LICENSE', 'DVLA', 'DRIVING AND VEHICLE'],
+    'drivers-license': ['DRIVER', 'LICENSE', 'DVLA', 'DRIVING AND VEHICLE', 'LICENCE'],
     ssnit: ['SSNIT', 'SOCIAL SECURITY', 'NATIONAL INSURANCE'],
   },
   KE: {
@@ -108,6 +119,28 @@ export function hasDocumentSignals(country: string, idType: string): boolean {
   return idType === 'passport';
 }
 
+/**
+ * `upper` with its accented capitals plain. The keywords are written without
+ * accents, as the server's are, while a Côte d'Ivoire CNI prints "RÉPUBLIQUE
+ * DE CÔTE D'IVOIRE" and "IDENTITÉ": read as printed, its front scored one hit.
+ */
+export function foldAccents(upper: string): string {
+  // A table rather than normalize('NFD'), which a Hermes build without Intl
+  // does not decompose. Same table as the Flutter SDK's foldAccents.
+  return upper.replace(/[^\x00-\x7F]/g, (ch) => ACCENT_FOLDS[ch] ?? ch);
+}
+
+const ACCENT_FOLDS: Record<string, string> = {
+  À: 'A', Á: 'A', Â: 'A', Ã: 'A', Ä: 'A', Å: 'A',
+  Ç: 'C',
+  È: 'E', É: 'E', Ê: 'E', Ë: 'E',
+  Ì: 'I', Í: 'I', Î: 'I', Ï: 'I',
+  Ñ: 'N',
+  Ò: 'O', Ó: 'O', Ô: 'O', Õ: 'O', Ö: 'O',
+  Ù: 'U', Ú: 'U', Û: 'U', Ü: 'U',
+  Ý: 'Y', Ÿ: 'Y',
+};
+
 function isShortAcronym(keyword: string): boolean {
   return keyword.length <= 4 && /^[A-Z]+$/.test(keyword);
 }
@@ -120,7 +153,8 @@ function isShortAcronym(keyword: string): boolean {
  * voter-card hit — harmless while every score is diluted by the keyword count,
  * and a false identification the moment anything counts hits directly.
  */
-export function countSignalHits(upper: string, keywords: string[]): number {
+export function countSignalHits(text: string, keywords: string[]): number {
+  const upper = foldAccents(text);
   let hits = 0;
   for (const keyword of keywords) {
     if (isShortAcronym(keyword)) {
@@ -137,7 +171,7 @@ export function countSignalHits(upper: string, keywords: string[]): number {
 /** Best-matching document type for the recognized `lines` within `country`. */
 export function detectDocumentType(lines: string[], country: string): DocumentTypeMatch {
   if (lines.length === 0) return NO_MATCH;
-  const upper = lines.join('\n').toUpperCase();
+  const upper = foldAccents(lines.join('\n').toUpperCase());
   const signals = DOCUMENT_SIGNALS[country] ?? {};
 
   let bestType: string | null = null;

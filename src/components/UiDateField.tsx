@@ -34,11 +34,14 @@ export function UiDateField({
   onChange,
   placeholder,
   error,
+  title,
 }: {
   value?: string;
   onChange: (iso: string) => void;
   placeholder?: string;
   error?: string | null;
+  /** The sheet's title: the field's label (web's DateField `title`). */
+  title?: string;
 }): React.ReactElement {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
@@ -78,6 +81,7 @@ export function UiDateField({
 
       {open ? (
         <DatePickerSheet
+          title={title ?? placeholder ?? 'Pick a date'}
           initial={selected}
           onClose={() => setOpen(false)}
           onPick={(iso) => {
@@ -95,10 +99,12 @@ const MIN_YEAR = 1900;
 const MAX_YEAR = new Date().getFullYear() + 5;
 
 function DatePickerSheet({
+  title,
   initial,
   onClose,
   onPick,
 }: {
+  title: string;
   initial: ReturnType<typeof parseIsoDate>;
   onClose: () => void;
   onPick: (iso: string) => void;
@@ -118,7 +124,7 @@ function DatePickerSheet({
     !!initial && initial.year === cursor.year && initial.month0 === cursor.month0 && initial.day === d;
 
   return (
-    <FloatingSheet visible onClose={onClose} closeLabel="Close date picker">
+    <FloatingSheet visible onClose={onClose} closeLabel="Close date picker" title={title}>
           <View style={{ padding: spacing.md, paddingTop: spacing.sm }}>
           {/* Month header: step, or tap the title to jump years. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm }}>

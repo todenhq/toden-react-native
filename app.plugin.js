@@ -9,7 +9,7 @@ const {
 const pkg = require('./package.json');
 
 // ---------------------------------------------------------------------------
-// Expo config plugin for @myazahq/kyc-sdk-react-native.
+// Expo config plugin for @toden/react-native.
 //
 // The native modules (face detector, text recogniser, eMRTD reader) autolink
 // via expo-module.config.json. This plugin only handles what must be written
@@ -18,8 +18,8 @@ const pkg = require('./package.json');
 //   • iOS  — NSCameraUsageDescription (document scan + selfie liveness), and,
 //            when NFC is enabled, NFCReaderUsageDescription plus the
 //            reader-session entitlements.
-//            NOTE: voice guidance is TTS OUTPUT only, so NO microphone usage
-//            string and no NSMicrophoneUsageDescription are added.
+//            NOTE: voice guidance is TTS OUTPUT only. The microphone is for
+//            `documentAudio` alone, added by `microphone: true`.
 //   • Android — CAMERA + INTERNET, plus NFC when enabled.
 //
 // NFC is OPT-IN (`nfc: true`). The entitlement requires the App ID to carry the
@@ -40,6 +40,8 @@ const CAMERA_USAGE =
 
 const NFC_USAGE =
   'We read the secure chip in your passport or ID card to confirm the document is genuine.';
+
+const MICROPHONE_USAGE = 'We record sound with the video of your ID document.';
 
 const LOCATION_USAGE =
   'We use your location to confirm you are at the address you pin during verification.';
@@ -141,11 +143,12 @@ function withIosNfc(config, customMessage) {
  * so the tests can pin what `location: 'always'` declares — a permission
  * that changes review posture must never arrive by accident.
  */
-function androidPermissionsFor({ nfc, location, backgroundLocation }) {
+function androidPermissionsFor({ nfc, location, backgroundLocation, microphone }) {
   return [
     'android.permission.CAMERA',
     'android.permission.INTERNET',
     ...(nfc ? ['android.permission.NFC'] : []),
+    ...(microphone ? ['android.permission.RECORD_AUDIO'] : []),
     // Foreground location, for the address-collection step's one-shot fix.
     ...(location
       ? ['android.permission.ACCESS_COARSE_LOCATION', 'android.permission.ACCESS_FINE_LOCATION']
@@ -165,6 +168,21 @@ function androidPermissionsFor({ nfc, location, backgroundLocation }) {
         ]
       : []),
   ];
+}
+
+/**
+ * The microphone, for workflows that record sound on the document video. An
+ * opt-in, unlike location: Android apps declaring RECORD_AUDIO answer for it in
+ * Play's data safety form, and the SDK checks the declaration before asking,
+ * so leaving it out costs the sound and nothing else.
+ */
+function withIosMicrophoneUsage(config, customMessage) {
+  return withInfoPlist(config, (cfg) => {
+    if (!cfg.modResults.NSMicrophoneUsageDescription) {
+      cfg.modResults.NSMicrophoneUsageDescription = customMessage || MICROPHONE_USAGE;
+    }
+    return cfg;
+  });
 }
 
 function withAndroidPermissions(config, opts) {
@@ -240,7 +258,8 @@ function withIosBackgroundLocation(config, customMessage) {
 /**
  * @param {object} config
  * @param {{ cameraPermission?: string, nfc?: boolean, nfcPermission?: string,
- *           location?: boolean | 'always', locationPermission?: string }} [props]
+ *           location?: boolean | 'always', locationPermission?: string,
+ *           microphone?: boolean, microphonePermission?: string }} [props]
  */
 function withMyazaKyc(config, props = {}) {
   const location = props.location !== false;
@@ -253,7 +272,11 @@ function withMyazaKyc(config, props = {}) {
     nfc: props.nfc === true,
     location,
     backgroundLocation,
+    microphone: props.microphone === true,
   });
+  if (props.microphone === true) {
+    config = withIosMicrophoneUsage(config, props.microphonePermission);
+  }
   if (location) {
     config = withIosLocationUsage(config, props.locationPermission);
   }

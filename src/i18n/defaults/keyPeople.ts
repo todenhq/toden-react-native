@@ -24,7 +24,7 @@ export const KEY_PEOPLE_TEXTS: Record<string, string> = {
   // The people still to verify (screens/KeyPeopleAwaitList.tsx).
   'keyPeople.await.allDone': 'Everyone on this application has completed their identity check.',
   'keyPeople.await.intro':
-    'To complete the review, the people below must verify their identity with a KYC check. Anyone with an email on file has already been sent their link.',
+    'To complete the review, the people below must verify their identity with a KYC check. We will email each person their link if you gave their email address.',
   'keyPeople.await.linkValidity': 'Links are valid for 14 days.',
 };
 

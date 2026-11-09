@@ -74,6 +74,8 @@ export interface DocumentCaptureCheckResponse {
   side: DocumentCaptureSide;
   face: boolean | null;
   barcode: boolean | null;
+  /** The whole document is in the photo. Absent from servers before 2026-11-09. */
+  complete?: boolean | null;
 }
 
 export interface KeyPersonInvite {
@@ -118,6 +120,8 @@ export interface VerifyResponse {
   applicantKeyPersonId?: string;
   /** Per-person hosted-KYC links to hand to the people the applicant listed. */
   keyPeopleInvites?: KeyPersonInvite[];
+  /** Only when the submission captured an address. Sent with presence reports. */
+  presenceToken?: string;
 }
 
 /**
@@ -192,6 +196,10 @@ export interface SdkConfigResponse {
    * built-in OSM picker is the fallback every map failure degrades to.
    */
   mapsFrameUrl?: string | null;
+  /** The Toden address book on this organisation: `save` offers the box that
+   *  saves the confirmed address to the person's own book, `reuse` the step
+   *  that lets them pick one they saved before. */
+  addressBook?: { save: boolean; reuse: boolean };
   /** Device Intelligence attestation settings (see DeviceAttestationConfig). */
   deviceAttestation?: DeviceAttestationConfig;
 }
@@ -329,16 +337,40 @@ export interface WorkflowResolutionResponse {
   /** The framed Google-map picker page, when the route carries one (see
    *  SdkConfigResponse.mapsFrameUrl). */
   mapsFrameUrl?: string | null;
+  /** The Toden address book on this organisation: `save` offers the box that
+   *  saves the confirmed address to the person's own book, `reuse` the step
+   *  that lets them pick one they saved before. */
+  addressBook?: { save: boolean; reuse: boolean };
   /** Device Intelligence attestation settings (same as /config). */
   deviceAttestation?: DeviceAttestationConfig;
   /** KYB only: the mapped applicant workflow, when configured and resolvable. */
   applicantWorkflow?: ApplicantWorkflowPayload | null;
 }
 
+/** POST /address-book/code: the same answer whether or not the email has a book. */
+export interface AddressBookLookupResponse {
+  recognised: boolean;
+}
+
+export interface AddressBookCodeResponse {
+  challengeId: string;
+  expiresInMinutes: number;
+}
+
+/** POST /address-book/addresses: the saved addresses (street and area only)
+ *  and the one-time grant the submission spends. */
+export interface AddressBookAddressesResponse {
+  grant: string;
+  expiresAt: string;
+  addresses: import('../lib/address-book').SavedAddress[];
+}
+
 export interface ContactSendResponse {
   challengeId: string;
   expiresAt: string;
   deliveryChannel: string;
+  /** The length of the code actually sent. Older servers leave it out. */
+  codeLength?: number;
 }
 
 export interface ContactCheckResponse {
@@ -398,6 +430,8 @@ export interface AwaitingPersonPayload {
   isApplicant: boolean;
   /** A company completes a KYB application, not a KYC - the list labels it so. */
   isCorporate?: boolean;
+  /** Added from the company's own documents, not listed by the applicant. */
+  foundInDocuments?: boolean;
 }
 
 /** `GET /session/:sessionId/summary` — a submitted session, rebuilt server-side. */
@@ -405,6 +439,11 @@ export interface SessionSummaryResponse {
   status: 'completed';
   /** False while registry discovery is still reconciling the people list. */
   keyPeopleSettled?: boolean;
+  /**
+   * Shareholders from the register are still on their way: they join
+   * `keyPeople`, with invite links, when they arrive. Absent on an older server.
+   */
+  keyPeopleOwnershipPending?: boolean;
   keyPeople: AwaitingPersonPayload[];
 }
 
@@ -446,7 +485,13 @@ export interface BusinessSelectResponse {
   reason?: string;
   found?: boolean;
   charged?: boolean;
-  business?: (BusinessCompanyRecord & { keyPeople: RegistryOfficer[] }) | null;
+  business?:
+    | (BusinessCompanyRecord & {
+        keyPeople: RegistryOfficer[];
+        /** The register has not sent the shareholders yet; absent on an older server. */
+        ownershipPending?: boolean;
+      })
+    | null;
 }
 
 /** One candidate from the FREE name search — picking one is what runs the paid check. */
@@ -461,6 +506,8 @@ export interface BusinessSearchResponse {
   results: BusinessSearchHit[];
   /** Which source answered; a degraded fallback names itself here. */
   source: string;
+  /** USD decimal string the org was charged, or null. Not for the applicant. */
+  charged?: string | null;
 }
 
 /** `GET /business/regions` — the registry regions of a split register. */

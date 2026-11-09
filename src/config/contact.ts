@@ -10,6 +10,7 @@
 
 import type { EmailVerificationConfig, PhoneVerificationConfig } from '../types/workflow';
 import { defaultText } from '../i18n/translate';
+import { businessKey } from '../i18n/business-variants';
 import type { TextFn } from '../i18n/types';
 
 /**
@@ -68,6 +69,17 @@ export function contactCodeLength(
 }
 
 /**
+ * The length to size the code field to once a code is out. The server decides
+ * it from the pinned workflow and says so; anything but a length it could have
+ * sent (an older server sends nothing) falls back to the configured one.
+ */
+export function sentCodeLength(sent: unknown, configured: number): number {
+  return typeof sent === 'number' && Number.isInteger(sent) && sent >= MIN_CODE_LENGTH && sent <= MAX_CODE_LENGTH
+    ? sent
+    : configured;
+}
+
+/**
  * Header title/description for a contact step, read by stepHeaderMeta.
  *
  * Wording matches the web SDK exactly, including the way the description turns
@@ -82,9 +94,11 @@ export function contactMeta(
   channel: 'email' | 'phone',
   ctx?: { codeLength?: number; challenge?: ContactChallenge | null },
   t: TextFn = defaultText,
+  /** A scoped business workflow confirms the company's contact details. */
+  scopedBusiness = false,
 ): { title: string; description: string } {
   const isEmail = channel === 'email';
-  const title = isEmail ? t('contact.email.title') : t('contact.phone.title');
+  const title = t(businessKey(isEmail ? 'contact.email.title' : 'contact.phone.title', scopedBusiness));
   const live = ctx?.challenge?.channel === channel ? ctx.challenge : null;
   const by = !isEmail && live?.via ? ` by ${CHANNEL_LABELS[live.via]}` : '';
 
@@ -99,8 +113,8 @@ export function contactMeta(
   return {
     title,
     description: isEmail
-      ? t('contact.email.intro')
-      : `We'll send a one-time code${by} to confirm this number belongs to you.`,
+      ? t(businessKey('contact.email.intro', scopedBusiness))
+      : `We'll send a one-time code${by} to confirm this number belongs to ${scopedBusiness ? 'your business' : 'you'}.`,
   };
 }
 

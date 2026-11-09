@@ -23,6 +23,13 @@ export interface StoredPin {
   /** The reporter has asked for "allow all the time" for this pin once
    *  (auto-arm.ts). It never asks again; a new pin starts clean. */
   backgroundAsked?: true;
+  /** The Google Cloud project Play Integrity proofs are made for, copied from
+   *  the server's config so a background report can prove itself. */
+  playIntegrityProject?: string;
+  /** From the 202 of the verification that captured this pin. It is what makes
+   *  this phone's reports count as the watch's own device; without one they
+   *  count at the foreground tier. Rolling chains keep the same token. */
+  presenceToken?: string;
 }
 
 const FILE_NAME = 'myaza-kyc-presence.json';
@@ -38,6 +45,9 @@ const FILE_NAME = 'myaza-kyc-presence.json';
  * and the reporter goes quiet before ever touching the GPS.
  */
 export const PIN_TTL_DAYS = 45;
+
+/** The server refuses a body with a longer token, which would lose the report. */
+const MAX_PRESENCE_TOKEN_LENGTH = 128;
 
 export function pinExpired(pin: StoredPin, nowMs: number = Date.now()): boolean {
   // An always-on pin has no end date by design (the OkHi model): monitoring
@@ -65,7 +75,7 @@ function writeAll(pins: Record<string, StoredPin>): void {
 export function savePresencePin(
   externalUserId: string,
   pin: { lat: number; lng: number },
-  opts?: { alwaysOn?: boolean; background?: boolean },
+  opts?: { alwaysOn?: boolean; background?: boolean; playIntegrityProject?: string | null },
 ): void {
   if (!externalUserId) return;
   const pins = readAll();
@@ -75,8 +85,41 @@ export function savePresencePin(
     savedAt: new Date().toISOString(),
     ...(opts?.alwaysOn === true ? { alwaysOn: true } : {}),
     ...(opts?.background === false ? { background: false as const } : {}),
+    ...(opts?.playIntegrityProject ? { playIntegrityProject: opts.playIntegrityProject } : {}),
   };
   writeAll(pins);
+}
+
+/** Keeps the 202's token beside the pin it belongs to. Saving a new pin drops
+ *  it, so a token can only ever sit beside the capture that earned it. */
+export function savePresenceToken(externalUserId: string, token: unknown): void {
+  if (typeof token !== 'string') return;
+  const value = token.trim();
+  if (value === '' || value.length > MAX_PRESENCE_TOKEN_LENGTH) return;
+  const pins = readAll();
+  const pin = pins[externalUserId];
+  if (!pin) return;
+  pins[externalUserId] = { ...pin, presenceToken: value };
+  writeAll(pins);
+}
+
+/** Stores the 202's token for a flow that saved a pin, the same rule the pin
+ *  was saved under. The 202 of any address capture carries a token, and one
+ *  from a flow with presence off must not replace that of a check still running. */
+export function keepPresenceToken(
+  config: { userId?: string; addressCollection?: { presence?: { enabled?: boolean } } | null },
+  token: unknown,
+): void {
+  if (config.addressCollection?.presence?.enabled === true && config.userId) {
+    savePresenceToken(config.userId, token);
+  }
+}
+
+/** The token to send with this user's reports, if the pin has one. Read on
+ *  every report rather than held in memory: the background tasks run with no
+ *  React context and no state from the flow. */
+export function presenceTokenFor(externalUserId: string): string | undefined {
+  return readAll()[externalUserId]?.presenceToken;
 }
 
 /** Records that the reporter asked for "allow all the time" for this pin. */

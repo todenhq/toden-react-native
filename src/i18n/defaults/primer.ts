@@ -19,7 +19,7 @@ export const PRIMER_TEXTS: Record<string, string> = {
   'primer.selfie.bodyPassive':
     "You'll hold still and look at the camera for a moment. This proves a real person is present, not a photo or a recording.",
   'primer.selfie.checklist1': 'Put your face in the circle',
-  'primer.selfie.checklist2': 'Take off glasses or anything covering your face',
+  'primer.selfie.checklist2': 'Take off glasses, hats, caps or anything covering your face',
   'primer.selfie.checklist4': 'Choose a bright spot, with the light in front of you',
   'primer.selfie.checklist5': 'Keep glare and shiny reflections off your face',
   // components/ReadyPrimer.tsx.

@@ -55,6 +55,8 @@ export interface VerifyRequest {
   };
   /** Which kind of document the user said they uploaded as proof of address. */
   proofOfAddressType?: string;
+  /** ISO-2 of the country the proof of address is from (absent = the verification's). */
+  proofOfAddressCountry?: string;
   /**
    * Address Intelligence: the map pin the applicant dropped (+ the optional
    * one-shot device fix taken at Continue). The server corroborates it; the
@@ -88,8 +90,18 @@ export interface VerifyRequest {
     deviceLat?: number;
     deviceLng?: number;
     deviceAccuracy?: number;
+    deviceMocked?: boolean;
     capturedAt?: string;
+    /** Save this address to the person's own Toden address book (the box on
+     *  the review step, unticked by default). */
+    book?: { save: boolean; photo: boolean; directions: boolean };
   };
+  /**
+   * A saved address the person picked from their Toden address book instead
+   * of entering one: the one-time grant from `addressBookAddresses` and the
+   * address they chose. Sent INSTEAD of `address`.
+   */
+  addressBookReuse?: { grant: string; entryId: string };
   /**
    * Business (KYB) registry details. Its presence is what makes this a business
    * submission — and the server REQUIRES a published KYB workflow for one, so
@@ -120,7 +132,7 @@ export interface VerifyRequest {
     natureOfBusiness?: string;
     /** Uploaded supporting documents (honoured only when the workflow's
      *  `business.documents` block configures them). */
-    documents?: Array<{ type: string; mediaId: string }>;
+    documents?: Array<{ type?: string; group?: string; mediaId: string }>;
     /** Applicant-declared directors & owners (≤20; `email` drives auto-sent
      *  invites; honoured only when the workflow sets `keyPeople.collect`). */
     keyPeople?: Array<{

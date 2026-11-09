@@ -1,4 +1,5 @@
 import * as ImageManipulator from 'expo-image-manipulator';
+import { File } from 'expo-file-system';
 import { Video } from 'react-native-compressor';
 
 import {
@@ -10,7 +11,10 @@ import {
   VIDEO_COMPRESS_FALLBACK_SIZE,
   VIDEO_COMPRESS_FALLBACK_BITRATE,
 } from '../config/captureSettings';
-import { cardCropRect, type CropRect } from './cardCrop';
+import type { PhotoPreparers } from './pickedPhoto';
+import { cardCropRect, cornerCropRect, guideCropRect, type CropRect } from './cardCrop';
+import { selfieFrameInStill, selfieOutputWidth, type StillFace } from '../lib/selfie-pick';
+import type { DocumentQuad } from '../capture/documentCorners';
 
 export type { CropRect } from './cardCrop';
 
@@ -115,6 +119,43 @@ export async function cropCardRegion(
   return cropImage(uri, cardCropRect(width, height, aspect, viewAr));
 }
 
+/**
+ * Crop a live-camera capture to the document's DETECTED corners, with the
+ * corner-gate bleed past each one, so a passport's MRZ is never cut off by the
+ * crop. Used whenever the corner gate passed; the guide crop above is only the
+ * fallback for a build that cannot detect corners.
+ */
+export async function cropToDocumentCorners(
+  uri: string,
+  quad: DocumentQuad,
+  /** Upright frame width ÷ height the quad was measured in, when known. */
+  frameAspect: number | null,
+): Promise<string> {
+  const { width, height } = await imageSize(uri);
+  const rect = cornerCropRect(width, height, quad, frameAspect ?? width / height);
+  if (rect.width < 2 || rect.height < 2) return uri;
+  return cropImage(uri, rect);
+}
+
+/** Crop a live-camera capture to an upright guide drawn at `guide` (shares of the preview box). */
+export async function cropGuideRegion(
+  uri: string,
+  viewAr: number,
+  guide: { x: number; y: number; width: number; height: number },
+): Promise<string> {
+  const { width, height } = await imageSize(uri);
+  return cropImage(uri, guideCropRect(width, height, viewAr, guide));
+}
+
+/** Turn an image clockwise by `degrees` (a multiple of 90). Returns a new file URI. */
+export async function rotateImage(uri: string, degrees: number): Promise<string> {
+  const result = await ImageManipulator.manipulateAsync(uri, [{ rotate: degrees }], {
+    compress: 0.95,
+    format: ImageManipulator.SaveFormat.JPEG,
+  });
+  return result.uri;
+}
+
 /** Compress a document still for OCR. Returns a new file URI. */
 export async function compressDocumentImage(uri: string): Promise<string> {
   let actions: ImageManipulator.Action[] = [];
@@ -138,7 +179,40 @@ export async function compressDocumentImage(uri: string): Promise<string> {
   return result.uri;
 }
 
+/** A local file's size in bytes, or null when it cannot be read. */
+export function fileSizeOf(uri: string): number | null {
+  return new File(uri).size;
+}
+
+/** How a picked photo is made fit to upload (services/pickedPhoto). */
+export const documentPhotoPreparers: PhotoPreparers = {
+  compress: compressDocumentImage,
+  sizeOf: fileSizeOf,
+};
+
 /** Compress a selfie still (moderate). Returns a new file URI. */
+/**
+ * The selfie cut to the standard frame (lib/selfie-pick.ts): 3:4, the face
+ * 42% of the width, at most 720px wide and never enlarged, as a JPEG at the
+ * selfie quality. Null when the face is unknown or too small for the frame:
+ * the caller keeps the whole still (compressSelfieImage).
+ */
+export async function cutSelfie(uri: string, face: StillFace | null): Promise<string | null> {
+  if (!face) return null;
+  const { width, height } = await imageSize(uri);
+  const rect = selfieFrameInStill(face, width, height);
+  if (!rect) return null;
+  const result = await ImageManipulator.manipulateAsync(
+    uri,
+    [
+      { crop: { originX: rect.x, originY: rect.y, width: rect.width, height: rect.height } },
+      { resize: { width: selfieOutputWidth(rect) } },
+    ],
+    { compress: SELFIE_IMAGE_QUALITY, format: ImageManipulator.SaveFormat.JPEG },
+  );
+  return result.uri;
+}
+
 export async function compressSelfieImage(uri: string): Promise<string> {
   let actions: ImageManipulator.Action[] = [];
   try {

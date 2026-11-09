@@ -10,6 +10,9 @@ import { BusinessSearch } from './BusinessSearch';
 import { BusinessPickedSection } from './BusinessPickedSection';
 import { BusinessDetailsFields } from './BusinessDetailsFields';
 import { BusinessCheckPanel } from './BusinessCheckPanel';
+import { useBusinessRegions } from './BusinessRegionField';
+import { businessPickView, nameSearchOffered, pickedBusinessName, SEARCH_REFUSED_FALLBACK } from '../config/businessSearch';
+import { BusinessNumberEntry } from './BusinessNumberEntry';
 import {
   businessCountriesFor,
   businessProductsForCountry,
@@ -21,16 +24,9 @@ import { registrationNumberHint } from '../config/registrationHint';
 import { registerPrefillPatch } from '../config/businessPrefill';
 import { businessDetailsValid, checkPanelVisible } from '../config/businessDetailsValidity';
 
-// ---------------------------------------------------------------------------
-// Business (KYB) registry details — two screens in one step.
-//
-// 'pick' is choosing WHICH company. 'details' is confirming what the register
-// then said about it. They are separate because the register has not been
-// asked yet while you are still picking, so showing the detail fields there
-// would invite somebody to fill in answers we are about to overwrite.
-// Continue is what runs the paid check and moves between them. Mirrors the
-// web SDK's BusinessDetailsStep — keep the two in lockstep.
-// ---------------------------------------------------------------------------
+// Business (KYB) registry details, two screens: 'pick' names WHICH company,
+// 'details' confirms what the register said. Continue runs the paid check and
+// moves between them. Mirrors the web SDK's BusinessDetailsStep (lockstep).
 
 export function BusinessDetailsStep(): React.ReactElement {
   const config = useVerificationConfig();
@@ -38,15 +34,28 @@ export function BusinessDetailsStep(): React.ReactElement {
   const store = useVerificationStore();
   const business = useFlowState((s) => s.business);
   const check = useFlowState((s) => s.businessCheck);
+  // No search by name (switched off, or refused for this attempt) asks for the
+  // registration number on the first screen instead; Continue still checks the
+  // register and fills the second. Never "no matches" ("not registered").
+  const [searchRefused, setSearchRefused] = useState<string | null>(null);
+  const [manualEntry, setManualEntry] = useState(false);
+  const searchOn = nameSearchOffered(config.business) && searchRefused === null;
   const [phase, setPhase] = useState<'pick' | 'details'>('pick');
+  // Read on every render (a config changing while mounted lands right).
+  const picked = business.registrationNumber.trim() !== '';
+  const view = businessPickView({
+    searchOffered: nameSearchOffered(config.business),
+    refused: searchRefused !== null,
+    manualEntry,
+    picked,
+  });
   // Production never shows the test-result toggle, and never honours a pin.
   const isSandbox = useFlowState((s) => s.serverConfig.environment) !== 'PRODUCTION';
   const geoCountry = useFlowState((s) => s.serverConfig.geoCountry);
 
   const workflowBusiness = config.business;
   const countries = useMemo(() => businessCountriesFor(workflowBusiness), [workflowBusiness]);
-  // Precedence mirrors the web SDK: the visitor's pick, then the workflow's
-  // PRIMARY country, then the list head.
+  // The visitor's pick, then the workflow's PRIMARY country, then the head.
   const country = business.country ?? workflowBusiness?.country ?? countries[0] ?? '';
   const products = useMemo(
     () => businessProductsForCountry(workflowBusiness, country),
@@ -55,6 +64,8 @@ export function BusinessDetailsStep(): React.ReactElement {
   const product = products.includes(business.product ?? '') ? business.product! : products[0]!;
   const productDef = getBusinessProductDef(product);
 
+  // The search carries the region picker; without it number entry has to.
+  const regions = useBusinessRegions(view.numberEntry ? country : '');
   const modes = companyInfoFieldModes(workflowBusiness);
   const showCompanyInfo = Object.values(modes).some((m) => m !== 'off');
   const showContactEmail = keyPeopleNeedsContactEmail(workflowBusiness);
@@ -64,10 +75,6 @@ export function BusinessDetailsStep(): React.ReactElement {
 
   const regHint = registrationNumberHint(country, productDef);
   const regNumber = business.registrationNumber;
-  // A company has been named, so the card replaces the search. The NUMBER is
-  // what names it (a prefilled session sends one without a name; the register
-  // supplies the name on Continue, so an unnamed card is momentary).
-  const picked = regNumber.trim() !== '';
   const nameRequired = workflowBusiness?.requireRegistrationName === true;
   const formatOk =
     !regHint.isValidFormat || regNumber.trim() === '' || regHint.isValidFormat(regNumber);
@@ -81,28 +88,28 @@ export function BusinessDetailsStep(): React.ReactElement {
     numberValid,
     nameRequired,
     showContactEmail,
+    regionMissing: regions.length > 0 && !business.subdivisionCode,
   });
 
   const checking = check.status === 'checking';
+  // What both the number box and the details screen are drawn from.
+  const fieldProps = {
+    business, productDef, regHint, numberValid, formatOk, requireName: nameRequired, regions, onChange: set,
+  };
 
   const handleContinue = async (): Promise<void> => {
     if (!isFormValid || checking) return;
-    // Persist the resolved country/product so the submission uses exactly what
-    // was on screen. Only when different: these are identity keys, and writing
-    // an unchanged value would needlessly reset the check we just ran.
+    // Persist the resolved country/product, only when different: these are
+    // identity keys, and an unchanged write would reset the check just run.
     if (business.country !== country) set('country', country);
     if (business.product !== product) set('product', product);
 
-    // The paid registry check — awaited, so the details screen opens already
-    // holding what the register said. Only a definitive "not on the register"
-    // stops the flow: everything else (a short balance, an outage) continues
-    // and is checked at submission, as it was before.
+    // The paid registry check. Only a definitive "not on the register" stops
+    // the flow; a short balance or an outage continues to submission.
     const { canContinue, company } = await store.getState().checkBusiness();
     if (!canContinue) return;
 
-    // First Continue ends at the details screen rather than the next step: the
-    // register has only just answered, and this is where what it said gets put
-    // in front of them to confirm or correct.
+    // First Continue ends at the details screen, to confirm what it said.
     if (phase === 'pick') {
       const { patch, prefilled } = registerPrefillPatch(company, store.getState().business);
       if (prefilled.length > 0) store.getState().applyBusinessPrefill(patch, prefilled);
@@ -119,32 +126,35 @@ export function BusinessDetailsStep(): React.ReactElement {
         countries={countries}
         product={product}
         products={products}
+        geoCountry={geoCountry}
         onCountry={(code) => {
           set('country', code);
-          // The product list narrows per country, so a stale pick is cleared
-          // rather than carried into a refused submission.
-          set('product', null);
+          set('product', null); // products narrow per country: clear a stale pick
         }}
         onProduct={(key) => set('product', key)}
       />
 
-      {/* HIDDEN, not unmounted, once a company is chosen: unmounting threw
-          away the query and results, so "Change" dropped somebody back to an
-          empty box. Hiding keeps the picker alive, which makes Change cheap. */}
-      <View style={{ display: phase === 'pick' && country && !picked ? 'flex' : 'none' }}>
+      {/* Hidden, not unmounted, so Change keeps the query and results. */}
+      {searchOn ? (
+        <View style={{ display: phase === 'pick' && country && view.search ? 'flex' : 'none' }}>
         <BusinessSearch
           country={country}
+          onRefused={(message) => setSearchRefused(message ?? SEARCH_REFUSED_FALLBACK)}
           onPicked={(hit) => {
-            // Names the company and nothing more: the register is asked on
-            // Continue, and the fields it fills live on the screen after.
+            // Names the company only: the register is asked on Continue.
             set('registrationNumber', hit.registrationNumber);
-            set('registrationName', hit.name);
+            set('registrationName', pickedBusinessName(hit.name));
           }}
-          onManualEntry={() => setPhase('details')}
+          onManualEntry={() => setManualEntry(true)}
         />
-      </View>
+        </View>
+      ) : null}
 
-      {phase === 'pick' && picked ? (
+      {phase === 'pick' && view.numberEntry ? (
+        <BusinessNumberEntry {...fieldProps} notice={searchRefused} country={country} isSandbox={isSandbox} />
+      ) : null}
+
+      {phase === 'pick' && view.card ? (
         <BusinessPickedSection
           country={country}
           name={business.registrationName}
@@ -161,18 +171,12 @@ export function BusinessDetailsStep(): React.ReactElement {
 
       {phase === 'details' ? (
         <BusinessDetailsFields
-          business={business}
-          productDef={productDef}
-          regHint={regHint}
-          numberValid={numberValid}
-          formatOk={formatOk}
-          requireName={nameRequired}
+          {...fieldProps}
           country={country}
           geoCountry={geoCountry}
           modes={modes}
           showCompanyInfo={showCompanyInfo}
           showContactEmail={showContactEmail}
-          onChange={set}
         />
       ) : null}
 

@@ -1,11 +1,11 @@
 import React from 'react';
 import { View } from 'react-native';
 
-import { CountryField } from '../components/CountryField';
+import { CountrySummarySelect } from '../components/CountrySummarySelect';
 import { UiSelect } from '../components/UiSelect';
 import { UiText } from '../components/Typography';
 import { useText } from '../i18n/useText';
-import { businessCountryName, getBusinessProductDef } from '../config/business';
+import { getBusinessProductDef } from '../config/business';
 import { spacing } from '../config/theme';
 
 // The registry pickers: which country's register, and which product to run
@@ -17,11 +17,14 @@ export function BusinessRegistryPickers({
   countries,
   product,
   products,
+  geoCountry,
   onCountry,
   onProduct,
 }: {
   country: string;
   countries: string[];
+  /** Where the visitor appears to be, pinned in the country list. */
+  geoCountry?: string | null;
   product: string;
   products: string[];
   onCountry: (code: string) => void;
@@ -32,15 +35,25 @@ export function BusinessRegistryPickers({
     <>
       {countries.length > 1 ? (
         <>
-          <UiText variant="label" style={{ marginBottom: spacing.sm }}>
-            {t('business.details.countryLabel')}
-          </UiText>
-          {/* The SAME sheet as the phone field's dial-code picker — restricted
-              to the workflow's registry countries. */}
-          <CountryField
-            value={country}
-            options={countries.map((code) => ({ code, name: businessCountryName(code) }))}
-            onChange={onCountry}
+          {/* The summary row the PoA and ID steps use (CountrySummarySelect).
+              Where they appear to be is pinned in its list: a guess, tagged
+              as one, and the register they pick is what counts. */}
+          <CountrySummarySelect
+            countries={countries}
+            value={country || null}
+            label={t('business.details.countryCaption')}
+            accessibilityName={t('business.details.countryLabel')}
+            geoCountry={geoCountry ?? null}
+            onPick={onCountry}
+            copy={{
+              placeholder: t('business.country.placeholder'),
+              change: t('business.country.change'),
+              choose: t('business.country.choose'),
+              search: t('business.country.searchPlaceholder'),
+              noMatches: t('business.country.noMatch'),
+              selected: t('business.country.selected'),
+              yourLocation: t('business.details.countryPinnedLocation'),
+            }}
           />
           <View style={{ height: spacing.lg }} />
         </>

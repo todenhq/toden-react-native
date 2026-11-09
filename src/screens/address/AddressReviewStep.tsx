@@ -10,6 +10,7 @@ import { useAuthedImage } from '../../lib/authed-image';
 import { missingFieldsNudge, missingRequiredAddressFields } from '../../lib/address-field-modes';
 import { useAddressFlow } from './use-address-flow';
 import { AddressSandboxTabs } from './AddressSandboxTabs';
+import { SaveAddressSheet } from './SaveAddressSheet';
 import { SkipForNow } from './SkipForNow';
 import { ReviewMapPicture } from './ReviewMapPicture';
 import { HERO, SECOND, ReviewEntranceThumb } from './ReviewEntranceThumbs';
@@ -79,6 +80,7 @@ export function AddressReviewStep(): React.ReactElement {
   const missingRequired = missingRequiredAddressFields(flow.cfg, address);
   const toPin = (): void => store.getState().goToStep('address-collection');
   const line = address ? displayAddressLine(address) : '';
+  const [askSave, setAskSave] = useState(false);
 
   return (
     <View>
@@ -155,10 +157,15 @@ export function AddressReviewStep(): React.ReactElement {
         label={t('address.review.confirm')}
         loading={flow.confirming}
         disabled={!flow.pin || missingRequired.length > 0}
-        onPress={() => void flow.confirm()}
+        onPress={() => {
+          // Asked once: an answer already given is not asked for again.
+          if (flow.bookOffer.save && !address?.book) setAskSave(true);
+          else void flow.confirm();
+        }}
       />
 
       <SkipForNow requirePin={flow.cfg?.requirePin} onPress={flow.exitForward} />
+      <SaveAddressSheet open={askSave} line={line} onClose={() => setAskSave(false)} onDecided={() => void flow.confirm()} />
     </View>
   );
 }

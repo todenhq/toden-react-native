@@ -1,4 +1,8 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 import {
+  TILE_HEADERS,
   defaultMapView,
   latLngToWorld,
   panCenter,
@@ -61,5 +65,13 @@ describe('defaultMapView', () => {
     expect(defaultMapView('NG').zoom).toBe(6);
     expect(defaultMapView('FR').zoom).toBe(3);
     expect(defaultMapView(undefined).zoom).toBe(3);
+  });
+});
+
+describe('OpenStreetMap tile requests', () => {
+  it('identify the app on every tile, or Android is served the block notice', () => {
+    expect(TILE_HEADERS['User-Agent']).toMatch(/^TodenVerification\//);
+    const source = readFileSync(join(__dirname, '../components/MapPinPicker.tsx'), 'utf8');
+    expect(source).toContain('source={{ uri: tile.url, headers: TILE_HEADERS }}');
   });
 });

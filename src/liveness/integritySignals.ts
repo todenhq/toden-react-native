@@ -1,5 +1,6 @@
 import type { FlashResult } from './flashDetector';
 import { flashUnmeasurable } from './flashOutcome';
+import type { PromptTime } from './promptTimeline';
 import type { LivenessMode } from './types';
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,8 @@ export interface LivenessIntegrity {
    * shape-from-movement verdict depends on whether a turn was asked for.
    */
   challenges?: string[];
+  /** When each gesture prompt appeared and passed (promptTimeline.ts). */
+  promptTimes?: PromptTime[];
   /** How many consecutive-frame discontinuities the continuity guard saw. */
   faceGlitches: number;
   flash?: {
@@ -63,10 +66,12 @@ export function buildLivenessIntegrity(
   faceGlitches: number,
   flash: FlashResult | null,
   challenges?: readonly string[],
+  promptTimes?: PromptTime[],
 ): LivenessIntegrity {
   return {
     mode,
     ...(challenges ? { challenges: [...challenges] } : {}),
+    ...(promptTimes ? { promptTimes } : {}),
     faceGlitches,
     ...(flash
       ? {

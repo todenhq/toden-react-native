@@ -18,11 +18,12 @@ import { useTheme } from '../runtime';
 // without it.
 //
 // Where it is used, and the rule behind that: glass is for things that FLOAT
-// above content — surfaces (the sheet shell + header, bottom sheets via
-// `GlassSheet`) and interactive chrome (the header icon buttons, the camera
-// controls via `ChromeGlass`).
+// above content — the sheet shell + header, and interactive chrome (the header
+// icon buttons, the camera controls via `ChromeGlass`).
 //
 // Deliberately NOT used for:
+//   • bottom sheets — `FloatingSheet` panels are full of text that has to read
+//     clearly, so they are a solid themed colour on every platform;
 //   • the primary CTA — it needs a solid brand fill to read as the one clear
 //     action, and a translucent one competes with everything behind it;
 //   • labels and status pills (the brand bar, capture hints, the sandbox

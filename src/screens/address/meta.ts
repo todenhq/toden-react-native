@@ -21,7 +21,7 @@ export function addressStepMeta(
   switch (step) {
     case 'address-search':
       return {
-        title: t('address.search.title'),
+        title: isBusiness ? t('address.search.title.business') : t('address.search.title'),
         description: t('address.search.description'),
       };
     case 'address-entrance':
@@ -29,7 +29,9 @@ export function addressStepMeta(
         title: t('address.entrance.title'),
         description: opts.framing
           ? t('address.entrance.description.framing')
-          : t('address.entrance.description.photo'),
+          : isBusiness
+            ? t('address.entrance.description.photo.business')
+            : t('address.entrance.description.photo'),
       };
     case 'address-review':
       return {
@@ -43,4 +45,9 @@ export function addressStepMeta(
         description: t('address.pin.description'),
       };
   }
+}
+
+/** The address book step confirms a picked saved address. */
+export function addressBookMeta(t: TextFn = defaultText): { title: string; description: string } {
+  return { title: t('address.book.chosen.title'), description: t('address.book.pick.description') };
 }

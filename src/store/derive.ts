@@ -30,7 +30,11 @@ import {
 import { hasActiveQuestionnaire } from '../config/questionnaire';
 import { hasConsentStep, openingStepOf } from '../config/consentStep';
 import { applicantSelfCountry, keyPeoplePayload } from '../config/keyPeople';
+import { businessDocumentsPayload } from '../config/businessDocumentGroups';
 import { featuresFor } from './serverConfig';
+import { countryOnIdStep } from '../lib/id-selection-layout';
+import { offeredIdTypeRows } from '../lib/offered-id-types';
+import { poaCountryOf, poaOfferedCountries } from '../lib/poa-country-gate';
 import type { VerifyRequest } from '../services/api';
 import type { VerificationStep, SupportedCountry } from '../types/config';
 import type { VerificationState } from './state';
@@ -77,9 +81,12 @@ export function stepOrderOptions(state: VerificationState): StepOrderOptions {
     // EXCEPT when the applicant picked THEMSELVES from the key people and
     // that entry carries a country: "where was your ID issued?" was already
     // answered there, so the leg skips the country-select step.
+    // The combined layout (the default) picks the country on the ID-type step
+    // instead (lib/id-selection-layout.ts), so there is no step of its own.
     hasCountrySelect:
       countrySelectOptions(state).length > 1 &&
-      applicantSelfCountry(state.businessApplication) === null,
+      applicantSelfCountry(state.businessApplication) === null &&
+      !countryOnIdStep(state.config),
     hasConsent: hasConsentStep(config),
     hasEmailVerification: config.emailVerification?.enabled === true,
     hasPhoneVerification: config.phoneVerification?.enabled === true,
@@ -104,6 +111,8 @@ export function stepOrderOptions(state: VerificationState): StepOrderOptions {
       addressVendorsStubbed({ environment: state.serverConfig.environment }),
       Boolean(state.serverConfig.mapsFrameUrl) && webViewAvailable(),
     ),
+    // A picked saved address replaces the capture steps (lib/address-book.ts).
+    addressBookReused: state.addressBookReuse != null,
     hasQuestionnaire: hasActiveQuestionnaire(config.questionnaire),
     // Present only on a session a reviewer sent back. Narrows the order to the
     // steps they ticked, so somebody fixing one blurry photo is not walked
@@ -123,8 +132,42 @@ export function countrySelectOptions(state: Pick<VerificationState, 'config' | '
   if (configured.length > 0) return configured;
   if (state.serverConfig.status !== 'ready') return [];
   const seen = new Set<string>();
-  for (const row of state.serverConfig.idTypes) seen.add(row.country.toUpperCase());
+  for (const row of offeredIdTypeRows(state.serverConfig.idTypes, state.config)) seen.add(row.country.toUpperCase());
   return [...seen];
+}
+
+/**
+ * Whether the ID-type step carries the country row: the combined layout on a
+ * flow that offers more than one country, unless a KYB applicant already
+ * named theirs, or a multi-ID run is past its first check (the country is
+ * settled for the run by then). Mirrors the web SDK's IdTypeStep `countryHere`.
+ */
+export function idCountryOnStep(
+  state: Pick<VerificationState, 'config' | 'serverConfig' | 'businessApplication' | 'multiIdSlotIndex'>,
+): boolean {
+  return (
+    countryOnIdStep(state.config) &&
+    countrySelectOptions(state).length > 1 &&
+    applicantSelfCountry(state.businessApplication) === null &&
+    state.multiIdSlotIndex <= 0
+  );
+}
+
+/**
+ * The Proof of Address step's country (lib/poa-country-gate.ts): on the
+ * address scope the declared country, elsewhere the one picked on the step,
+ * else the ID's when the org accepts it. Null holds Continue.
+ */
+export function poaCountryFor(
+  state: Pick<VerificationState, 'config' | 'selectedCountry' | 'poaCountry'>,
+): string | null {
+  return poaCountryOf({
+    scope: configScope(state.config),
+    selectedCountry: state.selectedCountry,
+    poaCountry: state.poaCountry,
+    idCountry: state.selectedCountry ?? state.config.country ?? null,
+    offered: poaOfferedCountries(state.config.proofOfAddress?.countries),
+  });
 }
 
 /**
@@ -194,7 +237,7 @@ export function businessSubmission(state: VerificationState): {
       // ignores an unconfigured block, but sending one is a claim we did not
       // collect properly.
       ...(hasBusinessDocumentsStep(config) && app.documents.length > 0
-        ? { documents: app.documents.map((d) => ({ type: d.type, mediaId: d.mediaId })) }
+        ? { documents: businessDocumentsPayload(app.documents) }
         : {}),
       ...(hasKeyPeopleCollection(config) && people.length > 0 ? { keyPeople: people } : {}),
       // The FATF fallback, attested: no natural person qualifies as a UBO.

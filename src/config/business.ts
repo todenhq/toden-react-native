@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { COMPANY_INFO_FIELDS } from '../types/business';
+import { configScope, type WorkflowScope } from '../lib/scope';
 import type {
   CompanyInfoField,
   CompanyInfoMode,
@@ -139,7 +140,12 @@ export const businessCountryName = regionCountryName;
 export function isBusinessFlow(config: {
   subjectType?: SubjectType;
   business?: WorkflowBusinessConfig;
+  scope?: WorkflowScope | string;
 }): boolean {
+  // A scoped workflow runs its scope's own steps whoever it is about: a
+  // business address, questionnaire or contact check never enters the KYB
+  // application (company search, registry lookup, key people, documents).
+  if (configScope(config) !== null) return false;
   return config.subjectType === 'business' && !!config.business;
 }
 

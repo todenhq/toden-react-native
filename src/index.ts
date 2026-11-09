@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @myazahq/kyc-sdk-react-native — public API barrel.
+// @toden/react-native — public API barrel.
 //
 // Mirrors the Flutter SDK's `kyc_sdk_flutter.dart`. The UI entry points
 // (`Verification`, `useVerification`) are added in Step 2; this currently exports the
@@ -32,6 +32,7 @@ export type {
   PhoneVerificationConfig,
   ProofOfAddressConfig,
   PoaDocumentType,
+  PoaDocumentSubtype,
   AddressCollectionConfig,
   QuestionnaireConfig,
   QuestionnaireField,
@@ -57,6 +58,7 @@ export type {
   WorkflowBusinessDocumentTypeConfig,
   WorkflowBusinessApplicantConfig,
 } from './types/business';
+export type { IdSelectionLayout } from './lib/id-selection-layout';
 export type { VerificationSubmission, VerificationResult, VerificationErrorCode, VerificationErrorDetails } from './types/verification';
 export type { BiometricFlowConfig, BiometricCopy, BiometricCopyText } from './config/biometricOptions';
 export { VerificationError } from './types/verification';
@@ -108,6 +110,14 @@ export {
   type BusinessSectionStep,
   type ResolvedBusinessDocumentType,
 } from './config/businessSteps';
+export {
+  BUSINESS_DOCUMENT_GROUP_OF,
+  BUSINESS_DOCUMENT_GROUP_ORDER,
+  businessDocumentGroups,
+  businessDocumentGroupTitle,
+  type BusinessDocumentGroup,
+  type BusinessDocumentGroupKey,
+} from './config/businessDocumentGroups';
 
 // Optional-step gates — the same helpers the step order reads, exported so a
 // consumer can reason about which steps a given config will run.

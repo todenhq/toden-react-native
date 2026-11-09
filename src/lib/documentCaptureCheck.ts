@@ -5,7 +5,8 @@
 // string below are word for word the same on each platform.
 //
 // Right after a document side uploads, the server runs the SAME detectors it
-// later decides the verification with: a face on the photo printed on the
+// later decides the verification with: the whole document inside the frame
+// (all four corners, on every side), a face on the photo printed on the
 // front (only when the workflow will compare the selfie with that photo), and
 // a readable barcode (only for documents whose details are read from one, such
 // as a Nigerian voter's card or driver's licence). Asking here turns a decline
@@ -28,7 +29,7 @@ import { defaultText } from '../i18n/translate';
 
 export type DocumentCaptureCheckResult = DocumentCaptureCheckResponse;
 
-export type CaptureProblemKind = 'no_face' | 'no_barcode';
+export type CaptureProblemKind = 'not_complete' | 'no_face' | 'no_barcode';
 
 export interface CaptureProblem {
   side: DocumentCaptureSide;
@@ -47,14 +48,16 @@ export const CAPTURE_CHECK_CONTINUE_ANYWAY = defaultText('common.continueAnyway'
 const SIDE_ORDER: readonly DocumentCaptureSide[] = ['front', 'back'];
 
 /**
- * The problems worth a retake, front before back and, within a side, the face
- * before the barcode. Only an explicit `false` is a problem: `true` is fine and
+ * The problems worth a retake, front before back and, within a side, a
+ * cut-off document first (it is usually why the others failed, and one retake
+ * fixes all three), then the face, then the barcode. Only an explicit `false` is a problem: `true` is fine and
  * `null` means the check did not apply or could not look.
  */
 export function captureCheckProblems(results: readonly DocumentCaptureCheckResult[]): CaptureProblem[] {
   const problems: CaptureProblem[] = [];
   for (const side of SIDE_ORDER) {
     const forSide = results.filter((r) => r.side === side);
+    if (forSide.some((r) => r.complete === false)) problems.push({ side, kind: 'not_complete' });
     if (forSide.some((r) => r.face === false)) problems.push({ side, kind: 'no_face' });
     if (forSide.some((r) => r.barcode === false)) problems.push({ side, kind: 'no_barcode' });
   }
@@ -70,6 +73,8 @@ export function captureRetakeSides(problems: readonly CaptureProblem[]): Documen
 
 export function captureProblemMessage(kind: CaptureProblemKind): string {
   switch (kind) {
+    case 'not_complete':
+      return "We couldn't see the whole of your ID. Retake it with all four corners inside the frame and a little space around the edges.";
     case 'no_face':
       return "We couldn't see the face in the photo on the front of your ID. Retake it in good light, with the ID out of any plastic cover and no glare over the photo.";
     case 'no_barcode':
@@ -124,6 +129,7 @@ async function checkOneSide(
         side: body.side,
         face: readVerdict(res?.face),
         barcode: readVerdict(res?.barcode),
+        complete: readVerdict(res?.complete),
       }),
     );
     return await Promise.race([answered, timedOut]);

@@ -11,6 +11,7 @@ import { displayAddressLine, shouldAskLabelDecision, addressVendorsStubbed } fro
 import { missingFieldsNudge, missingRequiredAddressFields } from '../../lib/address-field-modes';
 import { claimAutoLocate } from '../../lib/address-current-location';
 import { mapSurfaceHeight } from '../../lib/map-tiles';
+import { useFillHeight } from '../../components/useFillHeight';
 import { useAddressFlow } from './use-address-flow';
 import { AddressMapStub } from './AddressMapStub';
 import { useAddressIntroGate } from './AddressIntroGate';
@@ -50,7 +51,7 @@ export function AddressPinStep(): React.ReactElement {
   });
   const [sheetOpen, setSheetOpen] = useState(false);
   const [missingNudge, setMissingNudge] = useState(false);
-  const gate = useAddressIntroGate('address-collection', flow.steps[0]!);
+  const gate = useAddressIntroGate('address-collection', flow.firstCaptureStep);
 
   const gateShowing = Boolean(gate);
   const noPin = !flow.pin;
@@ -70,6 +71,9 @@ export function AddressPinStep(): React.ReactElement {
     if (!noPin || !claimAutoLocate()) return;
     void applyCurrentFix(undefined, { silent: true });
   }, [gateShowing, noPin, startPrefetch, relabelPin, applyCurrentFix]);
+  // The map takes the body's spare height, never less than its usual size.
+  // Above the gate's early return: a hook below it would break hook order.
+  const fill = useFillHeight(mapSurfaceHeight(viewport));
 
   if (gate) return gate;
 
@@ -78,9 +82,6 @@ export function AddressPinStep(): React.ReactElement {
   const address = flow.address;
   const label = address?.label ?? null;
   const askLabel = address ? shouldAskLabelDecision(address) : false;
-  // The pin step is the last of the flow on KYB, so its Continue commits.
-  const lastInFlow = flow.isBusiness;
-  const mapHeight = mapSurfaceHeight(viewport);
 
   const missingRequired = missingRequiredAddressFields(flow.cfg, address);
   const handleContinue = () => {
@@ -89,8 +90,8 @@ export function AddressPinStep(): React.ReactElement {
       setSheetOpen(true);
       return;
     }
-    if (lastInFlow) void flow.confirm();
-    else flow.goNext();
+    // The review step closes the flow, for a person and a business alike.
+    flow.goNext();
   };
 
   return (
@@ -108,9 +109,9 @@ export function AddressPinStep(): React.ReactElement {
           </>
         }
       >
-        <View>
+        <View style={fill.style} onLayout={fill.onLayout}>
           {vendorsStubbed ? (
-            <AddressMapStub hasPin={Boolean(flow.pin)} onLand={(next) => flow.setPin(next)} defaultCenter={flow.view.center} height={mapHeight} />
+            <AddressMapStub hasPin={Boolean(flow.pin)} onLand={(next) => flow.setPin(next)} defaultCenter={flow.view.center} height={fill.height} />
           ) : (
             <FramedMapPicker
               frameUrl={mapsFrameUrl}
@@ -118,7 +119,7 @@ export function AddressPinStep(): React.ReactElement {
               onChange={(next) => flow.setPin(next)}
               defaultCenter={flow.view.center}
               defaultZoom={flow.view.zoom}
-              height={mapHeight}
+              height={fill.height}
             />
           )}
           {flow.pin ? <LocateChip locating={flow.locating} onPress={() => void flow.locateToPin()} /> : null}

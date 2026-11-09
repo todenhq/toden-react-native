@@ -1,11 +1,10 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { spacing } from '../config/theme';
+import { radius } from '../config/theme';
 import { useTheme } from './runtime';
 import { UiText } from './Typography';
 import { CountryFlag } from './CountryFlag';
-import { GeoBadge } from './GeoBadge';
 import type { DialCodeOption } from './DialCodePicker';
 
 // ---------------------------------------------------------------------------
@@ -13,6 +12,9 @@ import type { DialCodeOption } from './DialCodePicker';
 // rule) and shared by the pinned geo row and the alphabetical ones, so the two
 // cannot drift apart: they are the same control in two positions, and the
 // pinned one only differs by carrying a tag and a hairline beneath it.
+//
+// Drawn as the web sheet draws its options (CountrySummarySelect): a 44px
+// rounded row, a 20px flag, the current answer filled rather than ticked.
 // ---------------------------------------------------------------------------
 
 export function DialCodeRow({
@@ -23,7 +25,7 @@ export function DialCodeRow({
 }: {
   option: DialCodeOption;
   isSelected: boolean;
-  /** Tags the pinned geo row ("Your location"). */
+  /** Tags a pinned row ("Selected", "Your location"). */
   badge?: string;
   onPress: () => void;
 }): React.ReactElement {
@@ -34,25 +36,24 @@ export function DialCodeRow({
       accessibilityRole="radio"
       accessibilityState={{ checked: isSelected }}
       accessibilityLabel={badge ? `${option.name}, ${badge.toLowerCase()}` : option.name}
-      style={{
+      style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: spacing.md,
-        // Roomier rows: a country list is a long scan, and cramped rows make
-        // every tap a precision job. Matches the web dropdown's row height.
-        paddingVertical: 12,
-        backgroundColor: isSelected ? colors.primary50 : 'transparent',
-      }}
+        gap: 10,
+        minHeight: 44,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        borderRadius: radius.xs,
+        backgroundColor: isSelected || pressed ? colors.backgroundSecondary : 'transparent',
+      })}
     >
-      <CountryFlag country={option.code} size={28} />
-      <View style={{ width: spacing.md }} />
-      {/* No line clamp: "Bosnia & Herzegovina" and the like must read in full,
-          which is what Flutter's Expanded(Text) gives. Full body size (16),
-          the web dropdown's reading size — 14 read small against the flags. */}
-      <UiText variant="body" style={{ flex: 1 }}>
-        {option.name}
-      </UiText>
-      {badge ? <GeoBadge label={badge} /> : null}
+      <CountryFlag country={option.code} size={20} />
+      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <UiText variant="body" numberOfLines={1} style={{ flexShrink: 1, fontWeight: isSelected ? '500' : '400' }}>
+          {option.name}
+        </UiText>
+        {badge ? <RowTag label={badge} onFill={isSelected} /> : null}
+      </View>
       {option.dialCode != null ? (
         <UiText variant="bodyMedium" color={colors.textSecondary}>
           {option.dialCode}
@@ -63,8 +64,34 @@ export function DialCodeRow({
 }
 
 /**
- * A region label between grouped rows — the country-select step's header
- * (uppercase, tracked out), so the two pickers read as one control.
+ * The web's small uppercase tag. Its fill is the muted surface on a plain row
+ * and the sheet's own colour on the filled one, so it stands off either.
+ */
+function RowTag({ label, onFill }: { label: string; onFill: boolean }): React.ReactElement {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={{
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: radius.full,
+        backgroundColor: onFill ? colors.background : colors.backgroundSecondary,
+      }}
+    >
+      <UiText
+        variant="bodySmall"
+        color={colors.textSecondary}
+        style={{ fontSize: 10, lineHeight: 14, fontWeight: '600', letterSpacing: 0.25 }}
+      >
+        {label.toUpperCase()}
+      </UiText>
+    </View>
+  );
+}
+
+/**
+ * A region label between grouped rows — the web sheet's header (11px,
+ * uppercase, tracked wide), so the pickers read as one control.
  */
 export function DialCodeRegionHeader({ region }: { region: string }): React.ReactElement {
   const { colors } = useTheme();
@@ -74,11 +101,13 @@ export function DialCodeRegionHeader({ region }: { region: string }): React.Reac
       color={colors.textSecondary}
       accessibilityRole="header"
       style={{
-        fontWeight: '700',
-        letterSpacing: 0.6,
-        paddingHorizontal: spacing.md,
-        paddingTop: spacing.md,
-        paddingBottom: spacing.xs,
+        fontSize: 11,
+        lineHeight: 16,
+        fontWeight: '600',
+        letterSpacing: 1.1,
+        paddingHorizontal: 10,
+        paddingTop: 8,
+        paddingBottom: 4,
       }}
     >
       {region.toUpperCase()}
@@ -86,14 +115,14 @@ export function DialCodeRegionHeader({ region }: { region: string }): React.Reac
   );
 }
 
-/** The hairline under the pinned row, separating it from the alphabet. */
+/** The hairline under the pinned rows, separating them from the regions. */
 export function DialCodeDivider(): React.ReactElement {
   const { colors } = useTheme();
   return (
     <View
       style={{
-        marginHorizontal: spacing.md,
-        marginVertical: spacing.xs,
+        marginTop: 6,
+        marginBottom: 4,
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: colors.border,
       }}

@@ -43,6 +43,9 @@ export interface AttestationContext {
   platform: string;
   /** From `deviceAttestation.playIntegrityCloudProjectNumber`; Android only. */
   playIntegrityCloudProjectNumber?: string | null;
+  /** Ties the proof to specific contents: turns the server's challenge into
+   *  the bytes the platform signs. Both base64. Omit for a plain attestation. */
+  bindChallenge?: (challenge: string) => string;
 }
 
 /** The whole step's bound, challenge round trip included. */
@@ -65,12 +68,13 @@ async function attest(
   ctx: AttestationContext,
   signal: AbortSignal,
 ): Promise<DeviceAttestation | null> {
-  if (ctx.platform === 'ios') return appAttest(ctx.api, signal);
+  if (ctx.platform === 'ios') return appAttest(ctx, signal);
   if (ctx.platform === 'android') return playIntegrity(ctx, signal);
   return null;
 }
 
-async function appAttest(api: ChallengeApi, signal: AbortSignal): Promise<AppAttestPayload | null> {
+async function appAttest(ctx: AttestationContext, signal: AbortSignal): Promise<AppAttestPayload | null> {
+  const { api, bindChallenge } = ctx;
   const native = deviceIntelNative();
   // Simulators and old devices: App Attest is unavailable, so omit — and do
   // not spend a server challenge finding that out.
@@ -81,14 +85,15 @@ async function appAttest(api: ChallengeApi, signal: AbortSignal): Promise<AppAtt
     signal,
   );
   const base = { platform: 'ios' as const, kind: 'app_attest' as const, challengeId: challenge.challengeId };
+  const signed = bindChallenge ? bindChallenge(challenge.challenge) : challenge.challenge;
   // The server asks for a fresh attestation when it has no key on file for
   // this install (none sent, or one it does not know). A key can be attested
   // only once, so that always means a new key.
   if (challenge.attest === true || !storedKeyId) {
-    const fresh = await native.appAttestAttestNewKey(challenge.challenge);
+    const fresh = await native.appAttestAttestNewKey(signed);
     return { ...base, keyId: fresh.keyId, attestation: fresh.attestation };
   }
-  const assertion = await native.appAttestAssert(storedKeyId, challenge.challenge);
+  const assertion = await native.appAttestAssert(storedKeyId, signed);
   return { ...base, keyId: storedKeyId, assertion };
 }
 
@@ -102,7 +107,8 @@ async function playIntegrity(
   const native = deviceIntelNative();
   if (!native) return null;
   const challenge = await ctx.api.deviceChallenge({ platform: 'android' }, signal);
-  const token = await native.playIntegrityToken(project, challenge.challenge);
+  const signed = ctx.bindChallenge ? ctx.bindChallenge(challenge.challenge) : challenge.challenge;
+  const token = await native.playIntegrityToken(project, signed);
   if (!token) return null;
   return { platform: 'android', kind: 'play_integrity', challengeId: challenge.challengeId, token };
 }

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { mapToVerificationError, safeReportError } from '../services/errors';
 import { contactStepFor, expiredContactChannels } from '../lib/contact-recovery';
-import { recoveryStepFor, serverRefusalOf } from '../lib/submit-recovery';
+import { addressBookReuseRefusal, recoveryStepFor, serverRefusalOf } from '../lib/submit-recovery';
 import { cancelledRefusalOf } from '../lib/session-cancelled';
 import { buildStepOrder } from '../config/stepOrder';
 import { stepOrderOptions } from '../store/derive';
@@ -19,7 +19,8 @@ import { SubmittedWaiting } from './SubmittedWaiting';
 import { SubmittedResult } from './SubmittedResult';
 import { SubmittedSuccess } from './SubmittedSuccess';
 import { SubmittedError } from './SubmittedError';
-import { autoReportPresence } from '../presence/auto-report';
+import { useBackgroundAsk } from '../presence/use-background-ask';
+import { SubmittedBackgroundAsk } from './SubmittedBackgroundAsk';
 
 // Terminal step — 1:1 with the Flutter SDK's SubmittedScreen. Calls submitAsync
 // on mount and renders one of: the waiting screen, the success screen, the
@@ -28,7 +29,8 @@ import { autoReportPresence } from '../presence/auto-report';
 // own files (200-line rule); this file is the orchestration only. The header
 // title is empty for this step.
 
-type Phase = 'submitting' | 'success' | 'error';
+// 'background': the "allow all the time" screen (presence/background-primer.ts).
+type Phase = 'submitting' | 'background' | 'success' | 'error';
 
 export function SubmittedStep({ onClose }: { onClose: () => void }): React.ReactElement {
   const config = useVerificationConfig();
@@ -37,6 +39,7 @@ export function SubmittedStep({ onClose }: { onClose: () => void }): React.React
   const existingResult = useFlowState((s) => s.submissionResult);
 
   const [phase, setPhase] = useState<Phase>('submitting');
+  const background = useBackgroundAsk(config);
   const [error, setError] = useState<VerificationError | null>(null);
   const [retry, setRetry] = useState<{ attempt: number; total: number } | null>(null);
   // Where Go back lands after a refusal (lib/submit-recovery.ts); null when
@@ -80,16 +83,23 @@ export function SubmittedStep({ onClose }: { onClose: () => void }): React.React
         submittedAt: new Date().toISOString(),
       };
       config.onSubmit?.(submission);
-      // The SDK's own first presence report (presence/auto-report.ts):
-      // fire-and-forget, so presence never waits on the host app's code.
-      void autoReportPresence(config);
-      setPhase('success');
+      // The SDK's own presence calls (presence/auto-report.ts), and the
+      // background ask. A reused saved address puts no pin on this device.
+      const ask = !store.getState().addressBookReuse && (await background.begin(false)) === 'ask';
+      setPhase(ask ? 'background' : 'success');
     } catch (err) {
       // The organisation cancelled this session: no retry or go-back can help.
       // The flow swaps to the cancelled screen, which reports onError once.
       const cancelled = cancelledRefusalOf(err);
       if (cancelled) {
         store.getState().markCancelled(cancelled.message);
+        return;
+      }
+      // The picked saved address could not be used: the offer comes back
+      // over the address step, saying why.
+      if (addressBookReuseRefusal(err)) {
+        store.getState().addressBookReuseRefused();
+        store.getState().goToStep('address-collection');
         return;
       }
       // A refusal over stale contact proofs is recoverable in-flow: clear the
@@ -185,5 +195,6 @@ export function SubmittedStep({ onClose }: { onClose: () => void }): React.React
     return <SubmittedWaiting title={copy.title} description={copy.description} retrying={retry != null} />;
   }
 
-  return <SubmittedSuccess showDone={showsDoneButton(config)} onClose={onClose} />;
+  if (phase === 'background') return <SubmittedBackgroundAsk ask={background} onDone={() => setPhase('success')} />;
+  return <SubmittedSuccess showDone={showsDoneButton(config)} onClose={onClose} background={background} />;
 }

@@ -78,6 +78,20 @@ describe('autoReportPresence', () => {
     expect(report).toHaveBeenCalledTimes(1);
   });
 
+  it('leaves the background ask to the explanation screen when told to', async () => {
+    // The "allow all the time" screen makes the OS prompt itself, after it
+    // has given the person their reasons (screens/SubmittedBackgroundAsk.tsx).
+    const enableBackground = jest.fn();
+    const report = jest.fn().mockResolvedValue(reported);
+    const outcome = await autoReportPresence(
+      { apiKey: 'pk_live_x', userId: 'user_42', ...presenceOn },
+      { report, enableBackground },
+      { background: false },
+    );
+    expect(enableBackground).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ background: null, report: reported });
+  });
+
   it('still reports when arming background monitoring fails', async () => {
     const enableBackground = jest.fn().mockRejectedValue(new Error('boom'));
     const report = jest.fn().mockResolvedValue(reported);

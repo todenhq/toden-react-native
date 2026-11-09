@@ -18,7 +18,7 @@ import { generateRequestId } from '../utils/uuid';
 import { hasActiveQuestionnaire, questionnairePayload } from '../config/questionnaire';
 import { multiIdWireSlots } from '../lib/multi-id';
 import { isBusinessFlow } from '../config/business';
-import { addressPayload } from '../config/addressCollection';
+import { addressSubmission, withoutReusedPhoto } from './address-submission';
 import { silentCaptureSubmission } from '../lib/silentCapture';
 import { businessSubmission, effectiveCountry } from './derive';
 import type { ClientFingerprint } from '../services/fingerprint';
@@ -96,13 +96,21 @@ export function buildVerifyRequest(
   // one selfie and its video) sit at the top level. Sending a slot's document
   // here too would file the last ID's capture as though it were the
   // verification's own.
+  // A business sends only the premises entrance photo, and only beside the
+  // premises pin: the server claims it with the application's media.
   mediaIds: business
-    ? {}
+    ? state.address && state.mediaIds.addressPhoto
+      ? { addressPhoto: state.mediaIds.addressPhoto }
+      : {}
     : multiSlots
-      ? { ...state.mediaIds, documentFront: undefined, documentBack: undefined, ...silent?.mediaIds }
-      : { ...state.mediaIds, ...silent?.mediaIds },
+      ? { ...state.mediaIds, documentFront: undefined, documentBack: undefined, ...withoutReusedPhoto(state), ...silent?.mediaIds }
+      : { ...state.mediaIds, ...withoutReusedPhoto(state), ...silent?.mediaIds },
   ...(state.config.workflowId ? { workflowId: state.config.workflowId } : {}),
-  ...(state.poaDocumentType ? { proofOfAddressType: state.poaDocumentType } : {}),
+  // The kind the applicant picked (the server recognises the document within
+  // it), and the document's own country: the applicant may not live in the
+  // country that issued their ID. Both only beside an uploaded document.
+  ...(state.mediaIds.proofOfAddress && state.poaDocumentType ? { proofOfAddressType: state.poaDocumentType } : {}),
+  ...(state.mediaIds.proofOfAddress && state.poaCountry ? { proofOfAddressCountry: state.poaCountry } : {}),
   // Supporting documents — artefacts held on file. The server validates them
   // against the resolved workflow's request list and drops anything it did
   // not ask for. File names are display only and never ride the wire.
@@ -118,7 +126,8 @@ export function buildVerifyRequest(
   // The smart address, when the step gathered one. Sent on individual AND
   // business submissions (a KYB flow's pin is the business premises) — the
   // server validates it against the workflow either way.
-  ...(state.address ? { address: addressPayload(state.address, state.config.addressCollection) } : {}),
+  // A saved address picked from the Toden address book replaces the capture.
+  ...addressSubmission(state),
   ...(state.contact.emailToken || state.contact.phoneToken
     ? {
         contact: {

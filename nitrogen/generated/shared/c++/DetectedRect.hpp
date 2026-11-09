@@ -46,10 +46,20 @@ namespace margelo::nitro::myazakyc {
     double height     SWIFT_PRIVATE;
     double aspect     SWIFT_PRIVATE;
     double confidence     SWIFT_PRIVATE;
+    double topLeftX     SWIFT_PRIVATE;
+    double topLeftY     SWIFT_PRIVATE;
+    double topRightX     SWIFT_PRIVATE;
+    double topRightY     SWIFT_PRIVATE;
+    double bottomRightX     SWIFT_PRIVATE;
+    double bottomRightY     SWIFT_PRIVATE;
+    double bottomLeftX     SWIFT_PRIVATE;
+    double bottomLeftY     SWIFT_PRIVATE;
+    double frameWidth     SWIFT_PRIVATE;
+    double frameHeight     SWIFT_PRIVATE;
 
   public:
     DetectedRect() = default;
-    explicit DetectedRect(bool found, double x, double y, double width, double height, double aspect, double confidence): found(found), x(x), y(y), width(width), height(height), aspect(aspect), confidence(confidence) {}
+    explicit DetectedRect(bool found, double x, double y, double width, double height, double aspect, double confidence, double topLeftX, double topLeftY, double topRightX, double topRightY, double bottomRightX, double bottomRightY, double bottomLeftX, double bottomLeftY, double frameWidth, double frameHeight): found(found), x(x), y(y), width(width), height(height), aspect(aspect), confidence(confidence), topLeftX(topLeftX), topLeftY(topLeftY), topRightX(topRightX), topRightY(topRightY), bottomRightX(bottomRightX), bottomRightY(bottomRightY), bottomLeftX(bottomLeftX), bottomLeftY(bottomLeftY), frameWidth(frameWidth), frameHeight(frameHeight) {}
 
   public:
     friend bool operator==(const DetectedRect& lhs, const DetectedRect& rhs) = default;
@@ -71,7 +81,17 @@ namespace margelo::nitro {
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "width"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "height"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "aspect"))),
-        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "confidence")))
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "confidence"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "topLeftX"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "topLeftY"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "topRightX"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "topRightY"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "bottomRightX"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "bottomRightY"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "bottomLeftX"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "bottomLeftY"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "frameWidth"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "frameHeight")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::myazakyc::DetectedRect& arg) {
@@ -83,6 +103,16 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "height"), JSIConverter<double>::toJSI(runtime, arg.height));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "aspect"), JSIConverter<double>::toJSI(runtime, arg.aspect));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "confidence"), JSIConverter<double>::toJSI(runtime, arg.confidence));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "topLeftX"), JSIConverter<double>::toJSI(runtime, arg.topLeftX));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "topLeftY"), JSIConverter<double>::toJSI(runtime, arg.topLeftY));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "topRightX"), JSIConverter<double>::toJSI(runtime, arg.topRightX));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "topRightY"), JSIConverter<double>::toJSI(runtime, arg.topRightY));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "bottomRightX"), JSIConverter<double>::toJSI(runtime, arg.bottomRightX));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "bottomRightY"), JSIConverter<double>::toJSI(runtime, arg.bottomRightY));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "bottomLeftX"), JSIConverter<double>::toJSI(runtime, arg.bottomLeftX));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "bottomLeftY"), JSIConverter<double>::toJSI(runtime, arg.bottomLeftY));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "frameWidth"), JSIConverter<double>::toJSI(runtime, arg.frameWidth));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "frameHeight"), JSIConverter<double>::toJSI(runtime, arg.frameHeight));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -100,6 +130,16 @@ namespace margelo::nitro {
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "height")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "aspect")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "confidence")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "topLeftX")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "topLeftY")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "topRightX")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "topRightY")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "bottomRightX")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "bottomRightY")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "bottomLeftX")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "bottomLeftY")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "frameWidth")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "frameHeight")))) return false;
       return true;
     }
   };

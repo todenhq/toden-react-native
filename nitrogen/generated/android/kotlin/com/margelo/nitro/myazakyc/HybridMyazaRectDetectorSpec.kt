@@ -32,6 +32,10 @@ abstract class HybridMyazaRectDetectorSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun detectRect(frame: com.margelo.nitro.camera.HybridFrameSpec): DetectedRect
+  
+  @DoNotStrip
+  @Keep
+  abstract fun setExpectUpright(upright: Boolean): Unit
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

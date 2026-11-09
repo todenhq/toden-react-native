@@ -3,7 +3,7 @@ import { View } from 'react-native';
 
 import { spacing } from '../config/theme';
 import { ID_TYPES } from '../config/idTypes';
-import { validateIdNumber } from '../services/validators';
+import { isPhoneIdType, validateIdNumber } from '../services/validators';
 import type { IdType } from '../types/config';
 import { useEffectiveCountry, useFlowState, useVerificationConfig } from '../components/runtime';
 import { UiText } from '../components/Typography';
@@ -40,6 +40,7 @@ export function IdInputStep(): React.ReactElement {
 
   const def = useMemo(() => Object.values(ID_TYPES).flat().find((d) => d.key === selectedIdType) ?? null, [selectedIdType]);
   const isDigits = def?.digits !== undefined;
+  const isPhone = isPhoneIdType(selectedIdType);
 
   const valid = useMemo(() => {
     if (!selectedIdType || !value.trim()) return false;
@@ -79,8 +80,8 @@ export function IdInputStep(): React.ReactElement {
         onChangeText={handleChange}
         placeholder={hintFor(def)}
         error={error}
-        keyboardType={isDigits ? 'number-pad' : 'default'}
-        autoCapitalize={isDigits ? 'none' : 'characters'}
+        keyboardType={isPhone ? 'phone-pad' : isDigits ? 'number-pad' : 'default'}
+        autoCapitalize={isDigits || isPhone ? 'none' : 'characters'}
         maxLength={def?.digits}
         autoFocus
       />

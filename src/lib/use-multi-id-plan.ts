@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
 import { multiIdPlan, type MultiIdPlan } from './multi-id';
+import { offeredIdTypeRows } from './offered-id-types';
 import { useEffectiveCountry, useFlowState, useVerificationConfig } from '../components/runtime';
 
 /**
@@ -22,7 +23,7 @@ export function useMultiIdPlan(): MultiIdPlan | null {
       multiIdPlan(
         { ...config, country },
         { multiIdSlotIndex, multiIdSlots },
-        serverConfig.status === 'ready' ? serverConfig.idTypes : [],
+        serverConfig.status === 'ready' ? offeredIdTypeRows(serverConfig.idTypes, config) : [],
       ),
     [config, country, multiIdSlotIndex, multiIdSlots, serverConfig],
   );

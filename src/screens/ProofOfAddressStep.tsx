@@ -1,35 +1,37 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View } from 'react-native';
 
 import { spacing } from '../config/theme';
-import { useEffectiveCountry, useFlowState, useVerificationConfig, useVerificationStore, useTheme } from '../components/runtime';
+import { useFlowState, useVerificationConfig, useVerificationStore, useTheme } from '../components/runtime';
 import { UiText } from '../components/Typography';
 import { UiButton } from '../components/UiButton';
 import { MediaSourceSheet } from '../components/MediaSourceSheet';
-import { PoaDocumentTypeList } from './PoaDocumentTypeList';
-import { configScope } from '../lib/scope';
+import { PhotoCamera } from '../components/PhotoCamera';
+import { PHOTO_COPY } from '../components/viewfinder/photoMode';
+import { configScope, isScopedBusiness } from '../lib/scope';
 import { withRetry } from '../services/retry';
-import { compressDocumentImage } from '../services/mediaCompress';
 import { uploadFailureMessage } from '../services/uploadErrors';
-import { poaDocumentTypes, poaMaxAgeDays, poaTypeLabel } from '../config/proofOfAddress';
+import { poaDocumentTypes, poaTypeLabel } from '../config/proofOfAddress';
 import { usePoaAttach, type PoaPick } from './usePoaAttach';
-import { AddressCountryControl, poaOfferedCountries } from './AddressCountryControl';
-import { poaCountryDeclared } from '../lib/poa-country-gate';
-import { PoaDropzone, PoaUploadedRow } from './ProofOfAddressParts';
+import { documentSourceOptions } from './documentSourceOptions';
+import { documentPickerAvailable } from '../services/documentPicker';
+import { AddressCountryControl } from './AddressCountryControl';
+import { poaCountryFor } from '../store/derive';
+import { businessKey } from '../i18n/business-variants';
+import { PoaAcceptedDocuments } from './PoaAcceptedDocuments';
+import { PoaRequirements } from './PoaRequirements';
+import { PoaUploadActions } from './ProofOfAddressParts';
+import { PoaUploadedCard } from './PoaUploadedCard';
 import type { PoaDocumentType } from '../types/workflow';
 import { useText } from '../i18n/useText';
 
 // ---------------------------------------------------------------------------
-// Proof of Address — pick the kind of document, then supply it.
-//
-// Mirrors the web SDK: a DASHED drop zone that NAMES the document being asked
-// for ("Upload your utility bill") plus what's accepted, replaced after upload
-// by a row showing the file, its kind, and an X to remove it. A generic "choose
-// a file" hid which of the offered document kinds the user had to supply.
-//
-// The check itself is soft — the server reads the document and reports a
-// verdict, but never fails the verification over it — so nothing here blocks
-// beyond making sure a file was actually attached.
+// Proof of Address: the applicant says which country the document is from,
+// picks its kind, and takes a photo or uploads a file. The server reads it
+// asynchronously, recognises which document within the kind it is, and checks
+// the name, address and date. The SDK only collects it. Mirrors the web SDK's
+// steps/ProofOfAddressStep.tsx; the header (StepView's sheet) carries the
+// title and what the document must show.
 // ---------------------------------------------------------------------------
 
 export function ProofOfAddressStep(): React.ReactElement {
@@ -40,48 +42,40 @@ export function ProofOfAddressStep(): React.ReactElement {
   const mediaId = useFlowState((s) => s.mediaIds.proofOfAddress);
   const fileName = useFlowState((s) => s.poaFileName);
   const storedType = useFlowState((s) => s.poaDocumentType);
+  const scoped = configScope(config) === 'address';
+  const poa = config.proofOfAddress;
 
-  // The kinds on offer follow the country — on the address scope the picker
-  // below changes it, and an org may accept different documents per market.
-  const country = useEffectiveCountry();
-  const types = poaDocumentTypes(config.proofOfAddress, country);
-  // The flag on the attachment area: on the address scope only a country the
-  // applicant picked (the scope has no seeded country to show), else the
-  // flow's effective country.
-  const selectedCountry = useFlowState((s) => s.selectedCountry);
-  const flagCountry = configScope(config) === 'address' ? (selectedCountry ?? null) : (country ?? null);
-  const [selectedType, setSelectedType] = useState<PoaDocumentType>(storedType ?? types[0]!);
-  const typesKey = types.join(',');
-  useEffect(() => {
-    // A country change can withdraw the picked kind; fall back to the first
-    // offered rather than submitting a label that country does not accept.
-    if (!types.includes(selectedType)) setSelectedType(types[0]!);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typesKey]);
+  // Where the document is from, on every scope; Continue holds while null.
+  // Outside the address scope it starts from the ID's country and the
+  // applicant can change it. See lib/poa-country-gate.ts.
+  const poaCountry = useFlowState(poaCountryFor);
+  // Per-country overrides narrow the kinds; a kind picked before the country
+  // changed may not be offered there.
+  const types = poaDocumentTypes(poa, poaCountry);
+  const selectedType: PoaDocumentType = storedType && types.includes(storedType) ? storedType : types[0]!;
+  const otherLabel = poa?.otherLabel?.trim() || null;
+  const labelFor = (type: PoaDocumentType): string => poaTypeLabel(type, poa, t);
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // The picked file, kept for the thumbnail — the only way a user catches
-  // "wrong photo from the camera roll" before submitting.
+  // The picked file, kept for the uploaded card's page.
   const [preview, setPreview] = useState<{ uri: string; isPdf: boolean } | null>(null);
-
-  const typeLabel = poaTypeLabel(selectedType, config.proofOfAddress, t);
 
   const upload = useCallback(
     async ({ uri, mimeType, name }: PoaPick) => {
       setBusy(true);
       setError(null);
       const isPdf = (mimeType ?? '').toLowerCase().startsWith('application/pdf');
-      setPreview({ uri, isPdf });
       try {
-        // Photos are compressed like any other capture; a PDF is passed through
-        // untouched — re-encoding it would destroy the text the server reads.
-        const finalUri = isPdf ? uri : await compressDocumentImage(uri).catch(() => uri);
+        // A photo arrives already resized and re-encoded by usePoaAttach (it is
+        // judged against the size cap on that); a PDF is passed through
+        // untouched: re-encoding it would destroy the text the server reads.
         const id = await withRetry(() =>
-          store.getState().api.upload({ uri: finalUri, type: mimeType, name }, 'proof_of_address'),
+          store.getState().api.upload({ uri, type: mimeType, name }, 'proof_of_address'),
         );
+        setPreview({ uri, isPdf });
         store.getState().setProofOfAddress(id, selectedType, name);
       } catch (e) {
-        setPreview(null);
         setError(uploadFailureMessage(e));
       } finally {
         setBusy(false);
@@ -90,10 +84,19 @@ export function ProofOfAddressStep(): React.ReactElement {
     [selectedType, store],
   );
 
-  const { pick, sheetOpen, closeSheet, choosePhoto, takePhoto, chooseFile } = usePoaAttach(
+  const { pick, sheetOpen, closeSheet, choosePhoto, takePhoto, chooseFile, photoCamera } = usePoaAttach(
     upload,
     setError,
+    setBusy,
   );
+  const pickerAvailable = documentPickerAvailable();
+  // "Upload a file" asks where from (the photo library or the files app); an
+  // app without a file picker has only the library, so it opens straight on it.
+  const chooseUpload = (): void => {
+    if (pickerAvailable) pick();
+    else void choosePhoto();
+  };
+  const capture = poa?.capture ?? 'both';
 
   const remove = useCallback(() => {
     setPreview(null);
@@ -102,87 +105,94 @@ export function ProofOfAddressStep(): React.ReactElement {
   }, [store]);
 
   const uploaded = Boolean(mediaId) && !busy;
-  // The address scope's country is the applicant's declaration and drives the
-  // document's market; Continue holds until it is made (the control above
-  // asks for it). Never bites elsewhere. See lib/poa-country-gate.ts.
-  const countryDeclared = poaCountryDeclared({
-    scope: configScope(config),
-    selectedCountry,
-    offered: poaOfferedCountries(config.proofOfAddress?.countries),
-  });
+
+  const proceed = (): void => {
+    // Pinned for the submission, which sends it as the document's country.
+    if (poaCountry) store.getState().setPoaCountry(poaCountry);
+    store.getState().nextStep();
+  };
 
   return (
-    <View>
+    <View style={{ gap: spacing.md }}>
       <MediaSourceSheet
         open={sheetOpen}
         onClose={closeSheet}
-        title="Upload your document"
-        options={[
+        title={t('proofOfAddress.action.file')}
+        // No camera here: taking a photo is its own tile, or the workflow
+        // asked for a file.
+        options={documentSourceOptions(
           {
-            icon: 'image',
-            label: 'Photo library',
-            caption: 'Pick a photo you already have',
-            onPress: () => void choosePhoto(),
+            choosePhoto: () => void choosePhoto(),
+            takePhoto: () => void takePhoto(),
+            chooseFile: () => void chooseFile(),
           },
-          {
-            icon: 'camera',
-            label: 'Take a photo',
-            caption: 'Photograph the document now',
-            onPress: () => void takePhoto(),
-          },
-          {
-            icon: 'file-text',
-            label: 'Choose a file',
-            caption: 'A PDF or image from your files',
-            onPress: () => void chooseFile(),
-          },
-        ]}
+          pickerAvailable,
+          false,
+        )}
       />
-      <AddressCountryControl />
+
+      {/* "Take a photo": the SDK's own camera, without the scan. Its Upload is
+          the step's own, and is left out when the workflow wants the camera. */}
+      <PhotoCamera
+        {...photoCamera}
+        title={t('proofOfAddress.title')}
+        instruction={PHOTO_COPY.fitDocument}
+        onUpload={capture === 'camera' ? null : chooseUpload}
+      />
+
+      {/* Every scope: where the document is from. On the address scope it is
+          the flow's declared country; elsewhere the document's own. */}
+      <AddressCountryControl
+        value={poaCountry}
+        label={t(businessKey('proofOfAddress.country.residence', isScopedBusiness(config)))}
+        onPick={(code) =>
+          scoped ? store.getState().setCountry(code) : store.getState().setPoaCountry(code)
+        }
+      />
+
       {types.length > 1 ? (
-        <>
-          <UiText variant="bodySmall" style={{ fontWeight: '600', marginBottom: spacing.xs }}>
-            {t('proofOfAddress.documentType')}
-          </UiText>
-          <PoaDocumentTypeList
-            value={selectedType}
-            // Locked once a file is attached: switching the kind afterwards
-            // would mislabel the document already uploaded.
-            disabled={uploaded || busy}
-            options={types.map((type) => ({
-              value: type,
-              label: poaTypeLabel(type, config.proofOfAddress, t),
-            }))}
-            onChange={setSelectedType}
-          />
-          <View style={{ height: spacing.sm }} />
-        </>
+        <PoaAcceptedDocuments
+          kinds={types}
+          value={selectedType}
+          disabled={busy || uploaded}
+          onChange={(kind) => store.getState().setPoaDocumentType(kind)}
+          poa={poa}
+          labelFor={labelFor}
+          otherLabel={otherLabel}
+        />
       ) : null}
 
+      <PoaRequirements kinds={types} selected={selectedType} poa={poa} labelFor={labelFor} otherLabel={otherLabel} />
+
       {uploaded ? (
-        <PoaUploadedRow
+        <PoaUploadedCard
           preview={preview}
           fileName={fileName}
-          typeLabel={typeLabel}
-          country={flagCountry}
+          typeLabel={labelFor(selectedType)}
+          country={poaCountry}
+          onReplace={capture === 'camera' ? () => void takePhoto() : chooseUpload}
           onRemove={remove}
         />
       ) : (
-        <PoaDropzone busy={busy} typeLabel={typeLabel} country={flagCountry} onPress={() => void pick()} />
+        <PoaUploadActions
+          capture={capture}
+          uploading={busy}
+          fileHint={pickerAvailable ? t('proofOfAddress.action.fileHint') : 'A photo from your library'}
+          onCamera={() => void takePhoto()}
+          onFile={chooseUpload}
+        />
       )}
 
       {error ? (
-        <UiText variant="bodySmall" color={colors.error} style={{ marginTop: spacing.sm }}>
+        <UiText variant="bodySmall" color={colors.error}>
           {error}
         </UiText>
       ) : null}
 
-      <View style={{ height: spacing.lg }} />
-      <UiButton
-        label={t('common.continue')}
-        disabled={!mediaId || busy || !countryDeclared}
-        onPress={() => store.getState().nextStep()}
-      />
+      {/* Continue arrives with the document: before it, the tiles are the action. */}
+      {uploaded ? (
+        <UiButton label={t('common.continue')} disabled={!mediaId || busy || !poaCountry} onPress={proceed} />
+      ) : null}
     </View>
   );
 }

@@ -4,6 +4,7 @@ import { collectDeviceMetadata } from '../services/deviceMetadata';
 import { restoreAddress } from './address';
 import { getStepLog } from '../lib/step-log';
 import { emptyKeyPerson, type KeyPersonEntry } from '../config/keyPeople';
+import { restoredBusinessDocuments } from '../config/businessDocumentGroups';
 import type { SessionStartResponse } from '../services/api-types';
 import { persistentDeviceId } from '../services/fingerprint-sources';
 import { openingStep } from './derive';
@@ -148,6 +149,12 @@ export function restoreAttemptProgress(
           businessApplication: {
             ...s.businessApplication,
             ...app,
+            // Uploads saved before they named their group still restore, found
+            // in their group by their type (config/businessDocumentGroups.ts).
+            documents: restoredBusinessDocuments(app.documents) ?? s.businessApplication.documents,
+            // A read in flight when the session was saved never answers this
+            // app: no spinner for it.
+            documentPeopleReading: [],
             // Rows saved BEFORE the sectioned redesign predate `roles`, `title`
             // and `owners`; a restored attempt must not hand the cards a shape
             // they cannot read. Same normalization as web's RESTORE_PROGRESS.

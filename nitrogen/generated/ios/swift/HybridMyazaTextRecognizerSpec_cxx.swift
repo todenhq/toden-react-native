@@ -142,6 +142,22 @@ open class HybridMyazaTextRecognizerSpec_cxx {
   }
   
   @inline(__always)
+  public final func recognizeTextTurned(frame: bridge.std__shared_ptr_margelo__nitro__camera__HybridFrameSpec_, quarterTurns: Double) -> bridge.Result_TurnedTextResult_ {
+    do {
+      let __result = try self.__implementation.recognizeTextTurned(frame: { () -> any HybridFrameSpec in
+        let __unsafePointer = bridge.get_std__shared_ptr_margelo__nitro__camera__HybridFrameSpec_(frame)
+        let __instance = HybridFrameSpec_cxx.fromUnsafe(__unsafePointer)
+        return __instance.getHybridFrameSpec()
+      }(), quarterTurns: quarterTurns)
+      let __resultCpp = __result
+      return bridge.create_Result_TurnedTextResult_(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_TurnedTextResult_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
   public final func recognizeTextInImage(uri: std.string, bottomFraction: Double) -> bridge.Result_std__shared_ptr_Promise_TextResult___ {
     do {
       let __result = try self.__implementation.recognizeTextInImage(uri: String(uri), bottomFraction: bottomFraction)

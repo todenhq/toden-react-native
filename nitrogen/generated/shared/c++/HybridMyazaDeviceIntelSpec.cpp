@@ -15,6 +15,7 @@ namespace margelo::nitro::myazakyc {
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridMethod("stableId", &HybridMyazaDeviceIntelSpec::stableId);
+      prototype.registerHybridMethod("declaresMicrophone", &HybridMyazaDeviceIntelSpec::declaresMicrophone);
       prototype.registerHybridMethod("integritySignals", &HybridMyazaDeviceIntelSpec::integritySignals);
       prototype.registerHybridMethod("appAttestSupported", &HybridMyazaDeviceIntelSpec::appAttestSupported);
       prototype.registerHybridMethod("appAttestKeyId", &HybridMyazaDeviceIntelSpec::appAttestKeyId);

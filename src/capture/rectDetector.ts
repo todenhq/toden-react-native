@@ -7,10 +7,10 @@ import type { DetectedRect, MyazaRectDetector } from '../specs/MyazaRectDetector
 // ---------------------------------------------------------------------------
 // Document EDGE detection — the geometry half of auto-capture.
 //
-// iOS only in practice: Apple Vision has a rectangle detector, ML Kit does not,
-// and the Android implementation reports nothing found. Everything here is
-// therefore written to degrade to "no opinion" rather than to block, so a
-// platform without geometry captures exactly as it did before.
+// Apple Vision on iOS, the SDK's own border detector on Android. The corners it
+// reports drive the four-corner capture gate (cornerGate.ts). When there is no
+// detector to ask, the reading says `unavailable`, and the gate steps aside so
+// a platform without geometry captures exactly as it did before.
 //
 // Geometry NEVER decides alone. An aspect ratio cannot tell a passport from a
 // driver's licence, so a capture that fired on shape would shoot the wrong
@@ -57,6 +57,20 @@ function resolve(): MyazaRectDetector | null {
 }
 
 /**
+ * Tell the detector whether the document is framed upright (a NIN slip on a
+ * phone held upright, documentTurn.ts). Android's border search admits one
+ * orientation at a time. An app whose native build lacks the method keeps the
+ * landscape search; nothing else changes.
+ */
+export function setRectDetectorUpright(upright: boolean): void {
+  try {
+    resolve()?.setExpectUpright(upright);
+  } catch {
+    /* an older native build: landscape only, as before */
+  }
+}
+
+/**
  * Whether this build can measure document edges at all.
  *
  * Also the WARM-UP: calling it resolves the module on the JS thread so the
@@ -66,18 +80,30 @@ export function hasRectDetector(): boolean {
   return resolve() !== null;
 }
 
-const NOT_FOUND: DetectedRect = {
+/** A reading, plus whether there was a detector to take it at all. */
+export type RectReading = DetectedRect & { unavailable?: boolean };
+
+const UNAVAILABLE: RectReading = {
   found: false, x: 0, y: 0, width: 0, height: 0, aspect: 0, confidence: 0,
+  topLeftX: 0, topLeftY: 0, topRightX: 0, topRightY: 0,
+  bottomRightX: 0, bottomRightY: 0, bottomLeftX: 0, bottomLeftY: 0,
+  frameWidth: 0, frameHeight: 0,
+  unavailable: true,
 };
 
-/** Measure the document-like rectangle in a frame. A WORKLET. */
-export function detectRectOnFrame(frame: Frame): DetectedRect {
+/**
+ * Measure the document-like rectangle in a frame. A WORKLET.
+ *
+ * No module, or one that throws, is UNAVAILABLE rather than "nothing found":
+ * the corner gate must not hold capture behind a check that cannot run.
+ */
+export function detectRectOnFrame(frame: Frame): RectReading {
   'worklet';
-  if (boxed == null) return NOT_FOUND;
+  if (boxed == null) return UNAVAILABLE;
   try {
     return boxed.unbox().detectRect(frame);
   } catch {
-    return NOT_FOUND;
+    return UNAVAILABLE;
   }
 }
 

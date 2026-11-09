@@ -38,7 +38,8 @@ export const UPLOAD_DOCUMENT_TEXTS: Record<string, string> = {
   'uploadDocument.upload.tip2': 'The whole document in view, all four corners',
   'uploadDocument.upload.tip3': 'Sharp and evenly lit, with no glare',
   // components/DocumentCropper.tsx.
-  'uploadDocument.crop.confirm': 'Crop & Use',
+  'uploadDocument.crop.confirm': 'Use photo',
+  'uploadDocument.crop.rotate': 'Rotate',
   // components/DocumentReview.tsx.
   'uploadDocument.review.tapToEnlarge': 'Tap a photo to see it larger.',
   // screens/document/CaptureCheckNotice.tsx (default kept in lib/documentCaptureCheck.ts).

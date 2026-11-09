@@ -12,6 +12,7 @@ import {
   contactIsRequired,
   isValidContactEmail,
   offeredPhoneChannels,
+  sentCodeLength,
   type PhoneOtpChannel,
 } from '../config/contact';
 import { attemptsRemaining, describeCheckError, describeSendError } from '../services/contactErrors';
@@ -37,11 +38,15 @@ export function ContactVerificationStep({
   const store = useVerificationStore();
   const contact = useFlowState((s) => s.contact);
   const serverConfig = useFlowState((s) => s.serverConfig);
+  const sessionId = useFlowState((s) => s.sessionId);
 
   const isEmail = channel === 'email';
   const stepConfig = isEmail ? config.emailVerification : config.phoneVerification;
   const required = contactIsRequired(stepConfig);
-  const codeLength = contactCodeLength(stepConfig);
+  const configuredLength = contactCodeLength(stepConfig);
+  // What the server actually sent, which its pinned workflow decides.
+  const [sentLength, setSentLength] = useState<number | null>(null);
+  const codeLength = sentLength ?? configuredLength;
   const inputStyle = stepConfig?.inputStyle ?? 'segmented';
   // The org decides which channels are on offer; the user picks between them.
   const offeredChannels: PhoneOtpChannel[] = isEmail
@@ -106,7 +111,8 @@ export function ContactVerificationStep({
       const res = await store.getState().api.contactSend({
         channel,
         destination: value,
-        codeLength,
+        codeLength: configuredLength,
+        ...(sessionId ? { sessionId } : {}),
         ...(stepConfig?.maxAttempts != null ? { maxAttempts: stepConfig.maxAttempts } : {}),
         ...(!isEmail && country ? { country } : {}),
         ...(isEmail ? {} : { via: sendVia }),
@@ -114,6 +120,7 @@ export function ContactVerificationStep({
       // Remember what was typed BEFORE the code lands: a user who backs out
       // here and returns should not have to retype it.
       store.getState().setContactDestination(channel, value);
+      setSentLength(sentCodeLength(res.codeLength, configuredLength));
       setChallengeId(res.challengeId);
       setExpiresAt(res.expiresAt ?? null);
       setCode('');

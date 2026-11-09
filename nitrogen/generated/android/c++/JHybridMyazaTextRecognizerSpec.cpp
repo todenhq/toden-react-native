@@ -9,6 +9,8 @@
 
 // Forward declaration of `TextResult` to properly resolve imports.
 namespace margelo::nitro::myazakyc { struct TextResult; }
+// Forward declaration of `TurnedTextResult` to properly resolve imports.
+namespace margelo::nitro::myazakyc { struct TurnedTextResult; }
 // Forward declaration of `HybridFrameSpec` to properly resolve imports.
 namespace margelo::nitro::camera { class HybridFrameSpec; }
 
@@ -16,6 +18,8 @@ namespace margelo::nitro::camera { class HybridFrameSpec; }
 #include "JTextResult.hpp"
 #include <string>
 #include <vector>
+#include "TurnedTextResult.hpp"
+#include "JTurnedTextResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/JPromise.hpp>
 #include <memory>
@@ -58,6 +62,11 @@ namespace margelo::nitro::myazakyc {
   TextResult JHybridMyazaTextRecognizerSpec::recognizeText(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame, double bottomFraction) {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JTextResult>(jni::alias_ref<margelo::nitro::camera::JHybridFrameSpec::JavaPart> /* frame */, double /* bottomFraction */)>("recognizeText");
     auto __result = method(_javaPart, std::dynamic_pointer_cast<margelo::nitro::camera::JHybridFrameSpec>(frame)->getJavaPart(), bottomFraction);
+    return __result->toCpp();
+  }
+  TurnedTextResult JHybridMyazaTextRecognizerSpec::recognizeTextTurned(const std::shared_ptr<margelo::nitro::camera::HybridFrameSpec>& frame, double quarterTurns) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JTurnedTextResult>(jni::alias_ref<margelo::nitro::camera::JHybridFrameSpec::JavaPart> /* frame */, double /* quarterTurns */)>("recognizeTextTurned");
+    auto __result = method(_javaPart, std::dynamic_pointer_cast<margelo::nitro::camera::JHybridFrameSpec>(frame)->getJavaPart(), quarterTurns);
     return __result->toCpp();
   }
   std::shared_ptr<Promise<TextResult>> JHybridMyazaTextRecognizerSpec::recognizeTextInImage(const std::string& uri, double bottomFraction) {

@@ -16,6 +16,13 @@ const FIX_TIMEOUT_MS = 8_000;
 const PRECISE_ENOUGH_M = 25;
 const PRECISE_WINDOW_MS = 8_000;
 /**
+ * The window bounds how long a reading may keep improving, not how long the
+ * first one may take. A phone indoors on mobile data with no recent fix needs
+ * longer than 8s to get one at all: a Galaxy S24 gave up at exactly 8s on every
+ * attempt with nothing delivered (2026-11-01).
+ */
+const NO_READING_LIMIT_MS = 30_000;
+/**
  * Once ANY fix exists, wait only this much longer for a better one. An indoor
  * or wifi-derived fix never reaches 25m, and sitting out the whole window for
  * an accuracy that is not coming reads as "it keeps loading".
@@ -155,25 +162,48 @@ export async function precisePositionOutcome(): Promise<PreciseFixOutcome> {
       if (settled) return;
       settled = true;
       clearTimeout(windowTimer);
+      clearTimeout(limitTimer);
       if (grace) clearTimeout(grace);
       sub?.remove();
-      if (best) resolve({ fix: remember(toFix(best)) });
-      else resolve({ failure: watchFailed ? 'unavailable' : 'timeout' });
+      if (best) {
+        resolve({ fix: remember(toFix(best)) });
+        return;
+      }
+      const failure = watchFailed ? 'unavailable' : 'timeout';
+      // Nothing live: where the phone was minutes ago still beats no pin.
+      Promise.resolve()
+        .then(() => Location.getLastKnownPositionAsync({ maxAge: LAST_KNOWN_MAX_AGE_MS }))
+        .then(
+          (pos) => resolve(pos ? { fix: remember(toFix(pos)) } : { failure }),
+          () => resolve({ failure }),
+        );
     };
 
-    const windowTimer = setTimeout(finish, PRECISE_WINDOW_MS);
+    const reading = (pos: Location.LocationObject): void => {
+      if (settled) return;
+      const acc = pos.coords.accuracy ?? Infinity;
+      if (!best || acc < (best.coords.accuracy ?? Infinity)) best = pos;
+      if (acc <= PRECISE_ENOUGH_M) {
+        finish();
+        return;
+      }
+      if (!grace) grace = setTimeout(finish, FIRST_FIX_GRACE_MS);
+    };
+
+    const windowTimer = setTimeout(() => {
+      if (best) finish();
+    }, PRECISE_WINDOW_MS);
+    const limitTimer = setTimeout(finish, NO_READING_LIMIT_MS);
+
+    // Cell towers answer long before a cold GPS does. A coarse reading lands
+    // the pin near the person while the watch goes on to sharpen it.
+    Promise.resolve()
+      .then(() => Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }))
+      .then(reading, () => undefined);
 
     Location.watchPositionAsync(
       { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 0 },
-      (pos) => {
-        const acc = pos.coords.accuracy ?? Infinity;
-        if (!best || acc < (best.coords.accuracy ?? Infinity)) best = pos;
-        if (acc <= PRECISE_ENOUGH_M) {
-          finish();
-          return;
-        }
-        if (!grace) grace = setTimeout(finish, FIRST_FIX_GRACE_MS);
-      },
+      reading,
     )
       .then((subscription) => {
         // The window may already have elapsed while the watch was starting —
@@ -216,6 +246,7 @@ export async function deviceFixFields(): Promise<{
   deviceLat?: number;
   deviceLng?: number;
   deviceAccuracy?: number;
+  deviceMocked?: boolean;
   capturedAt?: string;
 }> {
   // A single getCurrentPositionAsync at confirm routinely times out on iOS
@@ -229,6 +260,8 @@ export async function deviceFixFields(): Promise<{
     deviceLat: fix.lat,
     deviceLng: fix.lng,
     ...(fix.accuracy != null ? { deviceAccuracy: fix.accuracy } : {}),
+    // Left out when the platform gives no answer (expo-location on iOS).
+    ...(typeof fix.mocked === 'boolean' ? { deviceMocked: fix.mocked } : {}),
     capturedAt: new Date(fix.timestamp).toISOString(),
   };
 }

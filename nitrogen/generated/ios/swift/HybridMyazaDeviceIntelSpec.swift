@@ -14,6 +14,7 @@ public protocol HybridMyazaDeviceIntelSpec_protocol: HybridObject {
 
   // Methods
   func stableId() throws -> String
+  func declaresMicrophone() throws -> Bool
   func integritySignals() throws -> Promise<[String]>
   func appAttestSupported() throws -> Bool
   func appAttestKeyId() throws -> String

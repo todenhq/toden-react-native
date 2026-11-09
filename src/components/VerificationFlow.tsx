@@ -3,10 +3,11 @@ import { View } from 'react-native';
 
 import { radius, spacing } from '../config/theme';
 import { buildStepOrder } from '../config/stepOrder';
-import { isAddressStep } from '../lib/address-flow';
+import { firstAddressCaptureStep } from '../lib/address-flow';
 import { stepOrderOptions } from '../store/verificationStore';
 import { VerificationError } from '../types/verification';
 import { safeReportError } from '../services/errors';
+import { UNSUPPORTED_SCOPE_MESSAGE, unsupportedScopeConfig } from '../lib/scope';
 import type { VerificationStep, SupportedCountry } from '../types/config';
 import { useEffectiveCountry, useFlowState, useVerificationConfig, useVerificationStore, useTheme } from './runtime';
 import { COUNTRY_SEARCH_THRESHOLD } from '../screens/CountrySelectStep';
@@ -20,7 +21,8 @@ import { Icon } from './Icon';
 import { StepView } from './StepView';
 import { stepHeaderMeta } from './stepHeaderMeta';
 import { useText } from '../i18n/useText';
-import { countrySelectOptions } from '../store/derive';
+import { countrySelectOptions, idCountryOnStep, poaCountryFor } from '../store/derive';
+import { contactBackHidden } from '../lib/contact-recovery';
 
 // The step router — 1:1 with the Flutter SDK's _VerificationFlowWidget. Computes per-step
 // header title/description, the 4-step indicator info, back/country, fetches the
@@ -74,14 +76,22 @@ export function VerificationFlow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const isFatal = serverConfig.status === 'error' && serverConfig.fatal;
+  // A business workflow with a biometric scope is refused outright: it should
+  // never arrive (publish refuses it), and it must never open a camera.
+  const unsupportedScope = unsupportedScopeConfig(config);
+  const isFatal = unsupportedScope || (serverConfig.status === 'error' && serverConfig.fatal);
+  const fatalMessage = unsupportedScope ? UNSUPPORTED_SCOPE_MESSAGE : serverConfig.message;
   useEffect(() => {
     if (isFatal && !reportedRef.current) {
       reportedRef.current = true;
-      const code = serverConfig.statusCode === 401 ? 'invalid_api_key' : 'feature_disabled';
-      safeReportError(config.onError, new VerificationError(code, serverConfig.message ?? 'Unable to start verification.'));
+      const code = unsupportedScope
+        ? 'invalid_workflow'
+        : serverConfig.statusCode === 401
+          ? 'invalid_api_key'
+          : 'feature_disabled';
+      safeReportError(config.onError, new VerificationError(code, fatalMessage ?? 'Unable to start verification.'));
     }
-  }, [isFatal, serverConfig.statusCode, serverConfig.message, config.onError]);
+  }, [isFatal, unsupportedScope, serverConfig.statusCode, fatalMessage, config.onError]);
 
   // ── The flow's ordered steps ──────────────────────────────────────────────
   // ONE list, read by the step indicator AND by the address primer below, so
@@ -101,9 +111,11 @@ export function VerificationFlow({
   const addressIntroPending =
     config.addressCollection?.presence?.enabled === true &&
     !addressIntroSeen &&
-    order.find(isAddressStep) === currentStep;
+    firstAddressCaptureStep(order) === currentStep;
 
   const t = useText();
+  const countryOnStep = idCountryOnStep(state);
+  const poaCountry = poaCountryFor(state);
   const meta = useMemo(
     () =>
       stepHeaderMeta(currentStep, {
@@ -115,11 +127,13 @@ export function VerificationFlow({
         addressIntroPending,
         addressEntranceFraming: state.addressEntranceFraming,
         poaDocumentType: state.poaDocumentType,
+        poaCountry,
+        idCountryOnStep: countryOnStep,
         multiIdSlots: state.multiIdSlots,
         t,
       }),
     [currentStep, config, country, selectedIdType, documentCapturePhase, contactChallenge, addressIntroPending,
-      state.addressEntranceFraming, state.poaDocumentType, t],
+      state.addressEntranceFraming, state.poaDocumentType, poaCountry, countryOnStep, state.multiIdSlots, t],
   );
 
   // ── Step indicator info ───────────────────────────────────────────────────
@@ -136,8 +150,10 @@ export function VerificationFlow({
   // The flag beside the title names the country whose IDs are on screen. The
   // document steps ask for a country's document just as directly as the ID
   // ones do, so they carry the same flag rather than a second treatment.
+  // On the combined layout the ID-type step's own country row names it, so
+  // the header does not repeat it there.
   const headerCountry =
-    currentStep === 'id-type' ||
+    (currentStep === 'id-type' && !countryOnStep) ||
     currentStep === 'id-input' ||
     currentStep === 'document-capture' ||
     currentStep === 'nfc'
@@ -148,7 +164,11 @@ export function VerificationFlow({
   // name. A multi-ID run returns to the ID picker for its next check, where
   // Back means "redo the previous one", so a committed slot keeps it.
   const onOpeningStep = currentStep === order[0] && state.multiIdSlots.length === 0;
-  const onBack = onOpeningStep || currentStep === 'submitted' ? null : () => store.getState().previousStep();
+  // A contact step recovering from a refused submission returns to the end,
+  // so it has no Back (lib/contact-recovery.ts); nor does hardware back leave.
+  const recoveringContact = contactBackHidden(currentStep, state.contact.expired);
+  const onBack =
+    onOpeningStep || currentStep === 'submitted' || recoveringContact ? null : () => store.getState().previousStep();
 
   // Android hardware back arrives via the <Modal>'s onRequestClose. Expose a
   // back-aware handler through `backRef` so that handler navigates a step back
@@ -166,15 +186,15 @@ export function VerificationFlow({
         store.getState().previousStep();
         return 'navigated';
       }
-      return disableClose ? 'blocked' : 'close';
+      return disableClose || recoveringContact ? 'blocked' : 'close';
     };
     return () => {
       backRef.current = null;
     };
-  }, [backRef, canGoBack, disableClose, store]);
+  }, [backRef, canGoBack, disableClose, recoveringContact, store]);
 
   if (isFatal) {
-    return <FatalConfigError message={serverConfig.message} onClose={onClose} />;
+    return <FatalConfigError message={fatalMessage} onClose={onClose} />;
   }
   if (cancelled) return <SessionCancelled message={cancelled.message} onClose={onClose} />;
 

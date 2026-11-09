@@ -94,6 +94,42 @@ class HybridMyazaTextRecognizer : HybridMyazaTextRecognizerSpec() {
     return TextResult(lines)
   }
 
+  // The quarter turn the last turned read used; the next one tries the other.
+  // Only the camera worklet calls in, on one thread.
+  private var lastQuarterTurns = 1
+
+  /**
+   * The whole frame read with an extra quarter turn, for a long document framed
+   * upright on a phone held upright (a NIN slip). `quarterTurns` 1 or 3 is
+   * kept; anything else alternates between the two (the slip may be turned
+   * either way), and the result reports which was used.
+   */
+  @ExperimentalGetImage
+  override fun recognizeTextTurned(frame: HybridFrameSpec, quarterTurns: Double): TurnedTextResult {
+    val asked = quarterTurns.toInt()
+    val turns = if (asked == 1 || asked == 3) asked else if (lastQuarterTurns == 3) 1 else 3
+    lastQuarterTurns = turns
+    val proxy: ImageProxy = (frame as? NativeFrame)?.image ?: return TurnedTextResult(emptyArray(), turns.toDouble())
+    val mediaImage = proxy.image ?: return TurnedTextResult(emptyArray(), turns.toDouble())
+    val rotation = (proxy.imageInfo.rotationDegrees + 90 * turns) % 360
+    val input = InputImage.fromMediaImage(mediaImage, rotation)
+    var lines: Array<String> = emptyArray()
+    val latch = CountDownLatch(1)
+    recognizer.process(input)
+      .addOnSuccessListener { text ->
+        lines = text.textBlocks
+          .flatMap { it.lines }
+          .sortedBy { it.boundingBox?.centerY() ?: 0 }
+          .map { it.text }
+          .toTypedArray()
+        latch.countDown()
+      }
+      .addOnFailureListener { latch.countDown() }
+    // The same bound as recognizeText, for the same reason.
+    latch.await(2000, TimeUnit.MILLISECONDS)
+    return TurnedTextResult(lines, turns.toDouble())
+  }
+
   override fun recognizeTextInImage(uri: String, bottomFraction: Double): Promise<TextResult> {
     return Promise.async {
       val ctx = NitroModules.applicationContext

@@ -22,6 +22,7 @@
 // ---------------------------------------------------------------------------
 
 import * as Location from 'expo-location';
+import { withPromptWatch } from './os-prompt';
 import { foldSpanIntoDays } from './background-math';
 import { cancelCheckIns, defineCheckInTask, scheduleCheckIns } from './checkin';
 import { defineLocationTask } from './foreground-service';
@@ -139,6 +140,9 @@ export interface EnableBackgroundResult {
     | 'foreground_denied'
     | 'background_denied'
     | 'start_failed';
+  /** On a refusal: false when the OS answered without showing a prompt, which
+   *  leaves Settings as the only way forward (os-prompt.ts). */
+  osPrompted?: boolean;
 }
 
 /**
@@ -159,10 +163,20 @@ export async function enableBackgroundPresence(options: {
   const pin = loadPresencePin(options.externalUserId);
   if (!pin) return { enabled: false, reason: 'no_pin' };
 
-  const fg = await Location.requestForegroundPermissionsAsync().catch(() => null);
-  if (fg?.status !== 'granted') return { enabled: false, reason: 'foreground_denied' };
-  const bg = await Location.requestBackgroundPermissionsAsync().catch(() => null);
-  if (bg?.status !== 'granted') return { enabled: false, reason: 'background_denied' };
+  const fg = await withPromptWatch(
+    () => Location.requestForegroundPermissionsAsync().catch(() => null),
+    () => Location.getForegroundPermissionsAsync().catch(() => null),
+  );
+  if (fg.result?.status !== 'granted') {
+    return { enabled: false, reason: 'foreground_denied', osPrompted: fg.prompted };
+  }
+  const bg = await withPromptWatch(
+    () => Location.requestBackgroundPermissionsAsync().catch(() => null),
+    () => Location.getBackgroundPermissionsAsync().catch(() => null),
+  );
+  if (bg.result?.status !== 'granted') {
+    return { enabled: false, reason: 'background_denied', osPrompted: bg.prompted };
+  }
 
   // The task handler runs with no React context, so the wire config it needs
   // to flush is persisted beside the pin. The key is publishable by design.
