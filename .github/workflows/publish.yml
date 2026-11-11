@@ -1,8 +1,15 @@
-# Lives in the PUBLIC repo myazahq/kyc-sdk-react-native. The monorepo sync
-# preserves this repo's .github/, so it survives every release sync.
-# The RN package ships its TS source + native code (no build step).
-# Required secret: NPM_TOKEN (npm automation token).
-name: Publish @myazahq/kyc-sdk-react-native to npm
+# ⚠️  This workflow belongs to the PUBLIC repo todenhq/toden-react-native, where
+# it is committed as `.github/workflows/publish.yml` (NOT under this file's name —
+# this is only the canonical copy kept with the source). It is intentionally
+# excluded from the monorepo → public-repo sync, so a change here does NOT ship:
+# it must be committed to the public repo by hand. Each sync preserves the public
+# repo's .github/, so it survives every release.
+#
+# Unlike the web SDK, the RN package ships its TypeScript source + native code
+# (no bundling step — `main` points at `src/index.ts`), so there is no build here.
+#
+# Required secret in todenhq/toden-react-native: NPM_TOKEN (npm automation token).
+name: Publish @toden/react-native to npm
 
 on:
   push:
