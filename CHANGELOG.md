@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.1
+
+- iOS builds no longer fail with "The compiler is unable to type-check this expression in reasonable time" in `HybridMyazaRectDetector.swift`. Some Xcode versions could not compile the check that a document lies wholly inside the frame; it is now written in a form every Xcode handles. Detection is unchanged. Rebuild the app (`pod install` on iOS).
+
 ## 4.0.0
 
 The first release as `@toden/react-native`. The version moves to 4.0.0 to match `@toden/react` and because everyone upgrading changes their install and imports.
