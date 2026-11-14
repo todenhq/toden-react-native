@@ -7,6 +7,7 @@ import { spacing } from '../config/theme';
 import { ID_TYPES, documentGuideAspect, getScanSides } from '../config/idTypes';
 import { withRetry } from '../services/retry';
 import { mapToVerificationError, safeReportError } from '../services/errors';
+import { declinedRefusalOf } from '../lib/session-declined';
 import { compressDocumentImage, compressVideo, cropCardRegion, cropGuideRegion, cropToDocumentCorners, rotateImage } from '../services/mediaCompress';
 import { undoDegrees } from '../capture/documentTurn';
 import type { CornerFraming } from '../capture/useCornerGate';
@@ -44,6 +45,13 @@ import { useText } from '../i18n/useText';
 import { isBusinessFlow } from '../config/business';
 import { captureCheckProblems, runCaptureChecks, type CaptureProblem } from '../lib/documentCaptureCheck';
 import type { DocumentCaptureCheckRequest, DocumentCaptureSide } from '../services/api';
+import {
+  dropCapture,
+  emptySideRecordings,
+  recordCapture,
+  uploadDocumentSides,
+  type DocumentRecordingSide,
+} from '../lib/documentRecordings';
 
 // Document capture — the RN mirror of the Flutter/web DocumentCaptureStep.
 // Phases: front → front-preview → back → review (two-sided); front → review
@@ -108,6 +116,7 @@ function DocumentCapture({
   const selectedIdType = useFlowState((s) => s.selectedIdType);
   const api = useFlowState((s) => s.api);
   const setMediaId = useFlowState((s) => s.setMediaId);
+  const clearMediaIds = useFlowState((s) => s.clearMediaIds);
   const setMrzScan = useFlowState((s) => s.setMrzScan);
   const mrzScan = useFlowState((s) => s.mrzScan);
   const country = useEffectiveCountry();
@@ -149,9 +158,9 @@ function DocumentCapture({
   // next Continue uploads and checks again.
   const [captureProblems, setCaptureProblems] = useState<CaptureProblem[] | null>(null);
   // Best-effort document videos recorded alongside each side's still (uploaded as
-  // document_front_video / document_back_video). Refs — they don't drive the UI.
-  const frontVideoRef = useRef<string | null>(null);
-  const backVideoRef = useRef<string | null>(null);
+  // document_front_video / document_back_video), with the number of the capture
+  // each belongs to (lib/documentRecordings.ts). A ref: it doesn't drive the UI.
+  const recordingsRef = useRef(emptySideRecordings());
   // How each side's photo arrived, for the review switch (afterDocumentCapture).
   const sourcesRef = useRef<{ front: DocumentSideSource; back: DocumentSideSource }>({ front: null, back: null });
   // The review is off and a scan is moving straight on. A problem brings the
@@ -201,7 +210,7 @@ function DocumentCapture({
 
   // ── Capture → compress → store for the current side ────────────────────────
   const storeCapture = useCallback(
-    async (rawUri: string, source: 'camera' | 'upload') => {
+    async (rawUri: string, source: 'camera' | 'upload', videoPath: string | null = null) => {
       setBusy(true);
       setUploadError(null);
       setCaptureProblems(null);
@@ -225,6 +234,9 @@ function DocumentCapture({
         }
         const side = phase === 'back' ? 'back' : 'front';
         sourcesRef.current[side] = source;
+        // A new capture of this side: its own recording, never an earlier
+        // capture's (a gallery photo has none).
+        recordCapture(recordingsRef.current, side, source === 'camera' ? videoPath : null);
         if (side === 'back') setBackUri(compressed);
         else setFrontUri(compressed);
         const next = afterDocumentCapture(config, {
@@ -259,9 +271,6 @@ function DocumentCapture({
     async (rawUri: string, videoPath: string | null, viewAr: number, framing: CornerFraming | null, turn: CaptureTurn | null) => {
       setBusy(true);
       try {
-        // Stash the side's video (best-effort) before cropping/storing the still.
-        if (phase === 'back') backVideoRef.current = videoPath;
-        else frontVideoRef.current = videoPath;
         // viewAr is the MEASURED preview box — full-screen capture shows a far
         // taller slice than the framed 3:4 box the old constant assumed, which
         // is why reviews came back wider than what the user framed.
@@ -276,12 +285,12 @@ function DocumentCapture({
         // An upright slip is turned back to landscape, so the review, the upload
         // and the server see the document the usual way round.
         const upright = turn ? await rotateImage(carded, undoDegrees(turn.readTurn)).catch(() => carded) : carded;
-        await storeCapture(upright, 'camera');
+        await storeCapture(upright, 'camera', videoPath);
       } finally {
         setBusy(false);
       }
     },
-    [guideAspect, storeCapture, phase],
+    [guideAspect, storeCapture],
   );
 
   const pickFromGallery = useCallback(async () => {
@@ -307,7 +316,8 @@ function DocumentCapture({
 
   // Best-effort document video upload — never blocks or fails the flow.
   /**
-   * How long the flow will WAIT for a document video before moving on.
+   * How long the flow will WAIT for a document video before moving on is
+   * DOC_VIDEO_WAIT_MS (lib/documentRecordings.ts does the waiting).
    *
    * The clip is supplementary evidence, but transcoding a 4K recording and
    * pushing it over a phone hotspot is slow — and it used to be awaited with no
@@ -315,34 +325,24 @@ function DocumentCapture({
    * already uploaded fine. The user could not reach the chip step at all.
    *
    * The upload is NOT cancelled at the deadline: it keeps running in the
-   * background and still records its media id if it lands, usually well before
-   * submission. Only the WAIT is bounded.
+   * background and still records its media id if it lands while its capture
+   * is still the side's capture. Only the WAIT is bounded.
    */
-  const uploadDocVideo = useCallback(
-    async (
-      videoPath: string | null,
-      type: 'document_front_video' | 'document_back_video',
-      mediaKey: 'documentFrontVideo' | 'documentBackVideo',
-    ) => {
-      if (!videoPath) return;
-      const work = (async () => {
-        try {
-          // Transcode the raw 4K recording down to a small evidence clip first.
-          const small = await compressVideo(videoPath);
-          if (!small) return; // could not be shrunk below the ceiling: skip it
-          const id = await withRetry(() => api.upload({ uri: small, type: 'video/mp4' }, type, MAX_VIDEO_BYTES));
-          setMediaId(mediaKey, id);
-        } catch {
-          /* supplementary — verification proceeds without the document video
-             (dropped if it failed to upload or exceeded the 5MB ceiling) */
-        }
-      })();
-      await Promise.race([
-        work,
-        new Promise<void>((resolve) => setTimeout(resolve, DOC_VIDEO_WAIT_MS)),
-      ]);
+  const uploadRecording = useCallback(
+    async (videoPath: string, side: DocumentRecordingSide): Promise<string | null> => {
+      try {
+        // Transcode the raw 4K recording down to a small evidence clip first.
+        const small = await compressVideo(videoPath);
+        if (!small) return null; // could not be shrunk below the ceiling: skip it
+        const type = side === 'back' ? 'document_back_video' : 'document_front_video';
+        return await withRetry(() => api.upload({ uri: small, type: 'video/mp4' }, type, MAX_VIDEO_BYTES));
+      } catch {
+        /* supplementary — verification proceeds without the document video
+           (dropped if it failed to upload or exceeded the 5MB ceiling) */
+        return null;
+      }
     },
-    [api, setMediaId],
+    [api],
   );
 
   // ── Advance (VerificationFlow routes to liveness/submitted, or the next multi-ID ID) ─
@@ -361,21 +361,34 @@ function DocumentCapture({
     setCaptureProblems(null);
     setRetryInfo(null);
     const onRetry = (attempt: number, total: number) => setRetryInfo({ attempt, total });
-    const uploaded: { side: DocumentCaptureSide; mediaId: string }[] = [];
+    let uploaded: { side: DocumentCaptureSide; mediaId: string }[] = [];
+    const recordings = recordingsRef.current;
     try {
-      const frontId = await withRetry(() => api.upload({ uri: frontUri, type: 'image/jpeg' }, 'document_front'), { onRetry });
-      setMediaId('documentFront', frontId);
-      uploaded.push({ side: 'front', mediaId: frontId });
-      await uploadDocVideo(frontVideoRef.current, 'document_front_video', 'documentFrontVideo');
-      if (isTwoSided && backUri) {
-        const backId = await withRetry(() => api.upload({ uri: backUri, type: 'image/jpeg' }, 'document_back'), { onRetry });
-        setMediaId('documentBack', backId);
-        uploaded.push({ side: 'back', mediaId: backId });
-        await uploadDocVideo(backVideoRef.current, 'document_back_video', 'documentBackVideo');
-      }
+      uploaded = await uploadDocumentSides(
+        [
+          { side: 'front', uri: frontUri, recording: recordings.front.path, capture: recordings.front.capture },
+          ...(isTwoSided && backUri
+            ? [{ side: 'back' as const, uri: backUri, recording: recordings.back.path, capture: recordings.back.capture }]
+            : []),
+        ],
+        {
+          uploadStill: (uri, side) =>
+            withRetry(() => api.upload({ uri, type: 'image/jpeg' }, side === 'back' ? 'document_back' : 'document_front'), {
+              onRetry,
+            }),
+          uploadRecording,
+          setMediaId,
+          clearMediaIds,
+          isCurrent: (side, capture) => recordingsRef.current[side].capture === capture,
+          recordingWaitMs: DOC_VIDEO_WAIT_MS,
+        },
+      );
     } catch (err) {
       setRetryInfo(null);
       setUploading(false);
+      // A declined session ends the flow on its own screen (the API client
+      // marked it), which reports onError once: no toast, no second report.
+      if (declinedRefusalOf(err)) return;
       const verificationError = mapToVerificationError(err, 'upload');
       setUploadError(verificationError.message);
       toast.show({ variant: 'error', title: 'Upload failed', message: verificationError.message });
@@ -413,9 +426,10 @@ function DocumentCapture({
     isTwoSided,
     api,
     setMediaId,
+    clearMediaIds,
     config,
     toast,
-    uploadDocVideo,
+    uploadRecording,
     selectedIdType,
     country,
     sessionId,
@@ -437,13 +451,13 @@ function DocumentCapture({
     setUploadError(null);
     setCaptureProblems(null);
     setTurnOver(false);
+    // Any recording upload still in flight for the old capture is now stale.
+    dropCapture(recordingsRef.current, side);
     if (side === 'back') {
       setBackUri(null);
-      backVideoRef.current = null;
       setPhase('back');
     } else {
       setFrontUri(null);
-      frontVideoRef.current = null;
       setPhase('front');
     }
   };

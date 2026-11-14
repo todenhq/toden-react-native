@@ -1,5 +1,39 @@
 # Changelog
 
+## 4.2.0
+
+No breaking changes. The version jumps from 4.0.1 to 4.2.0 so the three SDKs share one number; there is no 4.1.0. Rebuild your Android app once, so its release build picks up the new ML Kit keep rules; everything else is JavaScript.
+
+**Deploy note for Toden:** the letters-and-digits code and the work-address message need the matching server release, which sends `alphanumericCode` in the workflow and the `corporate_email_required` reason. Until then the code field stays digits only and a refused address shows the existing message. The declined-session screen needs the server release that adds `declineOnLastAttempt` and the `session_declined` refusal; until then a used-up code simply asks for a new one. The limit on liveness attempts needs the server release that adds `maxLivenessAttempts` to the workflow and `/api/kyc/liveness/failed`; until then a failed face check offers Try Again as before, with no limit.
+
+### Added
+
+- **Codes with letters as well as digits.** When a workflow's email or phone verification turns on `alphanumericCode`, the code field accepts letters and digits, upper-cases them, and opens a capitalising keyboard with autocorrect off. Paste and one-time-code autofill work the same way, and the instruction asks for the "6-character code". Digits-only codes are unchanged.
+- **A clear message for work-address-only workflows.** When email verification takes work addresses only (`corporateOnly`) and the person enters a free-provider address, the SDK asks for a work email instead of showing a general error.
+- **A screen for a declined session.** When a workflow's email or phone verification turns on `declineOnLastAttempt` and the person uses up a code's attempts, the server declines the session and the SDK ends on a screen that says so: "We couldn't verify your email address" (or phone number), the server's explanation and Close. Any later request the server refuses as `session_declined` ends the flow the same way, never on a "try again" screen. `onError` fires once with the new code `session_declined`.
+- **A limit on liveness attempts.** On by default: 3 failed face checks, unless the workflow sets `maxLivenessAttempts` to 1 or 2, or turns the limit off with `false`. Each failed face check is reported to the server, and the failure panel says how many attempts are left ("2 attempts left."), shown as a small warning under the message: an amber pill with a warning icon, not the message's red. At the limit the server declines the session (`session_declined`, reason `liveness_attempts_exceeded`) and the flow ends on the declined screen, "We couldn't verify your face" with the server's explanation and Close, and `onError` fires once. Camera, permission and upload problems are never counted, and if the report cannot be sent, Try Again works as before.
+- **An explanation before the chip read.** The chip step now opens on a screen laid out like the address-monitoring explanation, saying the document has a chip the phone can read and how to hold it: for a passport, close it and place the phone on the front cover (and try the back cover if nothing happens); for a card, place the phone on the card. It names where the phone's reader is (the top of an iPhone, the middle of an Android phone's back), asks for a thick phone case to come off first, and lists the photo page first: ticked when document capture already read the code that unlocks the chip, still to do when it did not. The read starts on Continue; it used to start the moment the step opened.
+
+### Fixed
+
+- **A used-up code can no longer be retyped.** When a code's attempts run out, the code field is disabled (no typing, paste, autofill or auto-submit), the message reads "Too many incorrect attempts. Request a new code." and the button becomes "Send a new code". Once the new code is sent, the field clears and works again. A wrong code with attempts left behaves as before.
+- **Code errors are easier to see.** A wrong, expired or used-up code now shows in an alert box under the field, as in the Flutter SDK, instead of a line of red text.
+- **A wrong code clears the field**, so the next try starts empty.
+- **Code boxes stop growing.** The boxes stop at 56px wide, the same cap as the web and Flutter SDKs, so a short code keeps phone-sized boxes, centred.
+- **The cancelled and declined screens match Flutter's.** The icon, title, message and Close sit together in the centre, with no gap between the message and the button.
+- **A failed face check's message is never cut off.** "Time's up. Let's try again." and Try Again now rest on the bottom edge at their full height. They were squeezed into the strip under the camera window, which on a short screen cut off the top of the panel.
+- **ML Kit is kept in Android release builds.** The SDK's keep rules now cover the classes ML Kit builds at start-up, which R8 can remove in a release build, leaving face detection and text recognition unable to start. The Flutter SDK lost every scan to exactly this.
+- **A retaken document side is submitted with its own recording, or none.** A retake kept the recording uploaded for the earlier photo, so a retake with no recording of its own (a photo from the library, a clip that would not compress or upload in time) was submitted beside a recording of a different capture, which the server's injection check compares the photo with. Continue now clears the document's photos and recordings before uploading them again, and a recording upload that finishes after its side was retaken is dropped. A back captured for a two-sided ID picked earlier is no longer submitted with a one-sided one.
+- **The back of a document is recorded as the back.** On iOS, when the front's recording took more than two seconds to finish saving, the file could be handed to the back, which was then submitted with a recording of the front. And when the back follows the front with nothing tapped, its recording now starts once "Now turn it over" ends, rather than recording the front for the whole wait. Recordings still run until the photo is taken, up to the same 12 seconds.
+
+### Changed
+
+- **Your organisation's logo by default, and a workflow's "None" wins.** With no `appearance.logo` from your app or the workflow, the flow shows your organisation's logo from the dashboard, as `'default'` does (it showed none). An empty `appearance.logo` (`''`) means no logo, and the workflow's value wins over the logo your app sets, as its theme does.
+- **The code check names the session.** Checking an email or phone code now sends the session, as the web SDK does, so the step is charged when the check completes rather than at submission.
+- **The flow follows the device's light or dark setting by default.** When neither the workflow nor your app sets a theme, the flow now opens in the applicant's device setting (`system`). It used to open light. Set `appearance.theme` (or the workflow's theme) to `light` or `dark` to pin it.
+- **The chip screen says each thing once.** The header says where to hold the document ("Hold your document flat against the back of your phone until it's read."), so the body no longer repeats it: it shows "Waiting for the chip", then "Chip found. Keep still until this finishes." with each step of the read. The builder preview now shows the same screen. The default `nfc.description` is the new header text.
+
+
 ## 4.0.1
 
 - iOS builds no longer fail with "The compiler is unable to type-check this expression in reasonable time" in `HybridMyazaRectDetector.swift`. Some Xcode versions could not compile the check that a document lies wholly inside the frame; it is now written in a form every Xcode handles. Detection is unchanged. Rebuild the app (`pod install` on iOS).

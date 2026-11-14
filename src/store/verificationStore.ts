@@ -13,6 +13,7 @@
 import { createStore } from 'zustand/vanilla';
 
 import { createVerificationApi } from '../services/api';
+import { declinedChannelForStep, declinedRefusalOf } from '../lib/session-declined';
 
 import { resolveBaseUrl, normalizeBrandingUrls } from '../services/resolveUrl';
 import { withRetry } from '../services/retry';
@@ -95,7 +96,19 @@ export function createVerificationStore(
   const baseUrl = resolveBaseUrl(config.apiKey, config.devUrl);
   // Uploads carry the per-install device id (X-Myaza-Device-Id) while Device
   // Intelligence is on — the same value the fingerprint's deviceId carries.
-  const api = createVerificationApi(baseUrl, config.apiKey, { deviceId: uploadDeviceIdSource(config) });
+  //
+  // Every refusal the client sees passes `onRefusal`: a declined session is
+  // refused on EVERY request from then on (start, progress, uploads, verify,
+  // the contact check that declined it), so one place catches them all and
+  // no step can show it as something to try again. Bound late: the store
+  // exists by the time any request settles.
+  const api = createVerificationApi(baseUrl, config.apiKey, {
+    deviceId: uploadDeviceIdSource(config),
+    onRefusal: (err) => {
+      const declined = declinedRefusalOf(err);
+      if (declined) store.getState().markDeclined(declined);
+    },
+  });
 
   const store = createStore<VerificationState>((set, get) => {
     function emitStepChange(step: VerificationStep): void {
@@ -110,6 +123,7 @@ export function createVerificationStore(
       sessionId: null,
       sessionUrl: null,
       cancelled: null,
+      declined: null,
       businessCheck: { ...EMPTY_BUSINESS_CHECK },
       selectedCountry: null,
       countryAutoPicked: false,
@@ -307,6 +321,14 @@ export function createVerificationStore(
         set((s) => ({ mediaIds: { ...s.mediaIds, [key]: mediaId } }));
       },
 
+      clearMediaIds(keys) {
+        set((s) => {
+          const mediaIds = { ...s.mediaIds };
+          for (const key of keys) delete mediaIds[key];
+          return { mediaIds };
+        });
+      },
+
       setSelfiePreview(uri) {
         set({ selfiePreviewUri: uri });
       },
@@ -401,6 +423,16 @@ export function createVerificationStore(
       markCancelled(message) {
         if (get().cancelled) return;
         set({ cancelled: { message } });
+      },
+
+      markDeclined(refusal, channel) {
+        const known = channel ?? declinedChannelForStep(get().currentStep);
+        const current = get().declined;
+        if (current) {
+          if (!current.channel && known) set({ declined: { ...current, channel: known } });
+          return;
+        }
+        set({ declined: { message: refusal.message, reasonCode: refusal.reasonCode, channel: known } });
       },
 
       async checkBusiness() {
@@ -806,6 +838,7 @@ export function createVerificationStore(
           sessionId: null,
           sessionUrl: null,
           cancelled: null,
+          declined: null,
           businessCheck: { ...EMPTY_BUSINESS_CHECK },
           questionnaireAnswers: {},
           contact: {},

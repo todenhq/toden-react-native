@@ -239,6 +239,24 @@ export interface EmailVerificationConfig {
   /** Wrong entries allowed per code before it's dead (1–5; default 3). */
   maxAttempts?: number;
   inputStyle?: OtpInputStyle;
+  /**
+   * Letters as well as digits in the code (default false: digits only). The
+   * server sends from 23456789ABCDEFGHJKMNPQRSTUVWXYZ and compares without
+   * regard to case; the field accepts any letter or digit and upper-cases it.
+   */
+  alphanumericCode?: boolean;
+  /**
+   * Work addresses only. The server refuses a free-provider address at send
+   * with `invalid_destination`, reason `corporate_email_required`; the SDK
+   * does not pre-check it.
+   */
+  corporateOnly?: boolean;
+  /**
+   * Decline the session when a code's attempts run out (default false: the
+   * applicant can request a new code). The server answers the last wrong
+   * guess with `session_declined` and the SDK ends on the declined screen.
+   */
+  declineOnLastAttempt?: boolean;
 }
 
 export interface PhoneVerificationConfig {
@@ -248,6 +266,14 @@ export interface PhoneVerificationConfig {
   codeLength?: number;
   maxAttempts?: number;
   inputStyle?: OtpInputStyle;
+  /** Letters as well as digits in the code (default false: digits only). */
+  alphanumericCode?: boolean;
+  /**
+   * Decline the session when a code's attempts run out (default false: the
+   * applicant can request a new code). The server answers the last wrong
+   * guess with `session_declined` and the SDK ends on the declined screen.
+   */
+  declineOnLastAttempt?: boolean;
   /** Offered delivery channels (default ['sms']). */
   channels?: Array<'sms' | 'whatsapp'>;
   /** Default dial-code country (falls back to the flow's country). */

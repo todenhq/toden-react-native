@@ -37,6 +37,12 @@ describe('step header copy', () => {
     );
   });
 
+  it('says characters, not digits, for a code with letters', () => {
+    expect(contactMeta('email', { challenge: sentEmail, codeLength: 6, alphanumeric: true }).description).toBe(
+      'Enter the 6-character code we sent to a@b.com.',
+    );
+  });
+
   it('ignores a challenge raised by the OTHER step', () => {
     const meta = contactMeta('phone', { challenge: sentEmail });
     expect(meta.description).toContain("We'll send");

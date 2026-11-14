@@ -54,7 +54,9 @@ import {
   LivenessLive,
   LivenessReview,
   useSelfieAutoAdvance,
+  useLivenessFailureReport,
 } from './liveness';
+import { attemptsLeftLine } from '../lib/liveness-attempts';
 import { faceWindowFor } from '../lib/faceWindow';
 import { useSheetInsets } from '../components/sheetInsets';
 import { livenessCutout, type Size, windowDrop } from '../lib/livenessCutout';
@@ -230,6 +232,11 @@ export function LivenessStep(): React.ReactElement {
       flashSequenceLength: config.flashSequenceLength,
     },
   });
+
+  // A failed check is reported when the workflow limits attempts; the answer
+  // adds the attempts left to the panel, or ends the flow on the declined
+  // screen at the limit (./liveness/useLivenessFailureReport).
+  const attempts = useLivenessFailureReport(liveness.phase, liveness.failureReason);
 
   const stills = useSelfieStills(photoOutput, liveness.landSelfieShot);
   runStillRef.current = stills.takeRunStill;
@@ -669,7 +676,11 @@ export function LivenessStep(): React.ReactElement {
       dimRoom={dimRoom}
       failure={
         liveness.phase === 'failed'
-          ? { message: livenessFailureMessage(liveness.failureReason), onRetry: liveness.reset }
+          ? {
+              message: livenessFailureMessage(liveness.failureReason),
+              note: attemptsLeftLine(attempts),
+              onRetry: liveness.reset,
+            }
           : null
       }
       onFrameSize={onFrameSize}

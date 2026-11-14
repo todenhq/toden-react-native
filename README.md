@@ -386,7 +386,7 @@ consent → email-verification → phone-verification → country-select → id-
 
 | Prop | Shape | What it adds |
 |---|---|---|
-| `emailVerification` | `{ enabled?, required?, codeLength?, maxAttempts?, inputStyle? }` | Email OTP right after consent. `required: false` adds a "skip for now". `codeLength` 4–8 (default 6), `maxAttempts` 1–5 (default 3). |
+| `emailVerification` | `{ enabled?, required?, codeLength?, maxAttempts?, inputStyle?, declineOnLastAttempt? }` | Email OTP right after consent. `required: false` adds a "skip for now". `codeLength` 4–8 (default 6), `maxAttempts` 1–5 (default 3). A used-up code disables the field until a new one is sent; with `declineOnLastAttempt` the session is declined instead. |
 | `phoneVerification` | same, plus `{ channels?, defaultCountry? }` | Phone OTP. `channels` defaults to `['sms']`; add `'whatsapp'` to offer it. |
 | `proofOfAddress` | `{ enabled?, documentTypes?, otherLabel?, maxAgeDays? }` | Upload a utility bill, bank statement, tenancy agreement, or other document. `maxAgeDays` is the recency window (default 90). |
 | `questionnaire` | `{ enabled?, title?, description?, fields }` | Compliance declarations before submission. Field `type` is one of `text`, `number`, `money`, `select`, `multiselect`, `boolean`, `date`. |
@@ -585,6 +585,8 @@ import { Verification, type VerificationError } from '@toden/react-native';
 | `upload_failed`            | A media upload failed, **after retries are exhausted**.            |
 | `camera_permission_denied` | The user denied (or the OS blocks) camera access.                  |
 | `feature_disabled`         | Server returned `403` (ID type / feature not enabled for the org). |
+| `session_cancelled`        | The organisation cancelled the session. The flow ends on its own screen. |
+| `session_declined`         | The server declined the session (a code's attempts ran out with `declineOnLastAttempt`). The flow ends on its own screen. |
 | `unknown`                  | Anything else.                                                      |
 
 > Verification *outcomes* (identity not found, document mismatch, …) never come

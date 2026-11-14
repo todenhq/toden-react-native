@@ -14,11 +14,11 @@ describe('restoreAddress', () => {
       accuracy: 12,
       directions: 'black gate opposite the kiosk',
       propertyNumber: '11',
-      label: '11 Bassey Street, Idim Ita, Calabar',
+      label: '11 Adebayo Street, Idim Ita, Calabar',
       street: 'Wisdom Close',
       labelKept: true,
       pickedAt: { lat: 4.9323, lng: 8.3253 },
-      parts: { street: 'Bassey Street', city: 'Calabar' },
+      parts: { street: 'Adebayo Street', city: 'Calabar' },
       streetView: { panoId: 'pano_1', heading: 90, pitch: 0, fov: 75 },
     });
 
@@ -28,7 +28,7 @@ describe('restoreAddress', () => {
       accuracy: 12,
       directions: 'black gate opposite the kiosk',
       propertyNumber: '11',
-      label: '11 Bassey Street, Idim Ita, Calabar',
+      label: '11 Adebayo Street, Idim Ita, Calabar',
       street: 'Wisdom Close',
       labelKept: true,
       pickedAt: { lat: 4.9323, lng: 8.3253 },
@@ -36,7 +36,7 @@ describe('restoreAddress', () => {
     });
     // Every key of the breakdown is present, unset ones as null.
     expect(out.parts).toEqual({
-      street: 'Bassey Street',
+      street: 'Adebayo Street',
       area: null,
       city: 'Calabar',
       state: null,
@@ -105,14 +105,14 @@ describe('addressPayload', () => {
   it('sends the pin, the confirmed line and the typed fields, trimmed', () => {
     const out = addressPayload({
       ...base,
-      label: ' 11 Bassey Street, Calabar ',
+      label: ' 11 Adebayo Street, Calabar ',
       street: ' Wisdom Close ',
       accuracy: 12,
     });
     expect(out).toEqual({
       lat: 4.9324,
       lng: 8.3254,
-      label: '11 Bassey Street, Calabar',
+      label: '11 Adebayo Street, Calabar',
       accuracy: 12,
       propertyNumber: '11',
       street: 'Wisdom Close',
@@ -122,10 +122,10 @@ describe('addressPayload', () => {
   it('omits the display-only bookkeeping the server has no use for', () => {
     const out = addressPayload({
       ...base,
-      label: '11 Bassey Street',
+      label: '11 Adebayo Street',
       pickedAt: { lat: 4.9323, lng: 8.3253 },
       labelKept: true,
-      parts: { street: 'Bassey Street', area: null, city: null, state: null, postcode: null },
+      parts: { street: 'Adebayo Street', area: null, city: null, state: null, postcode: null },
     }) as Record<string, unknown>;
     expect(out['pickedAt']).toBeUndefined();
     expect(out['labelKept']).toBeUndefined();

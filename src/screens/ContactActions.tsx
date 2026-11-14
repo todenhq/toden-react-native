@@ -5,6 +5,7 @@ import { spacing } from '../config/theme';
 import { UiButton } from '../components/UiButton';
 import { ContactFooterNote } from './ContactFooterNote';
 import { useText } from '../i18n/useText';
+import { SEND_NEW_CODE_LABEL } from '../lib/contact-code-state';
 
 // ---------------------------------------------------------------------------
 // The contact step's footer: the one primary action (send, then verify), the
@@ -14,6 +15,7 @@ import { useText } from '../i18n/useText';
 
 export function ContactActions({
   hasChallenge,
+  codeUsedUp = false,
   busy,
   disabled,
   required,
@@ -23,6 +25,8 @@ export function ContactActions({
 }: {
   /** A code is out: the button verifies instead of sending. */
   hasChallenge: boolean;
+  /** The code's attempts are spent: the button sends a new code. */
+  codeUsedUp?: boolean;
   busy: boolean;
   disabled: boolean;
   /** `required: false` adds the skip; the server enforces the rest. */
@@ -36,7 +40,13 @@ export function ContactActions({
     <>
       <View style={{ height: spacing.md }} />
       <UiButton
-        label={hasChallenge ? t('contact.verifyCode') : t('contact.sendCode')}
+        label={
+          hasChallenge
+            ? codeUsedUp
+              ? SEND_NEW_CODE_LABEL
+              : t('contact.verifyCode')
+            : t('contact.sendCode')
+        }
         loading={busy}
         disabled={disabled}
         onPress={onPrimary}

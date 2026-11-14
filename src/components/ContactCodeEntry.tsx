@@ -7,7 +7,8 @@ import { useTheme } from './runtime';
 import { UiText } from './Typography';
 import { Icon } from './Icon';
 import { UiInput } from './UiInput';
-import { otpCodeFrom, pastedCode } from '../lib/otp-code';
+import { otpCodeFrom, otpPlaceholder, pastedCode } from '../lib/otp-code';
+import { otpKeyboard, type OtpKeyboard } from '../lib/otp-keyboard';
 import type { OtpInputStyle } from '../types/workflow';
 import { useText } from '../i18n/useText';
 
@@ -26,6 +27,10 @@ import { useText } from '../i18n/useText';
 // Neither field carries a maxLength: it cuts a paste before anybody reads it, so
 // "Your code is 123456" arrived as "Your c". The length is applied to the digits
 // (lib/otp-code.ts). A number pad has no paste key, so Paste code sits beside it.
+//
+// `alphanumeric` (the workflow's `alphanumericCode`) takes letters as well as
+// digits, upper-cased, on a capitalising keyboard without autocorrect
+// (lib/otp-keyboard.ts). Off, the field is the number pad it always was.
 // ---------------------------------------------------------------------------
 
 export function ContactCodeEntry({
@@ -36,6 +41,7 @@ export function ContactCodeEntry({
   disabled,
   onComplete,
   pasteColor,
+  alphanumeric = false,
 }: {
   code: string;
   onChange: (code: string) => void;
@@ -47,19 +53,25 @@ export function ContactCodeEntry({
   onComplete?: (code: string) => void;
   /** The Paste code link, where the entry sits on a glass sheet. */
   pasteColor?: string;
+  /** Letters as well as digits (config `alphanumericCode`); off by default. */
+  alphanumeric?: boolean;
 }): React.ReactElement {
   const t = useText();
   const { colors } = useTheme();
   const [noCode, setNoCode] = useState(false);
   const apply = (next: string): void => {
+    // A disabled field takes nothing: not a paste, not an autofill that
+    // slips through, and never an auto-submit (a used-up code, for one).
+    if (disabled) return;
     setNoCode(false);
     onChange(next);
     if (next.length === codeLength) onComplete?.(next);
   };
-  const handle = (raw: string): void => apply(otpCodeFrom(raw, code, codeLength));
+  const keyboard = otpKeyboard(alphanumeric);
+  const handle = (raw: string): void => apply(otpCodeFrom(raw, code, codeLength, alphanumeric));
   const paste = async (): Promise<void> => {
     const text = await Clipboard.getStringAsync().catch(() => '');
-    const next = pastedCode(text, codeLength);
+    const next = pastedCode(text, codeLength, alphanumeric);
     if (next) apply(next);
     else setNoCode(true);
   };
@@ -99,8 +111,8 @@ export function ContactCodeEntry({
           label={t('contact.code.label')}
           value={code}
           onChangeText={handle}
-          placeholder={'0'.repeat(codeLength)}
-          keyboardType="number-pad"
+          placeholder={otpPlaceholder(codeLength, alphanumeric)}
+          {...keyboard}
           editable={!disabled}
           autoFocus
         />
@@ -111,22 +123,33 @@ export function ContactCodeEntry({
 
   return (
     <View>
-      <SegmentedCode code={code} onChangeText={handle} codeLength={codeLength} disabled={disabled} />
+      <SegmentedCode
+        code={code}
+        onChangeText={handle}
+        codeLength={codeLength}
+        disabled={disabled}
+        keyboard={keyboard}
+      />
       {pasteLink}
     </View>
   );
 }
+
+/** The widest a code box grows (its height follows at 0.82 wide to 1 tall). */
+const OTP_BOX_MAX_WIDTH = 56;
 
 function SegmentedCode({
   code,
   onChangeText,
   codeLength,
   disabled,
+  keyboard,
 }: {
   code: string;
   onChangeText: (raw: string) => void;
   codeLength: number;
   disabled?: boolean;
+  keyboard: OtpKeyboard;
 }): React.ReactElement {
   const { colors } = useTheme();
   const inputRef = useRef<TextInput>(null);
@@ -136,10 +159,19 @@ function SegmentedCode({
       {/* Boxes flex to fill the width at a fixed aspect ratio, and the FILLED
           ones carry the primary border — same geometry and same signal as the
           Flutter SDK's OtpInput, so the step reads identically on both. */}
+      {/* The boxes share the width but never grow past OTP_BOX_MAX_WIDTH, so a
+          4-character code keeps the size a 6-character one has on a phone and
+          the row centres (the same cap in all three SDKs). */}
       <Pressable
         onPress={() => inputRef.current?.focus()}
         accessibilityRole="none"
-        style={{ flexDirection: 'row', gap: spacing.xs }}
+        style={{
+          flexDirection: 'row',
+          gap: spacing.xs,
+          width: '100%',
+          maxWidth: codeLength * OTP_BOX_MAX_WIDTH + (codeLength - 1) * spacing.xs,
+          alignSelf: 'center',
+        }}
       >
         {Array.from({ length: codeLength }, (_, i) => {
           const filled = i < code.length;
@@ -173,7 +205,7 @@ function SegmentedCode({
         ref={inputRef}
         value={code}
         onChangeText={onChangeText}
-        keyboardType="number-pad"
+        {...keyboard}
         textContentType="oneTimeCode"
         autoComplete="one-time-code"
         editable={!disabled}

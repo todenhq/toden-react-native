@@ -45,13 +45,13 @@ describe('the settle guard', () => {
 });
 
 describe('a picked label survives the move', () => {
-  const picked = address({ label: '11 Bassey Street', pickedAt: AT });
+  const picked = address({ label: '11 Adebayo Street', pickedAt: AT });
 
   it('keeps the label and wants no fresh geocode', () => {
     const move = pinMove(picked, north(40), 12);
     expect(move.kind).toBe('keep-label');
     if (move.kind !== 'keep-label') return;
-    expect(move.address.label).toBe('11 Bassey Street');
+    expect(move.address.label).toBe('11 Adebayo Street');
     expect(move.address.pickedAt).toEqual(AT);
     expect(move.address.accuracy).toBe(12);
   });
@@ -106,10 +106,10 @@ describe('landing on the current fix', () => {
 describe('adopting the pin’s address', () => {
   it('drops the pick and everything anchored to it', () => {
     const cur = address({
-      label: '11 Bassey Street',
+      label: '11 Adebayo Street',
       pickedAt: AT,
       labelKept: true,
-      parts: { street: 'Bassey Street', area: null, city: null, state: null, postcode: null },
+      parts: { street: 'Adebayo Street', area: null, city: null, state: null, postcode: null },
       propertyNumber: '8',
     });
     const next = withoutPickedLabel(cur);

@@ -45,7 +45,7 @@ const READY = (reuse: boolean): ServerConfigState =>
     fatal: false,
   }) as unknown as ServerConfigState;
 
-const PICK = { grant: 'abr_1', entryId: 'adb_1', label: 'Bassey Street', area: 'Calabar' };
+const PICK = { grant: 'abr_1', entryId: 'adb_1', label: 'Adebayo Street', area: 'Calabar' };
 
 describe('the address book step in the order', () => {
   it('is not a step of its own: the flow opens on capture, with the offer idle', () => {

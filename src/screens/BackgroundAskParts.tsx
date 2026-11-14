@@ -14,10 +14,15 @@ export interface AskReason {
   icon: IconName;
   title: string;
   caption: string;
+  /** Already done: a check in place of the icon (the chip intro's photo page). */
+  done?: boolean;
 }
 
-/** The radar in two soft rings: the area around the address being watched. */
-export function AskHero(): React.ReactElement {
+/**
+ * An icon in two soft rings. The radar (the area around the address being
+ * watched) by default; the chip intro (nfc/NfcIntro.tsx) shows the NFC phone.
+ */
+export function AskHero({ icon = 'radar' }: { icon?: IconName } = {}): React.ReactElement {
   const { colors } = useTheme();
   return (
     <View
@@ -40,7 +45,7 @@ export function AskHero(): React.ReactElement {
           justifyContent: 'center',
         }}
       >
-        <Icon name="radar" size={26} color={colors.primary} />
+        <Icon name={icon} size={26} color={colors.primary} />
       </View>
     </View>
   );
@@ -54,6 +59,8 @@ export function AskReasons({ reasons }: { reasons: AskReason[] }): React.ReactEl
       {reasons.map((r, i) => (
         <View
           key={r.title}
+          accessible
+          accessibilityLabel={`${r.title}. ${r.caption}${r.done ? ' Done.' : ''}`}
           style={{
             flexDirection: 'row',
             gap: spacing.md,
@@ -68,12 +75,16 @@ export function AskReasons({ reasons }: { reasons: AskReason[] }): React.ReactEl
               width: 40,
               height: 40,
               borderRadius: radius.full,
-              backgroundColor: `${colors.primary}24`,
+              backgroundColor: r.done ? `${colors.success}24` : `${colors.primary}24`,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Icon name={r.icon} size={20} color={colors.primary} />
+            <Icon
+              name={r.done ? 'badge-check' : r.icon}
+              size={20}
+              color={r.done ? colors.success : colors.primary}
+            />
           </View>
           <View style={{ flex: 1 }}>
             <UiText variant="heading3">{r.title}</UiText>

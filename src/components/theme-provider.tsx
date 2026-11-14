@@ -58,11 +58,13 @@ export function UiThemeProvider({
   // `theme: 'system'` follows the DEVICE's colour scheme — live, so an
   // OS-level switch mid-flow repaints — until the in-flow toggle picks a mode
   // explicitly (`override`), which then wins for the rest of the session.
-  // 'light'/'dark' (and unset → light) pin the mode exactly as before.
+  // 'light'/'dark' pin the mode. Unset follows the device too (decision
+  // 2026-11-13): with no theme from the workflow or the app, the applicant's
+  // own setting decides.
   const systemScheme = useColorScheme();
   const configured = appearance?.theme;
   const [override, setOverride] = useState<ThemeMode | null>(
-    configured === 'system' ? null : configured ?? 'light',
+    configured === 'system' || configured == null ? null : configured,
   );
   // A forced mode (the liveness camera) sits ABOVE the person's choice rather
   // than replacing it, so handing it back returns exactly what they had.

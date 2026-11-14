@@ -9,6 +9,7 @@ import { UiButton } from '../../components/UiButton';
 import { GESTURE_FULL_SIZE, gestureSize, ROOM_FOR_GESTURE, type Size } from '../../lib/livenessCutout';
 import { lightingGuidanceText, type useLiveness } from '../../liveness/useLiveness';
 import { LivenessAvatar } from '../LivenessAvatar';
+import { AttemptsLeftNotice } from './AttemptsLeftNotice';
 import { ImmersiveFrame } from './ImmersiveFrame';
 import { backdropNeedsTexture, CameraBackdrop } from './Backdrop';
 import { GesturePlate, Panel, Reassurance, StepCount } from './ImmersiveSurfaces';
@@ -53,8 +54,11 @@ export function LivenessLive({
   getRingTarget: () => number;
   windowRef: React.RefObject<View | null>;
   dimRoom: boolean;
-  /** Why the check stopped, with its retry, or null while it is running. */
-  failure: { message: string; onRetry: () => void } | null;
+  /**
+   * Why the check stopped, with its retry, or null while it is running. `note`
+   * is the attempts left, shown as a small warning under the reason.
+   */
+  failure: { message: string; note?: string | null; onRetry: () => void } | null;
   onFrameSize: (size: Size) => void;
 }): React.ReactElement {
   const { colors } = useTheme();
@@ -142,26 +146,31 @@ export function LivenessLive({
           </RNView>
         );
       }}
-      below={
+      below={!failure && showsCount ? <StepCount step={step} total={total} /> : undefined}
+      // A failed check rests its panel on the bottom edge at its full height.
+      // Squeezed into the strip under the window it was cut off on a short
+      // phone; the window has nothing left to show, so the panel may cover its
+      // lower edge.
+      footer={
         failure ? (
           // Its own surface: red text straight on the camera would be lost.
-          <Panel>
-            <UiText
-              variant="bodyMedium"
-              color={colors.error}
-              accessibilityRole="alert"
-              style={{ textAlign: 'center', fontWeight: '500' }}
-            >
-              {failure.message}
-            </UiText>
-            <RNView style={{ height: spacing.md }} />
-            <UiButton label="Try Again" onPress={failure.onRetry} />
-          </Panel>
-        ) : showsCount ? (
-          <StepCount step={step} total={total} />
-        ) : undefined
+          <RNView style={{ alignSelf: 'stretch' }}>
+            <Panel>
+              {/* One alert, so the reason and the attempts left are read together. */}
+              <RNView accessible accessibilityRole="alert" style={{ gap: spacing.sm }}>
+                <UiText variant="bodyMedium" color={colors.error} style={{ textAlign: 'center', fontWeight: '500' }}>
+                  {failure.message}
+                </UiText>
+                {failure.note ? <AttemptsLeftNotice text={failure.note} /> : null}
+              </RNView>
+              <RNView style={{ height: spacing.md }} />
+              <UiButton label="Try Again" onPress={failure.onRetry} />
+            </Panel>
+          </RNView>
+        ) : (
+          <Reassurance visible={beforeCapture} />
+        )
       }
-      footer={failure ? undefined : <Reassurance visible={beforeCapture} />}
     />
   );
 }

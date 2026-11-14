@@ -6,14 +6,14 @@ const FLITSTACK = [
   { name: 'Atambi Tony Joseph', designation: 'WITNESS' },
   { name: 'Archibong Bassey Charles', designation: 'DIRECTOR' },
   { name: 'Archibong Bassey Charles', designation: 'SHAREHOLDER' },
-  { name: 'Ingwe Unimke Richard', designation: 'DIRECTOR' },
-  { name: 'Ingwe Unimke Richard', designation: 'PERSONS WITH SIGNIFICANT CONTROL' },
+  { name: 'Okeke Obinna Chinedu', designation: 'DIRECTOR' },
+  { name: 'Okeke Obinna Chinedu', designation: 'PERSONS WITH SIGNIFICANT CONTROL' },
 ];
 
 describe('prefillKeyPeople', () => {
   it('offers one row per person and drops the filing agent and witness', () => {
     const rows = prefillKeyPeople(FLITSTACK, 'NG');
-    expect(rows.map((r) => r.name)).toEqual(['Archibong Bassey Charles', 'Ingwe Unimke Richard']);
+    expect(rows.map((r) => r.name)).toEqual(['Archibong Bassey Charles', 'Okeke Obinna Chinedu']);
   });
 
   it('keeps the classification that asks the most of them', () => {

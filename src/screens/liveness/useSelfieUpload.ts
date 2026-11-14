@@ -4,6 +4,7 @@ import { MAX_VIDEO_BYTES } from '../../config/captureSettings';
 import { compressVideo } from '../../services/mediaCompress';
 import { withRetry } from '../../services/retry';
 import { mapToVerificationError, safeReportError } from '../../services/errors';
+import { declinedRefusalOf } from '../../lib/session-declined';
 import { useFlowState, useVerificationConfig } from '../../components/runtime';
 import { useToast } from '../../components/toast';
 
@@ -133,6 +134,9 @@ export function useSelfieUpload(): SelfieUpload {
       } catch (err) {
         setRetryInfo(null);
         setUploading(false);
+        // A declined session ends the flow on its own screen (the API client
+        // marked it), which reports onError once: no toast, no second report.
+        if (declinedRefusalOf(err)) return;
         const verificationError = mapToVerificationError(err, 'upload');
         setUploadError(verificationError.message);
         setSelfieUpload({ status: 'failed', message: verificationError.message });

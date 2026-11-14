@@ -45,7 +45,7 @@ describe('shouldAskLabelDecision', () => {
   const picked = {
     lat: 4.9323964,
     lng: 8.3254216,
-    label: '11 Bassey Street, Idim Ita, Calabar',
+    label: '11 Adebayo Street, Idim Ita, Calabar',
     pickedAt: { lat: 4.9323964, lng: 8.3254216 },
   };
 
@@ -78,22 +78,22 @@ describe('displayAddressLine', () => {
     expect(
       displayAddressLine({
         ...base,
-        label: '11 Bassey Street, Idim Ita, Calabar',
+        label: '11 Adebayo Street, Idim Ita, Calabar',
         propertyNumber: '8',
       }),
-    ).toBe('8 Bassey Street, Idim Ita, Calabar');
+    ).toBe('8 Adebayo Street, Idim Ita, Calabar');
   });
 
   it('never doubles a number the label already leads with', () => {
     expect(
-      displayAddressLine({ ...base, label: '11 Bassey Street, Idim Ita', propertyNumber: '11' }),
-    ).toBe('11 Bassey Street, Idim Ita');
+      displayAddressLine({ ...base, label: '11 Adebayo Street, Idim Ita', propertyNumber: '11' }),
+    ).toBe('11 Adebayo Street, Idim Ita');
   });
 
   it('prefixes a number the label never carried', () => {
     expect(
-      displayAddressLine({ ...base, label: 'Bassey Street, Calabar', propertyNumber: '8' }),
-    ).toBe('8, Bassey Street, Calabar');
+      displayAddressLine({ ...base, label: 'Adebayo Street, Calabar', propertyNumber: '8' }),
+    ).toBe('8, Adebayo Street, Calabar');
   });
 
   it('leads with a typed street the label does not know', () => {

@@ -6,7 +6,7 @@
  * The address line the flow SHOWS (pin summary + review heading) — the client
  * mirror of the server's composed-line rules, so what the applicant confirms is
  * what the org later reads. A typed number REPLACES a differing picked number
- * (living at 8 when only 11 was listed is not "8, 11 Bassey Street"); a typed
+ * (living at 8 when only 11 was listed is not "8, 11 Adebayo Street"); a typed
  * street the label does not carry leads the line.
  */
 export function displayAddressLine(address: {

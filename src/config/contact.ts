@@ -92,7 +92,12 @@ export function sentCodeLength(sent: unknown, configured: number): number {
  */
 export function contactMeta(
   channel: 'email' | 'phone',
-  ctx?: { codeLength?: number; challenge?: ContactChallenge | null },
+  ctx?: {
+    codeLength?: number;
+    challenge?: ContactChallenge | null;
+    /** Letters as well as digits (config `alphanumericCode`): "6-character". */
+    alphanumeric?: boolean;
+  },
   t: TextFn = defaultText,
   /** A scoped business workflow confirms the company's contact details. */
   scopedBusiness = false,
@@ -106,7 +111,7 @@ export function contactMeta(
     const length = ctx?.codeLength ?? DEFAULT_CODE_LENGTH;
     return {
       title,
-      description: `Enter the ${length}-digit code we sent to ${live.destination}${by}.`,
+      description: `Enter the ${length}-${ctx?.alphanumeric ? 'character' : 'digit'} code we sent to ${live.destination}${by}.`,
     };
   }
 

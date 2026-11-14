@@ -14,6 +14,7 @@ import { COUNTRY_SEARCH_THRESHOLD } from '../screens/CountrySelectStep';
 import { VerificationSheet } from './VerificationSheet';
 import { FatalConfigError } from './flow/FatalConfigError';
 import { SessionCancelled, useReportCancellation } from './flow/SessionCancelled';
+import { SessionDeclined, useReportDecline } from './flow/SessionDeclined';
 import { ToastProvider } from './toast';
 import { UiText } from './Typography';
 import { UiButton } from './UiButton';
@@ -59,6 +60,9 @@ export function VerificationFlow({
   // Cancelled by the organisation (lib/session-cancelled.ts): terminal.
   const cancelled = useFlowState((s) => s.cancelled);
   useReportCancellation(cancelled, config.onError);
+  // Declined by the server (lib/session-declined.ts): terminal the same way.
+  const declined = useFlowState((s) => s.declined);
+  useReportDecline(declined, config.onError);
 
   const startedRef = useRef(false);
   const reportedRef = useRef(false);
@@ -177,7 +181,7 @@ export function VerificationFlow({
   // `disableClose` set it reports 'blocked' so back can never force the flow
   // closed. (iOS has no hardware back; its swipe-down keeps the standard
   // dismiss behaviour, handled by the Modal.)
-  const canGoBack = !isFatal && !cancelled && onBack != null;
+  const canGoBack = !isFatal && !cancelled && !declined && onBack != null;
   const disableClose = config.disableClose === true;
   useEffect(() => {
     if (!backRef) return undefined;
@@ -197,6 +201,7 @@ export function VerificationFlow({
     return <FatalConfigError message={fatalMessage} onClose={onClose} />;
   }
   if (cancelled) return <SessionCancelled message={cancelled.message} onClose={onClose} />;
+  if (declined) return <SessionDeclined declined={declined} onClose={onClose} />;
 
   return (
     <ToastProvider>

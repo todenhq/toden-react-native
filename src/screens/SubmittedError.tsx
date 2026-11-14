@@ -26,6 +26,7 @@ const ERROR_TITLES: Record<string, string> = {
   upload_failed: 'Upload Failed',
   network_error: 'Connection Failed',
   session_cancelled: 'This verification was cancelled',
+  session_declined: 'This verification has ended',
 };
 
 export function SubmittedError({

@@ -58,6 +58,10 @@ export type VerificationErrorCode =
   // The organisation (or Myaza support) cancelled this verification session.
   // Terminal until an admin uncancels it: retrying cannot succeed.
   | 'session_cancelled'
+  // The server declined this session before it was submitted (today: a
+  // contact code's attempts ran out on a step with `declineOnLastAttempt`).
+  // Terminal: every later request on the session is refused.
+  | 'session_declined'
   | 'unknown';
 
 export interface VerificationErrorDetails {

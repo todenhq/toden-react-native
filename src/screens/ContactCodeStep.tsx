@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 import { spacing } from '../config/theme';
 import { useTheme } from '../components/runtime';
 import { UiText } from '../components/Typography';
+import { UiAlert } from '../components/UiAlert';
 import { ContactCodeEntry } from '../components/ContactCodeEntry';
 import { ExpiryCountdown } from '../components/ExpiryCountdown';
 import { CHANNEL_LABELS, type PhoneOtpChannel } from '../config/contact';
@@ -26,8 +27,10 @@ import { useText } from '../i18n/useText';
 export function ContactCodeStep({
   codeLength,
   inputStyle,
+  alphanumeric,
   code,
   busy,
+  usedUp = false,
   error,
   attemptsLeft,
   expiresAt,
@@ -38,8 +41,15 @@ export function ContactCodeStep({
 }: {
   codeLength: number;
   inputStyle: OtpInputStyle;
+  /** Letters as well as digits (config `alphanumericCode`). */
+  alphanumeric?: boolean;
   code: string;
   busy: boolean;
+  /**
+   * The code's attempts are spent: the field is disabled (no typing, paste,
+   * autofill or auto-submit) until a new code is sent from the primary button.
+   */
+  usedUp?: boolean;
   error: string | null;
   attemptsLeft?: number;
   /** ISO expiry from the send response; null falls back to static copy. */
@@ -62,7 +72,8 @@ export function ContactCodeStep({
         onChange={onChange}
         codeLength={codeLength}
         style={inputStyle}
-        disabled={busy}
+        alphanumeric={alphanumeric}
+        disabled={busy || usedUp}
         onComplete={onCheck}
       />
 
@@ -81,20 +92,24 @@ export function ContactCodeStep({
             The code expires in 5 minutes.
           </UiText>
         )}
-        <Pressable
-          onPress={() => onResend()}
-          disabled={busy}
-          accessibilityRole="button"
-          hitSlop={8}
-        >
-          <UiText
-            variant="bodySmall"
-            color={busy ? colors.textMuted : colors.primary}
-            style={{ fontWeight: '600' }}
+        {/* A used-up code sends its replacement from the primary button, so
+            the link would only repeat it. */}
+        {usedUp ? null : (
+          <Pressable
+            onPress={() => onResend()}
+            disabled={busy}
+            accessibilityRole="button"
+            hitSlop={8}
           >
-            {t('contact.code.resend')}
-          </UiText>
-        </Pressable>
+            <UiText
+              variant="bodySmall"
+              color={busy ? colors.textMuted : colors.primary}
+              style={{ fontWeight: '600' }}
+            >
+              {t('contact.code.resend')}
+            </UiText>
+          </Pressable>
+        )}
       </View>
 
       {otherChannel ? (
@@ -118,14 +133,22 @@ export function ContactCodeStep({
       ) : null}
 
       {error ? (
-        <UiText variant="bodySmall" color={colors.error} style={{ marginTop: spacing.sm }}>
-          {/* The remaining count is what stops someone burning the whole
-              budget guessing — without it there is no signal the code is
-              about to die. */}
-          {attemptsLeft !== undefined
-            ? `${error} ${attemptsLeft} ${attemptsLeft === 1 ? 'attempt' : 'attempts'} left.`
-            : error}
-        </UiText>
+        // A tinted error card rather than a line of small text: a wrong or
+        // used-up code is the one thing the applicant must notice here. The
+        // remaining count is what stops someone burning the whole budget
+        // guessing; without it there is no signal the code is about to die.
+        <View style={{ marginTop: spacing.md }}>
+          <UiAlert
+            variant="error"
+            // The title, as Flutter does: the foreground colour and semibold.
+            // As the message it was drawn one step quieter, in grey.
+            title={
+              attemptsLeft !== undefined
+                ? `${error} ${attemptsLeft} ${attemptsLeft === 1 ? 'attempt' : 'attempts'} left.`
+                : error
+            }
+          />
+        </View>
       ) : null}
     </View>
   );

@@ -9,6 +9,7 @@ import { useTheme } from './runtime';
 import { documentHintIsAction, documentHintText, useAutoCapture, type AutoCaptureState, type CornerFraming } from '../capture';
 import { shortDocumentLabel, specimenTitle } from '../config/idTypes';
 import { useTurnOverHold } from './viewfinder/TurnOverPrompt';
+import { recordsDocumentClip } from './viewfinder/documentClip';
 import { regionCountryName } from '../config/regions';
 import type { MrzScan } from '../mrz/parse';
 import { useVideoRecorder } from './useVideoRecorder';
@@ -132,15 +133,21 @@ export function CameraViewfinder({
   const ready = !!device;
   const recorder = useVideoRecorder(videoOutput, ready);
 
-  // Record while the side's camera is live; restart when the side changes.
+  // Only over the full-screen camera, where the prompt can be drawn.
+  const turnedOver = !!turnOver && !!fill && side === 'back';
+  const { turning, finish: finishTurn } = useTurnOverHold(turnedOver);
+
+  // Record while the side's camera is live; restart when the side changes. The
+  // back's clip waits for the turn-over to end (viewfinder/documentClip.ts).
+  const recordingClip = recordsDocumentClip({ active, ready, waitingForTurn: turnedOver && turning });
   useEffect(() => {
-    if (active && ready) recorder.start();
+    if (recordingClip) recorder.start();
     return () => {
       void recorder.stop();
     };
     // `side` in the deps restarts the recording for the back side.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, ready, side]);
+  }, [recordingClip, side]);
 
   // Immersive insets its own controls (there is no header to sit under).
   //
@@ -203,10 +210,6 @@ export function CameraViewfinder({
       capturingRef.current = false;
     }
   }, [busy, ready, recorder, photoOutput, onCapture, guideAspect]);
-
-  // Only over the full-screen camera, where the prompt can be drawn.
-  const turnedOver = !!turnOver && !!fill && side === 'back';
-  const { turning, finish: finishTurn } = useTurnOverHold(turnedOver);
 
   // ── Auto-capture ──────────────────────────────────────────────────────────
   // Runs only with a document to check against; without one there is nothing to

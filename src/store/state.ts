@@ -26,6 +26,7 @@ import type { SelfieUploadState } from '../lib/selfie-upload-wait';
 import type { SilentCaptureFrame, SilentCaptureMoment } from '../lib/silentCapture';
 import type { AddressBookReuse, AddressBookSaveChoice } from '../lib/address-book';
 import type { AddressBookFlowState } from './addressBook';
+import type { DeclinedChannel, DeclinedSession } from '../lib/session-declined';
 
 export interface VerificationMediaIds {
   /** Proof-of-address document (image or PDF). */
@@ -344,6 +345,13 @@ export interface VerificationState {
    */
   cancelled: { message: string } | null;
   /**
+   * Set when the server refused this session as DECLINED
+   * (lib/session-declined.ts), from whichever request learned it first: the
+   * API client reports every `session_declined` refusal here. Terminal for
+   * this run, like `cancelled`: the flow swaps to the declined screen.
+   */
+  declined: DeclinedSession | null;
+  /**
    * What the register said about the company the applicant identified — the
    * paid check run at SELECTION (`/business/select`), so the officer list is
    * already here by the time the key-people step asks for it. `officers` is
@@ -561,6 +569,8 @@ export interface VerificationState {
   /** Step BACK into the previous slot, restoring what it captured. */
   uncommitMultiIdSlot: (step: VerificationStep) => void;
   setMediaId: (key: MediaIdKey, mediaId: string) => void;
+  /** Drop uploaded media ids, e.g. a document capture's before it is uploaded again. */
+  clearMediaIds: (keys: MediaIdKey[]) => void;
   /** Record the captured selfie's local path (null on retake). */
   setSelfiePreview: (uri: string | null) => void;
   /** Retake: drop the selfie preview + its uploaded media ids in one set. */
@@ -588,6 +598,15 @@ export interface VerificationState {
   setSessionId: (sessionId: string, sessionUrl?: string | null) => void;
   /** Stop the flow on the cancelled screen. Idempotent: the first message wins. */
   markCancelled: (message: string) => void;
+  /**
+   * Stop the flow on the declined screen. Idempotent: the first refusal wins,
+   * except that a later call naming the channel fills one the first lacked.
+   * With no channel, the contact step on screen (if any) names it.
+   */
+  markDeclined: (
+    refusal: { message: string | null; reasonCode: string | null },
+    channel?: DeclinedChannel | null,
+  ) => void;
   /** Run the paid registry check for the typed company. Never blocks the flow. */
   checkBusiness: () => Promise<BusinessCheckResult>;
   setKeyPeople: (rows: KeyPersonEntry[]) => void;

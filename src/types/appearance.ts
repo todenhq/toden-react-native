@@ -66,11 +66,15 @@ export interface VerificationAppearance {
    * - An image URL renders that logo.
    * - The literal `'default'` renders the org's own logo from the server config
    *   response (falls back to the built-in shield if the org has none set).
-   * - Omitted renders the built-in shield badge.
+   * - Omitted shows the organisation's logo, as `'default'` does (the built-in
+   *   shield if the organisation has none).
+   * - An empty string (`''`) shows no logo. A workflow's "None" logo is this,
+   *   and it wins over a logo the app sets.
    */
   logo?: string;
-  /** Initial mode. 'system' follows the device's colour scheme (live, until
-   *  the in-flow theme toggle picks one); applied on mount. */
+  /** Initial mode. 'system' (the default when neither this nor the workflow
+   *  sets one) follows the device's colour scheme, live, until the in-flow
+   *  theme toggle picks one; applied on mount. */
   theme?: 'light' | 'dark' | 'system';
 }
 

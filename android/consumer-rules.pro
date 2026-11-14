@@ -20,3 +20,11 @@
 # shrink-time surprises out of a decode that runs once per chip read.
 -keep class jj2000.** { *; }
 -dontwarn jj2000.**
+
+# ML Kit (face detection, text recognition) starts from component registrars it
+# builds by reflection, through their no-argument constructors. R8 removed them
+# in a Flutter SDK release build ("Could not instantiate ...TextRegistrar ...
+# NoSuchMethodException <init> []"), ML Kit never started and every scan found
+# nothing. The same libraries are used here, so the same keeps apply.
+-keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }
+-keep class com.google.mlkit.**.*Registrar { <init>(); }

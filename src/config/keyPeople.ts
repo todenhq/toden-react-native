@@ -225,7 +225,7 @@ export function keyPeoplePayload(
     }));
 }
 
-/** "Richard Ingwe" → "RI" — the avatar monogram used on person cards. */
+/** "Chinedu Okeke" → "CO" — the avatar monogram used on person cards. */
 export function initialsOf(name: string): string {
   return name
     .trim()
@@ -247,7 +247,7 @@ export function splitFullName(name: string): { firstName?: string; lastName?: st
  * Loose "is this the same person?" match used ONLY to PRE-SELECT the
  * applicant's own entry on the applicant-role step (from the consumer's
  * userData). Every token of the shorter name must appear in the longer one,
- * so "Richard Ingwe" matches "Richard A. Ingwe" but never "Jane Ingwe". The
+ * so "Chinedu Okeke" matches "Chinedu A. Okeke" but never "Jane Okeke". The
  * user still confirms explicitly — this never merges anything by itself.
  */
 export function namesLooselyMatch(a: string, b: string): boolean {

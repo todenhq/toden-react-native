@@ -109,7 +109,7 @@ describe('saving', () => {
   });
 
   it('reads a saved address by street and area', () => {
-    expect(savedAddressLine({ label: 'Bassey Street', area: 'Calabar South' })).toBe('Bassey Street, Calabar South');
+    expect(savedAddressLine({ label: 'Adebayo Street', area: 'Calabar South' })).toBe('Adebayo Street, Calabar South');
     expect(savedAddressLine({ label: null, area: 'Ikeja' })).toBe('Ikeja');
   });
 });
@@ -118,7 +118,7 @@ describe('usableSavedAddresses', () => {
   const now = new Date('2026-10-26T12:00:00Z');
   const entry = (status: string | null, daysAgo: number | null): SavedAddress => ({
     entryId: `adb_${status}_${daysAgo}`,
-    label: 'Bassey Street',
+    label: 'Adebayo Street',
     area: 'Calabar',
     countryCode: 'NG',
     tier: 'attested',
@@ -149,7 +149,7 @@ describe('usableSavedAddresses', () => {
 
 describe('offerTitleKey', () => {
   it('greets the person when the host app named them', () => {
-    expect(offerTitleKey('Richard')).toBe('address.book.offer.titleNamed');
+    expect(offerTitleKey('Chinedu')).toBe('address.book.offer.titleNamed');
   });
 
   it('keeps the plain title without a usable name, so no comma is left behind', () => {

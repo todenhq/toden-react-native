@@ -244,6 +244,17 @@ export interface VerificationConfig<C extends SupportedCountry = SupportedCountr
   flashSequenceLength?: number;
 
   /**
+   * The most failed liveness checks one verification attempt may have (1 to
+   * 3). Absent means no limit. Each failed check is reported to the server,
+   * the failure panel says how many attempts are left, and at the limit the
+   * server declines the session (`session_declined`, reason
+   * `liveness_attempts_exceeded`): the flow ends on the declined screen.
+   * Normally set by a workflow; the server reads the limit from the published
+   * workflow, never from the app. See lib/liveness-attempts.
+   */
+  maxLivenessAttempts?: number | false;
+
+  /**
    * Light the person's face from the screen while the liveness camera is on:
    * the flow switches to the light theme (the organisation's own light
    * colours) and raises this app's screen brightness to full, then puts both

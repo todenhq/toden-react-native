@@ -8,11 +8,11 @@ import { mrzCheckDigit, parseMrz } from '../mrz/parse';
 // digits produces a fixture that fails for a reason unrelated to what is being
 // tested (it did, first time round) — and worse, a fixture whose digits happened
 // to be wrong in the same way as the code would pass while proving nothing.
-const DOC = 'B51305135';
-const DOB = '990725';
+const DOC = 'A12345674';
+const DOB = '920719';
 const EXPIRY = '341029';
 
-const L1 = 'P<NGAINGWE<<RICHARD<UNIMKE'.padEnd(44, '<');
+const L1 = 'P<NGAOKEKE<<CHINEDU<OBINNA'.padEnd(44, '<');
 
 const L2 = ((): string => {
   const head =
@@ -56,9 +56,9 @@ function dg1(mrz: string): string {
 describe('parseDg1', () => {
   it('reads the holder name off the chip exactly', () => {
     const scan = parseDg1(dg1(MRZ));
-    expect(scan?.lastName).toBe('INGWE');
-    expect(scan?.firstName).toBe('RICHARD UNIMKE');
-    expect(scan?.documentNumber).toBe('B51305135');
+    expect(scan?.lastName).toBe('OKEKE');
+    expect(scan?.firstName).toBe('CHINEDU OBINNA');
+    expect(scan?.documentNumber).toBe('A12345674');
     expect(scan?.nationality).toBe('NGA');
   });
 
@@ -76,8 +76,8 @@ describe('parseDg1', () => {
   // check digit still validates and the scan is accepted: the name is silently
   // wrong and nothing in the MRZ can tell, because TD3 carries no check digit
   // over the name field.
-  it('is immune to the camera misread that produced "KKKK INGWEK RICHARD UNIMKE"', () => {
-    const misread = L1.replace('INGWE<<RICHARD', 'INGWEK<RICHARD').replace(
+  it('is immune to the camera misread that produced "KKKK OKEKEK CHINEDU OBINNA"', () => {
+    const misread = L1.replace('OKEKE<<CHINEDU', 'OKEKEK<CHINEDU').replace(
       /<{4}$/,
       'KKKK',
     );
@@ -88,12 +88,12 @@ describe('parseDg1', () => {
     expect(fromCamera).not.toBeNull();
     expect(
       [fromCamera?.firstName, fromCamera?.lastName].filter(Boolean).join(' '),
-    ).toBe('KKKK INGWEK RICHARD UNIMKE');
+    ).toBe('KKKK OKEKEK CHINEDU OBINNA');
 
     // The chip is unaffected by whatever the camera thought it saw.
     const fromChip = parseDg1(dg1(MRZ));
     expect([fromChip?.firstName, fromChip?.lastName].join(' ')).toBe(
-      'RICHARD UNIMKE INGWE',
+      'CHINEDU OBINNA OKEKE',
     );
   });
 });

@@ -7,7 +7,6 @@ import { UiText } from '../Typography';
 import { UiButton } from '../UiButton';
 import { Icon } from '../Icon';
 import { VerificationSheet } from '../VerificationSheet';
-import { Badge } from '../../screens/SubmittedBadge';
 import { CANCELLED_TITLE, DEFAULT_CANCELLED_MESSAGE } from '../../lib/session-cancelled';
 import { safeReportError } from '../../services/errors';
 import { VerificationError } from '../../types/verification';
@@ -45,31 +44,54 @@ export function SessionCancelled({
   message?: string | null;
   onClose: () => void;
 }): React.ReactElement {
+  return <SessionEnded title={CANCELLED_TITLE} body={message || DEFAULT_CANCELLED_MESSAGE} onClose={onClose} />;
+}
+
+/**
+ * The terminal screen a session the server will no longer accept ends on
+ * (cancelled, declined): the error badge, a title, the reason and Close.
+ */
+export function SessionEnded({
+  title,
+  body,
+  onClose,
+}: {
+  title: string;
+  body: string;
+  onClose: () => void;
+}): React.ReactElement {
   const { colors } = useTheme();
   return (
     <VerificationSheet title="" onClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'space-between' }}>
+      {/* Flutter's blocking screen, exactly: one group centred in the sheet
+          (an 80px circle at the error colour's 10%, a 40px icon, 24px between
+          blocks, 4px within the text) with Close right under the words, not
+          pushed to the bottom. */}
+      <View style={{ flex: 1, justifyContent: 'center', paddingVertical: spacing.xl }}>
         <View style={{ alignItems: 'center' }}>
-          <View style={{ height: spacing.xl }} />
-          <Badge bg={colors.errorBg} border={`${colors.error}4D`}>
-            <Icon name="circle-x" size={44} color={colors.error} />
-          </Badge>
-          <View style={{ height: spacing.lg }} />
-          <UiText variant="heading1" style={{ textAlign: 'center' }} accessibilityRole="header">
-            {CANCELLED_TITLE}
-          </UiText>
-          <View style={{ height: spacing.sm }} />
-          <UiText
-            variant="bodyMedium"
-            color={colors.textSecondary}
-            style={{ textAlign: 'center', paddingHorizontal: spacing.lg }}
+          <View
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: `${colors.error}1A`,
+            }}
           >
-            {message || DEFAULT_CANCELLED_MESSAGE}
-          </UiText>
+            <Icon name="circle-x" size={40} color={colors.error} />
+          </View>
         </View>
-        <View style={{ paddingTop: spacing.lg }}>
-          <UiButton label="Close" onPress={onClose} />
-        </View>
+        <View style={{ height: spacing.lg }} />
+        <UiText variant="heading2" style={{ textAlign: 'center' }} accessibilityRole="header">
+          {title}
+        </UiText>
+        <View style={{ height: spacing.xs }} />
+        <UiText variant="bodyMedium" color={colors.textSecondary} style={{ textAlign: 'center' }}>
+          {body}
+        </UiText>
+        <View style={{ height: spacing.lg }} />
+        <UiButton label="Close" onPress={onClose} />
       </View>
     </VerificationSheet>
   );

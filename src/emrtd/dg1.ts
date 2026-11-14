@@ -12,9 +12,9 @@ import { parseMrz, type MrzScan } from '../mrz/parse';
 // The camera scan is a GUESS at the same characters, and it is not a safe
 // substitute for display. Measured on a real Nigerian passport read on a Galaxy
 // S24: the on-device recogniser read the first '<' of the '<<' surname
-// separator as 'K', so `INGWE<<RICHARD<UNIMKE` arrived as `INGWEK<RICHARD…`.
+// separator as 'K', so `OKEKE<<CHINEDU<OBINNA` arrived as `OKEKEK<CHINEDU…`.
 // The split then never fired at the surname boundary and landed in the trailing
-// filler instead, yielding lastName "INGWEK RICHARD UNIMKE" and firstName
+// filler instead, yielding lastName "OKEKEK CHINEDU OBINNA" and firstName
 // "KKKK" — displayed under a caption promising we had read the secure chip.
 //
 // TD3 carries NO check digit over the name field (only line 2 is protected), so

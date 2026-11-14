@@ -26,7 +26,7 @@ export interface CurrentFix {
   lat: number;
   lng: number;
   accuracy: number | null;
-  /** The reverse-geocoded line ("11 Bassey Street, Calabar"), when known. */
+  /** The reverse-geocoded line ("11 Adebayo Street, Calabar"), when known. */
   label: string | null;
   parts: AddressParts | null;
 }

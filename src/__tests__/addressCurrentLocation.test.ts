@@ -21,7 +21,7 @@ import type { ResolvedVerificationConfig } from '../types/config';
 function source(over: Partial<FixSource> = {}): FixSource {
   return {
     takeFix: async () => ({ fix: { lat: 4.9, lng: 8.3, accuracy: 12 } }),
-    addressReverse: async () => ({ line: '11 Bassey Street', parts: null }),
+    addressReverse: async () => ({ line: '11 Adebayo Street', parts: null }),
     ...over,
   };
 }
@@ -43,7 +43,7 @@ it('resolves a fix with its reverse-geocoded line', async () => {
     lat: 4.9,
     lng: 8.3,
     accuracy: 12,
-    label: '11 Bassey Street',
+    label: '11 Adebayo Street',
     parts: null,
   });
   expect(currentFix()).toBe(fix);

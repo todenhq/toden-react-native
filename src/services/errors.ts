@@ -10,6 +10,7 @@
 import { VerificationApiError } from './api';
 import { VerificationError, type VerificationErrorCode } from '../types/verification';
 import { cancelledRefusalOf } from '../lib/session-cancelled';
+import { declinedRefusalOf, declinedScreenCopy } from '../lib/session-declined';
 import { BUSINESS_DOCUMENT_LABELS } from '../config/businessSteps';
 import { businessDocumentGroupTitle } from '../config/businessDocumentGroups';
 import type { BusinessDocumentKey } from '../types/business';
@@ -56,6 +57,11 @@ export function mapToVerificationError(err: unknown, context: ErrorContext): Ver
     // its own code rather than a generic "try again" one.
     const cancelled = cancelledRefusalOf(err);
     if (cancelled) return new VerificationError('session_cancelled', cancelled.message);
+    // A declined session is terminal too: every later request is refused.
+    const declined = declinedRefusalOf(err);
+    if (declined) {
+      return new VerificationError('session_declined', declinedScreenCopy({ ...declined, channel: null }).body);
+    }
     if (err.statusCode === 401) {
       return new VerificationError('invalid_api_key', 'Invalid API key. Please contact support.');
     }

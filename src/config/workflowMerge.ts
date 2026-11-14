@@ -33,6 +33,9 @@ export const WORKFLOW_KEYS = [
   'enableLiveness',
   'livenessMode',
   'flashSequenceLength',
+  // The failed liveness checks allowed before the server declines the session
+  // (lib/liveness-attempts).
+  'maxLivenessAttempts',
   // The light theme and full brightness while the liveness camera is on
   // (lib/bright-screen).
   'livenessBrightScreen',
@@ -144,6 +147,7 @@ const APPLICANT_LEG_KEYS = [
   'enableLiveness',
   'livenessMode',
   'flashSequenceLength',
+  'maxLivenessAttempts',
   'livenessBrightScreen',
   'selfieReview',
   'nfc',

@@ -120,11 +120,13 @@ export function stepHeaderMeta(
         return contactMeta('email', {
           codeLength: contactCodeLength(config.emailVerification),
           challenge: contactChallenge,
+          alphanumeric: config.emailVerification?.alphanumericCode === true,
         }, t, scopedBusiness);
       case 'phone-verification':
         return contactMeta('phone', {
           codeLength: contactCodeLength(config.phoneVerification),
           challenge: contactChallenge,
+          alphanumeric: config.phoneVerification?.alphanumericCode === true,
         }, t, scopedBusiness);
       case 'proof-of-address': {
         // Word the ask by the rule the server will judge THIS document under:

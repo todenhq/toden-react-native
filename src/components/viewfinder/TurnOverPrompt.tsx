@@ -28,6 +28,14 @@ const FLIP_MS = 800;
 /** True while the camera should wait. Starts again each time `needed` turns on. */
 export function useTurnOverHold(needed: boolean): { turning: boolean; finish: () => void } {
   const [turning, setTurning] = useState(needed);
+  // Follow `needed` in the same render it changes, not an effect later: the
+  // render where the back's camera appears must already be waiting, or the
+  // back's clip and auto-capture start for one render with the front still up.
+  const [lastNeeded, setLastNeeded] = useState(needed);
+  if (needed !== lastNeeded) {
+    setLastNeeded(needed);
+    setTurning(needed);
+  }
   useEffect(() => {
     setTurning(needed);
     if (!needed) return undefined;

@@ -44,3 +44,53 @@ describe('pastedCode', () => {
     expect(pastedCode('', 6)).toBeNull();
   });
 });
+
+// An alphanumeric code (the workflow's `alphanumericCode`): any ASCII letter or
+// digit, upper-cased. Sandbox still sends zeros, so digits alone must pass too.
+describe('otpCodeFrom, letters and digits', () => {
+  it('upper-cases what is typed and keeps letters and digits', () => {
+    expect(otpCodeFrom('k7m', 'k7', 6, true)).toBe('K7M');
+    expect(otpCodeFrom('K7M!', 'K7M', 6, true)).toBe('K7M');
+    expect(otpCodeFrom('000000', '00000', 6, true)).toBe('000000');
+  });
+
+  it('drops spaces and dashes', () => {
+    expect(otpCodeFrom('K7M P2Q', '', 6, true)).toBe('K7MP2Q');
+    expect(otpCodeFrom('k7m-p2q', '', 6, true)).toBe('K7MP2Q');
+  });
+
+  it('finds the code in the sentence it was copied from', () => {
+    expect(otpCodeFrom('Your code is K7MP2Q. It expires soon.', '', 6, true)).toBe('K7MP2Q');
+    expect(otpCodeFrom('Your Toden code: HJKM', '', 4, true)).toBe('HJKM');
+    expect(otpCodeFrom('CODE: K7MP', '', 4, true)).toBe('K7MP');
+  });
+
+  it('truncates to the code length', () => {
+    expect(otpCodeFrom('K7MP2QX', 'K7MP2Q', 6, true)).toBe('K7MP2Q');
+    expect(otpCodeFrom('abK7MP2Q', 'ab', 6, true)).toBe('K7MP2Q');
+  });
+
+  it('leaves the digits-only reading alone', () => {
+    expect(otpCodeFrom('12a', '12', 6)).toBe('12');
+    expect(otpCodeFrom('12a', '12', 6, false)).toBe('12');
+  });
+});
+
+describe('pastedCode, letters and digits', () => {
+  it('takes a code, however it was copied', () => {
+    expect(pastedCode('Your code is K7MP2Q', 6, true)).toBe('K7MP2Q');
+    expect(pastedCode('k7m p2q', 6, true)).toBe('K7MP2Q');
+    expect(pastedCode('K7M-P2Q', 6, true)).toBe('K7MP2Q');
+    expect(pastedCode('000000', 6, true)).toBe('000000');
+  });
+
+  it('refuses what is not a code', () => {
+    expect(pastedCode('08031234567', 6, true)).toBeNull();
+    expect(pastedCode('hello', 6, true)).toBeNull();
+    expect(pastedCode('', 6, true)).toBeNull();
+  });
+
+  it('still refuses letters with digits only', () => {
+    expect(pastedCode('K7MP2Q', 6)).toBeNull();
+  });
+});

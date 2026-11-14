@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { View } from 'react-native';
 
 import { spacing } from '../config/theme';
@@ -15,8 +15,10 @@ import {
   sentCodeLength,
   type PhoneOtpChannel,
 } from '../config/contact';
-import { attemptsRemaining, describeCheckError, describeSendError } from '../services/contactErrors';
+import { describeSendError } from '../services/contactErrors';
 import { stepAfterContactVerified } from '../lib/contact-recovery';
+import { INITIAL_CODE_ENTRY, codeEntryReducer } from '../lib/contact-code-state';
+import { declinedRefusalOf } from '../lib/session-declined';
 
 // ---------------------------------------------------------------------------
 // Contact-verification OTP step — email or phone, one component, two mounts.
@@ -48,6 +50,8 @@ export function ContactVerificationStep({
   const [sentLength, setSentLength] = useState<number | null>(null);
   const codeLength = sentLength ?? configuredLength;
   const inputStyle = stepConfig?.inputStyle ?? 'segmented';
+  // Letters as well as digits, when the org turned it on in the builder.
+  const alphanumeric = stepConfig?.alphanumericCode === true;
   // The org decides which channels are on offer; the user picks between them.
   const offeredChannels: PhoneOtpChannel[] = isEmail
     ? []
@@ -64,10 +68,11 @@ export function ContactVerificationStep({
   );
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
-  const [code, setCode] = useState('');
+  // The code, its message and whether it is used up (lib/contact-code-state).
+  const [entry, dispatch] = useReducer(codeEntryReducer, INITIAL_CODE_ENTRY);
+  const { code, error, attemptsLeft, usedUp } = entry;
+  const setCode = useCallback((next: string) => dispatch({ type: 'typed', code: next }), []);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [attemptsLeft, setAttemptsLeft] = useState<number | undefined>(undefined);
   const otherChannel = offeredChannels.find((c) => c !== via) ?? null;
 
   const value = isEmail ? destination.trim() : phone.e164;
@@ -105,8 +110,7 @@ export function ContactVerificationStep({
     const sendVia = switchTo ?? via;
     if (switchTo) setVia(switchTo);
     setBusy(true);
-    setError(null);
-    setAttemptsLeft(undefined);
+    dispatch({ type: 'request' });
     try {
       const res = await store.getState().api.contactSend({
         channel,
@@ -123,26 +127,44 @@ export function ContactVerificationStep({
       setSentLength(sentCodeLength(res.codeLength, configuredLength));
       setChallengeId(res.challengeId);
       setExpiresAt(res.expiresAt ?? null);
-      setCode('');
+      // A new code: clears the old one, its message and any used-up lock.
+      dispatch({ type: 'sent' });
     } catch (err) {
-      setError(describeSendError(err));
+      // Declined: the flow is already on the declined screen (the API client
+      // marked it); nothing here to show.
+      const declined = declinedRefusalOf(err);
+      if (declined) {
+        store.getState().markDeclined(declined, channel);
+        return;
+      }
+      dispatch({ type: 'sendFailed', message: describeSendError(err) });
     } finally {
       setBusy(false);
     }
   };
 
   const check = async (submitted: string): Promise<void> => {
-    if (!challengeId || submitted.length !== codeLength) return;
+    if (!challengeId || usedUp || submitted.length !== codeLength) return;
     setBusy(true);
-    setError(null);
+    dispatch({ type: 'request' });
     try {
-      const res = await store.getState().api.contactCheck({ challengeId, code: submitted });
+      const res = await store.getState().api.contactCheck({
+        challengeId,
+        code: submitted,
+        ...(sessionId ? { sessionId } : {}),
+        ...(country ? { country } : {}),
+      });
       store.getState().setContactVerified(channel, value, res.token);
       advance();
     } catch (err) {
-      setError(describeCheckError(err));
-      setAttemptsLeft(attemptsRemaining(err));
-      setCode('');
+      // The last attempt declined the session (`declineOnLastAttempt`): the
+      // flow ends on the declined screen, named for this channel.
+      const declined = declinedRefusalOf(err);
+      if (declined) {
+        store.getState().markDeclined(declined, channel);
+        return;
+      }
+      dispatch({ type: 'checkFailed', err });
     } finally {
       setBusy(false);
     }
@@ -164,10 +186,17 @@ export function ContactVerificationStep({
     <View>
       {challengeId ? (
         <ContactCodeStep
+          // A fresh field for each code sent. On iOS a TextInput that goes
+          // from editable={false} back to true can stay locked, and autoFocus
+          // only runs on mount; remounting gives the new code an editable,
+          // empty, focused field (as Flutter keys its field on the send).
+          key={challengeId}
           codeLength={codeLength}
           inputStyle={inputStyle}
+          alphanumeric={alphanumeric}
           code={code}
           busy={busy}
+          usedUp={usedUp}
           error={error}
           attemptsLeft={attemptsLeft}
           expiresAt={expiresAt}
@@ -195,11 +224,13 @@ export function ContactVerificationStep({
 
       <ContactActions
         hasChallenge={challengeId != null}
+        codeUsedUp={usedUp}
         busy={busy}
-        disabled={challengeId ? code.length !== codeLength : !canSend}
+        disabled={challengeId ? !usedUp && code.length !== codeLength : !canSend}
         required={required}
         isEmail={isEmail}
-        onPrimary={() => (challengeId ? void check(code) : void send())}
+        // A used-up code: the button sends a new one down the same channel.
+        onPrimary={() => (challengeId && !usedUp ? void check(code) : void send())}
         onSkip={advance}
       />
     </View>

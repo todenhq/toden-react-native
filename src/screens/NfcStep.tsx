@@ -14,6 +14,8 @@ import { successHaptic } from '../services/haptics';
 import { NfcSuccessPanel } from './nfc/NfcSuccessPanel';
 import { NfcMrzPrompt } from './nfc/NfcMrzPrompt';
 import { NfcReadBody } from './nfc/NfcReadBody';
+import { NfcIntro } from './nfc/NfcIntro';
+import { isPassportId } from '../lib/nfcIntro';
 import { NfcReadActions } from './nfc/NfcReadActions';
 import type { NfcReadStage } from '../emrtd';
 import type { MrzScan } from '../mrz/parse';
@@ -51,6 +53,10 @@ export function NfcStep(): React.ReactElement {
   const store = useVerificationStore();
   const { colors } = useTheme();
   const mrz = useFlowState((s) => s.mrzScan);
+  const idKey = useFlowState((s) => s.selectedIdType);
+  // The explanation comes first: nothing is read, and no camera opens, until
+  // the person has seen how to hold the document and pressed Continue.
+  const [introDone, setIntroDone] = useState(false);
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -90,10 +96,10 @@ export function NfcStep(): React.ReactElement {
   const allowSkip = config.nfc?.allowSkip === true;
   const [skipRevealed, setSkipRevealed] = useState(false);
   useEffect(() => {
-    if (!allowSkip || skipRevealed) return;
+    if (!allowSkip || skipRevealed || !introDone) return;
     const timer = setTimeout(() => setSkipRevealed(true), SKIP_REVEAL_MS);
     return () => clearTimeout(timer);
-  }, [allowSkip, skipRevealed]);
+  }, [allowSkip, skipRevealed, introDone]);
 
   useEffect(() => {
     // NOTHING auto-skips this step any more.
@@ -200,13 +206,13 @@ export function NfcStep(): React.ReactElement {
     }
   }, [mrz, store, advance]);
 
-  // Start the read as soon as the step opens.
+  // Start the read as soon as the intro's Continue is pressed.
   //
-  // The MRZ was already lifted off the photo page during document capture, so
-  // everything needed to unlock the chip is in hand — asking the user to press
-  // a button first adds a step that answers no question. Flutter goes straight
-  // to the read for the same reason, and a user who has just been told to hold
-  // the document to the phone expects it to be listening.
+  // It used to start on arrival, on the reasoning that a button first answers
+  // no question. It does answer one: where the chip is. Most people have never
+  // had a phone read a passport and do not know the chip is in the cover, so
+  // the intro (nfc/NfcIntro.tsx) says how to hold it, and Continue is the
+  // moment they are ready. Flutter does the same.
   //
   // Once per arrival: `startedRef` is cleared only when the step is left, so a
   // failure shows its own Try again rather than being restarted underneath the
@@ -216,11 +222,11 @@ export function NfcStep(): React.ReactElement {
     // Attempt the read on any settled verdict, not only a positive one — the
     // availability check is no longer trusted to veto (see above). `checking`
     // still waits, so a session is never opened before the module has resolved.
-    if (availability === 'checking' || !mrz) return;
+    if (!introDone || availability === 'checking' || !mrz) return;
     if (startedRef.current) return;
     startedRef.current = true;
     void read();
-  }, [availability, mrz, read]);
+  }, [introDone, availability, mrz, read]);
 
   // The success panel lives in its own file (200-line rule) — it is the only
   // part of this step with real layout.
@@ -238,6 +244,12 @@ export function NfcStep(): React.ReactElement {
           void read();
         }}
       />
+    );
+  }
+
+  if (!introDone) {
+    return (
+      <NfcIntro passport={isPassportId(idKey)} needsCode={!mrz} onContinue={() => setIntroDone(true)} />
     );
   }
 

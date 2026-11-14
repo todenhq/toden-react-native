@@ -34,29 +34,27 @@ export function NfcReadBody({
       <NfcScanIllustration />
       <View style={{ height: spacing.lg }} />
 
+      {/* The header already says where to hold the document, so the body
+          says only what is happening: waiting for the chip, then each step of
+          the read (the builder preview draws the same). */}
       {reading ? (
         <>
-          <UiText variant="bodyMedium" style={{ textAlign: 'center' }}>
-            {stage === 'waiting'
-              ? 'Hold the top edge of your document flat against the back of your phone and keep still…'
-              : 'Chip detected — keep the document still until this finishes.'}
-          </UiText>
-          <View style={{ height: spacing.md }} />
+          {stage !== 'waiting' && (
+            <>
+              <UiText variant="bodySmall" color={colors.textMuted} style={{ textAlign: 'center' }}>
+                Chip found. Keep still until this finishes.
+              </UiText>
+              <View style={{ height: spacing.md }} />
+            </>
+          )}
           <NfcReadProgress stage={stage} />
         </>
       ) : (
-        <>
-          <UiText variant="bodySmall" color={colors.textMuted} style={{ textAlign: 'center' }}>
-            Hold the top edge of your document flat against the back of your
-            phone and keep still…
-          </UiText>
-          {/* Shown BEFORE the read, so the wrong document is obvious now rather
-              than after an opaque BAC failure. */}
-          <View style={{ height: spacing.md }} />
-          <View style={{ alignSelf: 'stretch' }}>
-            <NfcScannedSummary scan={scan} />
-          </View>
-        </>
+        // Shown BEFORE the read, so the wrong document is obvious now rather
+        // than after an opaque BAC failure.
+        <View style={{ alignSelf: 'stretch' }}>
+          <NfcScannedSummary scan={scan} />
+        </View>
       )}
     </>
   );

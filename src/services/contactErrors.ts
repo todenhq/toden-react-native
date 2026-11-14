@@ -27,7 +27,19 @@ function describe(err: unknown, map: Record<string, string>): string {
   return 'Something went wrong. Please try again.';
 }
 
-export const describeSendError = (err: unknown): string => describe(err, SEND_ERRORS);
+/**
+ * A workflow that takes work addresses only refuses a free-provider one with
+ * `invalid_destination` and this reason; an older server sends no reason.
+ */
+const CORPORATE_EMAIL_REQUIRED =
+  'Use your work email address. Personal email services such as Gmail are not accepted here.';
+
+export const describeSendError = (err: unknown): string =>
+  err instanceof VerificationApiError &&
+  err.code === 'invalid_destination' &&
+  err.body?.reason === 'corporate_email_required'
+    ? CORPORATE_EMAIL_REQUIRED
+    : describe(err, SEND_ERRORS);
 export const describeCheckError = (err: unknown): string => describe(err, CHECK_ERRORS);
 
 /**
@@ -41,3 +53,18 @@ export function attemptsRemaining(err: unknown): number | undefined {
   const value = err.body?.attemptsRemaining;
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
+
+/**
+ * Is the code the check was for used up? Either the wrong guess spent its
+ * last attempt (`invalid_code` with `attemptsRemaining: 0`), or a check on an
+ * already used-up code was refused (`too_many_attempts`). No further guess on
+ * it can succeed, so the field is disabled until a new code is sent.
+ */
+export function isCodeUsedUp(err: unknown): boolean {
+  if (!(err instanceof VerificationApiError)) return false;
+  if (err.code === 'too_many_attempts') return true;
+  return err.code === 'invalid_code' && attemptsRemaining(err) === 0;
+}
+
+/** The message a used-up code shows, whichever signal said so. */
+export const CODE_USED_UP_MESSAGE = CHECK_ERRORS.too_many_attempts!;

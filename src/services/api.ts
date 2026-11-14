@@ -1,6 +1,7 @@
 import { compactDrawing, type SignatureDrawing } from '../lib/signature';
 import { SDK_VERSION } from './deviceMetadata';
 import { businessSearchQuery, type BusinessSearchParams } from '../config/businessSearch';
+import { readLivenessFailed, type LivenessFailedResult } from '../lib/liveness-attempts';
 import type {
   AddressBookAddressesResponse,
   AddressBookCodeResponse,
@@ -165,6 +166,12 @@ export interface VerificationApiOptions {
    * device. Absent (Device Intelligence off) means no header.
    */
   deviceId?: () => Promise<string | undefined>;
+  /**
+   * Told about every error response before it is thrown to the caller, so
+   * the store can stop the flow on a terminal refusal (a declined session)
+   * whichever call met it. Must not throw; a throw is ignored.
+   */
+  onRefusal?: (err: VerificationApiError) => void;
 }
 
 /** The upload headers: the shared ones plus the device id, when known. */
@@ -182,6 +189,22 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
   const base = `${baseUrl}/api/v1`;
   const headers = baseHeaders(apiKey);
 
+  // Every response goes through here, so `onRefusal` sees every refusal.
+  async function respond<T>(res: Response): Promise<T> {
+    try {
+      return await handleResponse<T>(res);
+    } catch (err) {
+      if (err instanceof VerificationApiError && options.onRefusal) {
+        try {
+          options.onRefusal(err);
+        } catch {
+          // A listener must never change what the caller receives.
+        }
+      }
+      throw err;
+    }
+  }
+
   // JSON request to our own server (verify, status, config, health).
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const res = await fetch(`${base}${path}`, {
@@ -192,7 +215,7 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
         ...init.headers,
       },
     });
-    return handleResponse<T>(res);
+    return respond<T>(res);
   }
 
   return {
@@ -232,7 +255,7 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
         headers: await uploadHeaders(headers, options.deviceId),
         body: form,
       });
-      const { mediaId } = await handleResponse<UploadResponse>(res);
+      const { mediaId } = await respond<UploadResponse>(res);
       return mediaId;
     },
 
@@ -304,11 +327,35 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
 
     /** Check a typed code. The returned `token` is a single-use proof that
      *  rides the /verify submission. */
-    async contactCheck(body: { challengeId: string; code: string }): Promise<ContactCheckResponse> {
+    /**
+     * Check the typed code. `sessionId` names the attempt, as the web SDK does,
+     * so the server can charge the step when the check completes (and, on a
+     * workflow that declines on the last attempt, decline the right session).
+     */
+    async contactCheck(body: {
+      challengeId: string;
+      code: string;
+      sessionId?: string;
+      country?: string;
+    }): Promise<ContactCheckResponse> {
       return request<ContactCheckResponse>('/contact/check', {
         method: 'POST',
         body: JSON.stringify(body),
       });
+    },
+
+    /**
+     * Report one failed liveness check, for a workflow's `maxLivenessAttempts`
+     * (lib/liveness-attempts). Called once per failure, never retried. At the
+     * limit the server declines the session: that arrives as a thrown
+     * `session_declined` refusal, exactly as on the contact calls.
+     */
+    async livenessFailed(body: { sessionId?: string; country?: string }): Promise<LivenessFailedResult> {
+      const res = await request<unknown>('/liveness/failed', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return readLivenessFailed(res);
     },
 
     /** Whether the email has a saved address this flow could take. */

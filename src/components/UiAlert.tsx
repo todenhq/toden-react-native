@@ -19,7 +19,8 @@ export type AlertVariant = 'info' | 'success' | 'warning' | 'error';
 export interface UiAlertProps {
   variant: AlertVariant;
   title?: string;
-  message: string;
+  /** The quieter second line. Optional: an alert can be its title alone. */
+  message?: string;
 }
 
 const ICONS: Record<AlertVariant, IconName> = {
@@ -86,13 +87,15 @@ export function UiAlert({ variant, title, message }: UiAlertProps): React.ReactE
             {title}
           </UiText>
         ) : null}
-        <UiText
-          variant="bodyMedium"
-          color={colors.textSecondary}
-          style={{ fontSize: 13, lineHeight: 20, marginTop: title ? spacing.xs : 0 }}
-        >
-          {message}
-        </UiText>
+        {message ? (
+          <UiText
+            variant="bodyMedium"
+            color={colors.textSecondary}
+            style={{ fontSize: 13, lineHeight: 20, marginTop: title ? spacing.xs : 0 }}
+          >
+            {message}
+          </UiText>
+        ) : null}
       </View>
     </View>
   );

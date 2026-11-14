@@ -80,7 +80,8 @@ export function startAttemptSession(store: VerificationStore): void {
     .catch((err: unknown) => {
       // Best-effort, except a cancellation: the organisation cancelled this
       // attempt, so the flow stops on the cancelled screen rather than walking
-      // the applicant through capture steps the server will refuse.
+      // the applicant through capture steps the server will refuse. A declined
+      // session stops it the same way, through the API client's onRefusal.
       if (shouldStopOnSessionStartFailure(err)) {
         store.getState().markCancelled(cancelledRefusalOf(err)!.message);
       }
@@ -254,7 +255,7 @@ export function watchSessionProgress(store: VerificationStore): () => void {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       const s = store.getState();
-      if (!s.sessionId || s.cancelled) return;
+      if (!s.sessionId || s.cancelled || s.declined) return;
       const payload = progressFromState(s);
       if (isUntouchedProgress(payload, openingStep(s))) return;
       const fingerprint = JSON.stringify(payload);
@@ -263,6 +264,8 @@ export function watchSessionProgress(store: VerificationStore): () => void {
       void s.api.saveProgress(s.sessionId, payload).catch((err: unknown) => {
         // A lost save is swallowed (it costs some re-typing on resume), but a
         // cancellation stops the flow: no later save or submit can succeed.
+        // A decline (session_declined) is caught by the API client's
+        // onRefusal, which marks the store before this runs.
         const cancelled = cancelledRefusalOf(err);
         if (cancelled) store.getState().markCancelled(cancelled.message);
       });

@@ -7,6 +7,7 @@ export { CaptureRing } from './CaptureRing';
 export { ShutterFlash } from './ShutterFlash';
 export { SelfiePreview } from './SelfiePreview';
 export { useSelfieUpload } from './useSelfieUpload';
+export { useLivenessFailureReport } from './useLivenessFailureReport';
 export { LivenessComplete, livenessFailureMessage } from './LivenessOutcome';
 export { LivenessCamera } from './LivenessCamera';
 export { LivenessHandover, useSelfieAutoAdvance } from './LivenessHandover';

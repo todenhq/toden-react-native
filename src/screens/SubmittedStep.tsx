@@ -4,6 +4,7 @@ import { mapToVerificationError, safeReportError } from '../services/errors';
 import { contactStepFor, expiredContactChannels } from '../lib/contact-recovery';
 import { addressBookReuseRefusal, recoveryStepFor, serverRefusalOf } from '../lib/submit-recovery';
 import { cancelledRefusalOf } from '../lib/session-cancelled';
+import { declinedRefusalOf } from '../lib/session-declined';
 import { buildStepOrder } from '../config/stepOrder';
 import { stepOrderOptions } from '../store/derive';
 import type { VerificationStep } from '../types/config';
@@ -93,6 +94,13 @@ export function SubmittedStep({ onClose }: { onClose: () => void }): React.React
       const cancelled = cancelledRefusalOf(err);
       if (cancelled) {
         store.getState().markCancelled(cancelled.message);
+        return;
+      }
+      // Declined by the server: the flow swaps to the declined screen (marked
+      // by the API client), which reports onError once.
+      const declined = declinedRefusalOf(err);
+      if (declined) {
+        store.getState().markDeclined(declined);
         return;
       }
       // The picked saved address could not be used: the offer comes back
