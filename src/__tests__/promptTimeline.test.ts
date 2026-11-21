@@ -1,6 +1,15 @@
 import { PromptTimeline } from '../liveness/promptTimeline';
 
 describe('PromptTimeline', () => {
+  it('reports the head directions too, which it once left out', () => {
+    const t = new PromptTimeline();
+    for (const [i, prompt] of ['turnRight', 'turnLeft', 'lookDown', 'lookUp'].entries()) {
+      t.shown(prompt, 2000 + i * 3000);
+      t.passed(3000 + i * 3000);
+    }
+    expect(t.report(1000)?.map((p) => p.prompt)).toEqual(['turnRight', 'turnLeft', 'lookDown', 'lookUp']);
+  });
+
   it('reports each prompt against the start of the recording', () => {
     const t = new PromptTimeline();
     t.shown('turn', 2000);

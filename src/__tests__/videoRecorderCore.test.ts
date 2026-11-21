@@ -115,3 +115,15 @@ describe('the back clip starts once the document is turned over', () => {
     expect(src).toMatch(/if \(needed !== lastNeeded\) \{\s*setLastNeeded\(needed\);\s*setTurning\(needed\);/);
   });
 });
+
+describe('the recording cap leaves room for a whole liveness run', () => {
+  // A real iPhone run (2026-11-19): three head directions ended at 12.6 s, past
+  // the old 12 s cap. Four directions with their prompts take about 3.5 s each;
+  // the flash and the pause before the selfie come after.
+  it('outlasts four head directions, the flash and the selfie pause, with room to spare', async () => {
+    const { MAX_VIDEO_DURATION_MS } = await import('../config/captureSettings');
+    const directions = 4 * 3_500;
+    const flashAndSelfie = 8_000;
+    expect(MAX_VIDEO_DURATION_MS).toBeGreaterThanOrEqual(directions + flashAndSelfie + 3_000);
+  });
+});

@@ -169,9 +169,8 @@ describe('the head start reaches BOTH entry points', () => {
     // A copy is how the two drift back apart — one gains a model the other
     // never learns about.
     expect(entry).not.toMatch(/primeFaceModel\(\)/);
-    expect(entry).not.toMatch(/primeLivenessAvatars\(/);
     const shared = read('sdk-react-native/src/lib/prime-models.ts');
-    for (const fn of ['primeFaceModel()', 'primeTextModel()', 'primeLivenessAvatars(']) {
+    for (const fn of ['primeFaceModel()', 'primeTextModel()']) {
       expect(shared).toContain(fn);
     }
   });

@@ -7,9 +7,11 @@ import { useReduceMotion } from '../../components/StaggerIn';
 import { UiPulseLoader } from '../../components/UiPulseLoader';
 import type { Size } from '../../lib/livenessCutout';
 import type { LivenessPhase } from '../../liveness/types';
+import type { DirectionSides } from '../../liveness/livenessState';
 import { StyleAbsFill } from './constants';
 import { SCAN_DELAY_MS, SCAN_MS, ScanSweep } from './ScanSweep';
 import { ShutterFlash } from './ShutterFlash';
+import { SideRing } from './SideRing';
 import { WindowRing } from './WindowRing';
 
 // ---------------------------------------------------------------------------
@@ -32,7 +34,9 @@ export function LivenessWindow({
   loading,
   getRingTarget,
   segments,
+  sides = null,
   windowRef,
+  children,
 }: {
   window: Size;
   phase: LivenessPhase;
@@ -42,8 +46,14 @@ export function LivenessWindow({
   getRingTarget: () => number;
   /** Stages of the test: the line is cut into this many parts. */
   segments: number;
+  /** Set when the test is head directions: the line is then four sides
+   *  (SideRing), one lit for the direction asked, green for each done. */
+  sides?: DirectionSides | null;
   /** Measured for the flash, which paints everywhere but here. */
   windowRef: React.RefObject<View | null>;
+  /** Drawn inside the window, under its marks and clipped by its shape: the
+   *  gesture narrator. */
+  children?: React.ReactNode;
 }): React.ReactElement {
   const { colors } = useTheme();
   const reduceMotion = useReduceMotion();
@@ -58,13 +68,15 @@ export function LivenessWindow({
           { borderRadius: window.width / 2, overflow: 'hidden' },
         ]}
       >
+        {children}
         {loading ? (
           <View style={[StyleAbsFill, { backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' }]}>
             <UiPulseLoader size={64} />
           </View>
         ) : null}
 
-        {/* A step landed: a green wash and a tick. */}
+        {/* A step landed, a head direction included: a green wash and a
+            tick. The side turning green is not enough by itself to say "done". */}
         {phase === 'challenge_passed' ? (
           <View style={[StyleAbsFill, { backgroundColor: `${colors.success}33`, alignItems: 'center', justifyContent: 'center' }]}>
             <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.success, alignItems: 'center', justifyContent: 'center' }}>
@@ -81,7 +93,15 @@ export function LivenessWindow({
         {phase === 'complete' && !reduceMotion ? <ScanSweep window={window} /> : null}
 
       </View>
-      {loading ? null : (
+      {loading ? null : sides ? (
+        <SideRing
+          window={window}
+          asked={phase === 'challenge' ? sides.asked : null}
+          done={sides.done}
+          directions={sides.directions}
+          warning={warning || failed}
+        />
+      ) : (
         <WindowRing
           // A failed check has no progress to show: only the bed, in red.
           window={window}

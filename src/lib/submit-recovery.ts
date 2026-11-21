@@ -33,6 +33,7 @@ const STEP_FOR_MEDIA_KEY: Readonly<Record<string, VerificationStep>> = {
   documentBack: 'document-capture',
   selfie: 'liveness',
   livenessVideo: 'liveness',
+  livenessDepth: 'liveness',
   proofOfAddress: 'proof-of-address',
   addressPhoto: 'address-entrance',
 };

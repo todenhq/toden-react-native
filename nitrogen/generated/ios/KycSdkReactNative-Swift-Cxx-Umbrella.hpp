@@ -18,10 +18,16 @@ namespace margelo::nitro::myazakyc { struct EmrtdApduResponse; }
 namespace margelo::nitro::myazakyc { struct EmrtdTagInfo; }
 // Forward declaration of `FaceResult` to properly resolve imports.
 namespace margelo::nitro::myazakyc { struct FaceResult; }
+// Forward declaration of `HybridCameraOutputSpec` to properly resolve imports.
+namespace margelo::nitro::camera { class HybridCameraOutputSpec; }
+// Forward declaration of `HybridCameraPhotoOutputSpec` to properly resolve imports.
+namespace margelo::nitro::camera { class HybridCameraPhotoOutputSpec; }
 // Forward declaration of `HybridFrameSpec` to properly resolve imports.
 namespace margelo::nitro::camera { class HybridFrameSpec; }
 // Forward declaration of `HybridMyazaBackdropBlurSpec` to properly resolve imports.
 namespace margelo::nitro::myazakyc { class HybridMyazaBackdropBlurSpec; }
+// Forward declaration of `HybridMyazaDepthFrameSpec` to properly resolve imports.
+namespace margelo::nitro::myazakyc { class HybridMyazaDepthFrameSpec; }
 // Forward declaration of `HybridMyazaDeviceIntelSpec` to properly resolve imports.
 namespace margelo::nitro::myazakyc { class HybridMyazaDeviceIntelSpec; }
 // Forward declaration of `HybridMyazaEmrtdSpec` to properly resolve imports.
@@ -46,6 +52,7 @@ namespace margelo::nitro::myazakyc { struct TurnedTextResult; }
 #include "EmrtdTagInfo.hpp"
 #include "FaceResult.hpp"
 #include "HybridMyazaBackdropBlurSpec.hpp"
+#include "HybridMyazaDepthFrameSpec.hpp"
 #include "HybridMyazaDeviceIntelSpec.hpp"
 #include "HybridMyazaEmrtdSpec.hpp"
 #include "HybridMyazaFaceDetectorSpec.hpp"
@@ -56,6 +63,8 @@ namespace margelo::nitro::myazakyc { struct TurnedTextResult; }
 #include "TurnedTextResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/Result.hpp>
+#include <VisionCamera/HybridCameraOutputSpec.hpp>
+#include <VisionCamera/HybridCameraPhotoOutputSpec.hpp>
 #include <VisionCamera/HybridFrameSpec.hpp>
 #include <exception>
 #include <memory>
@@ -72,10 +81,16 @@ namespace margelo::nitro::myazakyc { struct TurnedTextResult; }
 #include <NitroModules/DateToChronoDate.hpp>
 
 // Forward declarations of Swift defined types
+// Forward declaration of `HybridCameraOutputSpec_cxx` to properly resolve imports.
+namespace VisionCamera { class HybridCameraOutputSpec_cxx; }
+// Forward declaration of `HybridCameraPhotoOutputSpec_cxx` to properly resolve imports.
+namespace VisionCamera { class HybridCameraPhotoOutputSpec_cxx; }
 // Forward declaration of `HybridFrameSpec_cxx` to properly resolve imports.
 namespace VisionCamera { class HybridFrameSpec_cxx; }
 // Forward declaration of `HybridMyazaBackdropBlurSpec_cxx` to properly resolve imports.
 namespace KycSdkReactNative { class HybridMyazaBackdropBlurSpec_cxx; }
+// Forward declaration of `HybridMyazaDepthFrameSpec_cxx` to properly resolve imports.
+namespace KycSdkReactNative { class HybridMyazaDepthFrameSpec_cxx; }
 // Forward declaration of `HybridMyazaDeviceIntelSpec_cxx` to properly resolve imports.
 namespace KycSdkReactNative { class HybridMyazaDeviceIntelSpec_cxx; }
 // Forward declaration of `HybridMyazaEmrtdSpec_cxx` to properly resolve imports.

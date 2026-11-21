@@ -14,9 +14,13 @@ import { declinedRefusalOf, declinedScreenCopy } from '../lib/session-declined';
 import { BUSINESS_DOCUMENT_LABELS } from '../config/businessSteps';
 import { businessDocumentGroupTitle } from '../config/businessDocumentGroups';
 import type { BusinessDocumentKey } from '../types/business';
+import { recordJourneyEvent } from '../lib/step-log';
 
 /** Which operation failed — picks the fallback code for non-HTTP failures. */
 export type ErrorContext = 'upload' | 'verify';
+
+/** Errors recorded as their own journey events (camera, uploads, network), not again as `error_shown`. */
+const ERRORS_RECORDED_ELSEWHERE: ReadonlySet<string> = new Set(['camera_permission_denied', 'upload_failed', 'network_error']);
 
 /**
  * Invokes the consumer's `onError` handler defensively — a handler that throws
@@ -26,6 +30,9 @@ export function safeReportError(
   onError: ((error: VerificationError) => void) | undefined,
   error: VerificationError,
 ): void {
+  // What the person was shown, by code (drop-off insights), whether or not the
+  // app listens. Codes another event already says better are left out.
+  if (!ERRORS_RECORDED_ELSEWHERE.has(error.code)) recordJourneyEvent('error_shown', error.code);
   if (!onError) return;
   try {
     onError(error);

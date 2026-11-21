@@ -171,7 +171,7 @@ export function InstructionPill({
   const row = (line: Line, onLayout?: (e: LayoutChangeEvent) => void) => {
     const mark =
       line.tone === 'warning' ? (
-        <Icon name="alert" size={20} color={colors.error} />
+        <Icon name="triangle-alert" size={20} color={colors.error} />
       ) : line.tone === 'done' ? (
         <Icon name="circle-check" size={20} color={colors.success} />
       ) : (

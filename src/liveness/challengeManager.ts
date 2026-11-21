@@ -7,12 +7,15 @@
 import {
   CHALLENGE_POOL,
   DEFAULT_LIVENESS_CONFIG,
+  DIRECTION_POOL,
   HOLD_CHALLENGE,
   type ChallengeConfig,
   type LivenessChallenge,
   type LivenessConfig,
   type LivenessMode,
 } from './types';
+import type { PlanRequest } from './directionPlan';
+import { flashSequenceCount } from './flashDetector';
 
 // Gestures within a similarity group should never appear together — one can
 // accidentally satisfy the other (head motion overlaps).
@@ -43,6 +46,69 @@ export function modeRunsGestures(mode: LivenessMode | undefined): boolean {
   return mode !== 'flash';
 }
 
+/** A run asks for this many directions unless the workflow says otherwise. */
+export const DEFAULT_DIRECTION_COUNT = 3;
+
+/**
+ * What this configuration asks Core to plan for an attempt, or null when it
+ * runs neither gestures nor a flash (passive). Every gesture run asks: head
+ * directions with the `directions` set, otherwise the classic gestures with
+ * the integration's count and pool, so a modified client cannot choose
+ * either. Since 2026-11-19 Core picks the flash colours too: every run with a
+ * flash asks for them, and a flash-only run asks for no gestures, only
+ * colours. The web SDK's useLiveness, in one pure place.
+ */
+export function planRequestFor(config: Partial<LivenessConfig> | undefined): PlanRequest | null {
+  const mode = config?.mode ?? 'gestures';
+  const asksGestures = mode === 'gestures' || mode === 'both';
+  const showsFlash = mode === 'flash' || mode === 'both';
+  if (!asksGestures && !showsFlash) return null;
+  // As many colours as the SDK's own pick would show, so either way the same length.
+  const flash = showsFlash ? { flash: flashSequenceCount(config?.flashSequenceLength) } : {};
+  if (!asksGestures) return { set: 'none', count: 0, ...flash };
+  return config?.gestureSet === 'directions'
+    ? { set: 'directions', count: config.directionCount ?? DEFAULT_DIRECTION_COUNT, ...flash }
+    : { set: 'classic', count: config?.challengeCount ?? 2, pool: config?.challengePool, ...flash };
+}
+
+/**
+ * PURE given `random`. The directions of a run, `count` of the four (2 to 4,
+ * anything else is 3), always with at least one head turn, left or right. A
+ * turn is what tells a head from a flat picture: Core's head-movement check
+ * only calls a capture flat when a turn was asked for, and a photo can be
+ * tilted up and down but not turned. The rest are picked at random from the
+ * other three, so which directions and their order are what a recording made
+ * earlier cannot know. Returned in the pool's order; the caller shuffles. The
+ * web SDK's challenge-manager.ts, number for number.
+ */
+export function pickDirections(count: number = DEFAULT_DIRECTION_COUNT, random: () => number = Math.random): ChallengeConfig[] {
+  const n = Number.isInteger(count) && count >= 2 && count <= DIRECTION_POOL.length ? count : DEFAULT_DIRECTION_COUNT;
+  const turns = DIRECTION_POOL.filter((c) => c.type === 'turnLeft' || c.type === 'turnRight');
+  const turn = turns[Math.floor(random() * turns.length) % turns.length]!;
+  const rest = DIRECTION_POOL.filter((c) => c !== turn);
+  // A partial Fisher-Yates with the same random source: n - 1 of the other three.
+  for (let i = 0; i < n - 1; i++) {
+    const j = i + (Math.floor(random() * (rest.length - i)) % (rest.length - i));
+    [rest[i], rest[j]] = [rest[j]!, rest[i]!];
+  }
+  const chosen = new Set([turn, ...rest.slice(0, n - 1)]);
+  return DIRECTION_POOL.filter((c) => chosen.has(c));
+}
+
+/**
+ * The challenges for a plan Core picked (liveness/directionPlan.ts): its
+ * gestures (head directions or classic) in its order. The flash is not a
+ * tracker entry in this SDK (it is a phase of its own, added to the claim by
+ * livenessPrompts), so unlike web nothing is appended for Dual Check.
+ */
+export function planChallenges(prompts: readonly string[], config: Partial<LivenessConfig> = {}): ChallengeConfig[] {
+  const merged = { ...DEFAULT_LIVENESS_CONFIG, ...config };
+  return prompts
+    .map((type) => DIRECTION_POOL.find((c) => c.type === type) ?? CHALLENGE_POOL.find((c) => c.type === type))
+    .filter((c): c is ChallengeConfig => !!c)
+    .map((c) => ({ ...c, timeoutSeconds: merged.timeoutPerChallenge }));
+}
+
 /**
  * Picks `challengeCount` non-similar challenges from the pool, in random order.
  *
@@ -62,6 +128,13 @@ export function pickChallenges(config: Partial<LivenessConfig> = {}): ChallengeC
   if (!modeRunsGestures(merged.mode)) return [];
   // Passive: no gestures and no flash. Hold still while the clip records.
   if (merged.mode === 'passive') return [{ ...HOLD_CHALLENGE }];
+
+  // Head directions: as many as the workflow asks for, 2 to 4, 3 unless set,
+  // in a shuffled order. This pick stands in until Core's plan for the
+  // attempt arrives (useLiveness), and is used when none does.
+  if (merged.gestureSet === 'directions') {
+    return shuffle(pickDirections(merged.directionCount)).map((c) => ({ ...c, timeoutSeconds: merged.timeoutPerChallenge }));
+  }
 
   let pool = CHALLENGE_POOL;
   if (merged.challengePool && merged.challengePool.length > 0) {

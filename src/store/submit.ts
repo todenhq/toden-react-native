@@ -23,6 +23,8 @@ import { silentCaptureSubmission } from '../lib/silentCapture';
 import { businessSubmission, effectiveCountry } from './derive';
 import type { ClientFingerprint } from '../services/fingerprint';
 import type { VerifyRequest } from '../services/api';
+import type { CaptureIntegrity } from '../liveness/integritySignals';
+import type { CaptureProof } from '../liveness/signedCapture';
 import type { VerificationState } from './state';
 
 /** The chip payload as the wire wants it. One builder, so a slot's chip and a
@@ -51,9 +53,24 @@ export function nfcPayload(
   };
 }
 
+/**
+ * `metadata.device.integrity`: the liveness claim, and beside it the
+ * platform's proof that the uploaded selfie and video are the files this app
+ * sent (`captureProof`, liveness/signedCapture.ts). Undefined when there is
+ * neither.
+ */
+export function submittedIntegrity(
+  claim: CaptureIntegrity | null,
+  captureProof: CaptureProof | undefined,
+): (Partial<CaptureIntegrity> & { captureProof?: CaptureProof }) | undefined {
+  if (!claim && !captureProof) return undefined;
+  return { ...claim, ...(captureProof ? { captureProof } : {}) };
+}
+
 export function buildVerifyRequest(
   state: VerificationState,
   fingerprint: ClientFingerprint | undefined,
+  captureProof?: CaptureProof,
 ): VerifyRequest {
   // A KYB flow submits registry details instead of an ID: a different country
   // source (the picked registry), the product key riding on `idType`, and no
@@ -69,6 +86,9 @@ export function buildVerifyRequest(
   // Silent capture frames ride an individual submission (a KYB flow's frames
   // belong to the applicant's own leg, submitApplicant.ts).
   const silent = business ? null : silentCaptureSubmission(state.silentFrames);
+  // A business request carries no selfie, so the proof over it rides the
+  // applicant's own request instead (submitApplicant.ts).
+  const integrity = submittedIntegrity(state.captureIntegrity, business ? undefined : captureProof);
 
   return {
   country: business ? business.country : effectiveCountry(state),
@@ -190,7 +210,7 @@ export function buildVerifyRequest(
       // The liveness claim (mode, flash outcome, recording fate). Builds up to
       // 3.1.0 recorded it and never sent it, so the server could neither audit
       // the flash nor tell whether liveness ran at all.
-      ...(state.captureIntegrity ? { integrity: state.captureIntegrity } : {}),
+      ...(integrity ? { integrity } : {}),
       // What each submitted silent frame is: its slot, moment and time.
       ...(silent ? { silentCapture: silent.device } : {}),
     },

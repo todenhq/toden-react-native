@@ -5,6 +5,8 @@ import { radius } from '../config/theme';
 import { useTheme } from './runtime';
 import { Icon, type IconName } from './Icon';
 import { GlassSurface, supportsLiquidGlass } from './glass/GlassSurface';
+import { useText } from '../i18n/useText';
+import { logPress } from '../lib/click-log';
 
 // Circular icon button for the header chrome (back / theme toggle / close).
 // On iOS 26 it renders as an interactive Liquid Glass circle; elsewhere it's a
@@ -37,7 +39,10 @@ export function GlassIconButton({
   accessibilityLabel,
 }: GlassIconButtonProps): React.ReactElement {
   const { colors } = useTheme();
+  const t = useText();
   const enabled = !disabled && !!onPress;
+  // Named by its accessible label's catalogue key for the verification timeline (lib/click-log.ts).
+  const press = onPress ? () => { logPress([accessibilityLabel], t); onPress(); } : undefined;
   const iconColor = enabled ? `${colors.textDark}CC` : colors.textMuted; // ~0.8 alpha
 
   const glyph = (
@@ -76,7 +81,7 @@ export function GlassIconButton({
 
   return (
     <Pressable
-      onPress={enabled ? onPress : undefined}
+      onPress={enabled ? press : undefined}
       disabled={!enabled}
       hitSlop={6}
       accessibilityRole="button"

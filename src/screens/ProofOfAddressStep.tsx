@@ -24,6 +24,8 @@ import { PoaUploadActions } from './ProofOfAddressParts';
 import { PoaUploadedCard } from './PoaUploadedCard';
 import type { PoaDocumentType } from '../types/workflow';
 import { useText } from '../i18n/useText';
+import { logChoice } from '../lib/click-log';
+import { recordUploadFailure } from '../lib/step-log';
 
 // ---------------------------------------------------------------------------
 // Proof of Address: the applicant says which country the document is from,
@@ -76,6 +78,7 @@ export function ProofOfAddressStep(): React.ReactElement {
         setPreview({ uri, isPdf });
         store.getState().setProofOfAddress(id, selectedType, name);
       } catch (e) {
+        recordUploadFailure('proof_of_address');
         setError(uploadFailureMessage(e));
       } finally {
         setBusy(false);
@@ -145,9 +148,10 @@ export function ProofOfAddressStep(): React.ReactElement {
       <AddressCountryControl
         value={poaCountry}
         label={t(businessKey('proofOfAddress.country.residence', isScopedBusiness(config)))}
-        onPick={(code) =>
-          scoped ? store.getState().setCountry(code) : store.getState().setPoaCountry(code)
-        }
+        onPick={(code) => {
+          logChoice('country');
+          return scoped ? store.getState().setCountry(code) : store.getState().setPoaCountry(code);
+        }}
       />
 
       {types.length > 1 ? (

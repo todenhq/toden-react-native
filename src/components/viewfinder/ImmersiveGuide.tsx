@@ -30,7 +30,8 @@ export function ImmersiveGuide({
   height,
   framing,
   subject,
-  showSpecimen,
+  turnFrom = null,
+  holding = false,
   band,
 }: {
   guideAspect: number;
@@ -41,8 +42,11 @@ export function ImmersiveGuide({
   framing: DocumentFraming;
   /** The ID being captured, for the sample document. */
   subject: DocumentSpecimenSubject;
-  /** Off once the turn-over prompt has already shown this side. */
-  showSpecimen: boolean;
+  /** Set on the side that follows the last with no tap: the sample opens as
+   *  that side and turns over in the frame (DocumentGhost). */
+  turnFrom?: 'front' | 'back' | null;
+  /** The turn-over is still on screen: the sample stays, untimed. */
+  holding?: boolean;
   /** For an upright guide: the space it must stay clear of (immersiveBand). */
   band?: { topReserve: number; bottomReserve: number };
 }): React.ReactElement {
@@ -93,8 +97,10 @@ export function ImmersiveGuide({
   return (
     <>
       {/* Under the guide, so the corners sit on the sample's edges. Keyed by side
-          so turning the document over shows the other face. */}
-      {showSpecimen ? (
+          so the back's sample is a new one, which (after a front with no tap
+          between) opens as the front and turns over where it stands. The
+          back's sample stays in the frame for the back scan, as the front's
+          did for the front. */}
       <DocumentGhost
         key={subject.side}
         x={gx}
@@ -105,8 +111,9 @@ export function ImmersiveGuide({
         accent={primary}
         subject={subject}
         documentFound={framing !== 'none' && framing !== 'wrongShape'}
+        turnFrom={turnFrom}
+        holding={holding}
       />
-      ) : null}
       <Svg style={{ position: 'absolute', inset: 0 }} width={width} height={height}>
         <Defs>
           <Mask id="guideWindow">

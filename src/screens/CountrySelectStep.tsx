@@ -5,6 +5,7 @@ import { useFlowState, useVerificationConfig, useVerificationStore } from '../co
 import { CountryRegionPicker, CountryRow } from '../components/CountryRegionPicker';
 import { regionCountryName } from '../config/regions';
 import { countrySelectOptions } from '../store/derive';
+import { logChoice } from '../lib/click-log';
 
 // ---------------------------------------------------------------------------
 // Country selection for multi-region flows (`countries` has more than one).
@@ -40,6 +41,7 @@ export function CountrySelectStep(): React.ReactElement {
   );
 
   const pick = (country: string): void => {
+    logChoice('country');
     store.getState().setCountry(country);
     store.getState().nextStep();
   };

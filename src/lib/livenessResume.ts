@@ -32,7 +32,7 @@ export interface RestoredCapture {
 export function withoutRestoredSelfie(restored: RestoredCapture): RestoredCapture {
   const media = restored.mediaIds;
   if (!media?.selfie) return restored;
-  const { selfie: _selfie, livenessVideo: _video, ...rest } = media;
+  const { selfie: _selfie, livenessVideo: _video, livenessDepth: _depth, ...rest } = media;
   const step = restored.step && AFTER_LIVENESS.has(restored.step) ? 'liveness' : restored.step;
   return { step, mediaIds: rest };
 }

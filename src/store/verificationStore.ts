@@ -71,6 +71,8 @@ import { applicantMediaCaptured, buildApplicantVerifyRequest } from './submitApp
 import { keptIdType } from '../lib/resubmit';
 import { documentPeopleReducer } from '../config/documentPeople';
 import { keepPresenceToken } from '../presence/store';
+import { captureMediaOf, makeCaptureProof } from '../liveness/signedCapture';
+import { OS } from '../utils/platform';
 
 export * from './state';
 export {
@@ -138,6 +140,7 @@ export function createVerificationStore(
       selfiePreviewUri: null,
       selfieUpload: IDLE_SELFIE_UPLOAD,
       mediaIds: {},
+      uploadSha256: {},
       submissionResult: null,
       serverConfig: serverConfig ?? INITIAL_SERVER_CONFIG,
       documentScanPhase: 'front',
@@ -329,6 +332,10 @@ export function createVerificationStore(
         });
       },
 
+      setUploadSha256(mediaId, sha256) {
+        set((s) => ({ uploadSha256: { ...s.uploadSha256, [mediaId]: sha256 } }));
+      },
+
       setSelfiePreview(uri) {
         set({ selfiePreviewUri: uri });
       },
@@ -337,7 +344,7 @@ export function createVerificationStore(
         set((s) => ({
           selfiePreviewUri: null,
           selfieUpload: IDLE_SELFIE_UPLOAD,
-          mediaIds: { ...s.mediaIds, selfie: undefined, livenessVideo: undefined },
+          mediaIds: { ...s.mediaIds, selfie: undefined, livenessVideo: undefined, livenessDepth: undefined },
         }));
       },
 
@@ -757,7 +764,21 @@ export function createVerificationStore(
           api,
           playIntegrityCloudProjectNumber: state.serverConfig.playIntegrityCloudProjectNumber,
         });
-        const request = buildVerifyRequest(state, fingerprint);
+        // The platform's proof over the uploaded selfie and video
+        // (liveness/signedCapture.ts), bounded and best-effort like the
+        // fingerprint. Made AFTER it, never beside it: on an iPhone both are
+        // signed by the one App Attest key, whose counter Core lets only rise,
+        // and Core checks the fingerprint's before the capture's.
+        const captureMedia = captureMediaOf(state.mediaIds, state.uploadSha256);
+        const captureProof = captureMedia
+          ? await makeCaptureProof({
+              media: captureMedia,
+              api,
+              platform: OS,
+              playIntegrityCloudProjectNumber: state.serverConfig.playIntegrityCloudProjectNumber,
+            })
+          : undefined;
+        const request = buildVerifyRequest(state, fingerprint, captureProof);
         try {
           const res = await withRetry(() => api.verify(request), { onRetry });
           // Before anything can report: the first report starts when the
@@ -784,7 +805,13 @@ export function createVerificationStore(
             void withRetry(() =>
               // The attestation challenge was spent by the business submit.
               api.verify(
-                buildApplicantVerifyRequest(state, res.applicantKeyPersonId!, withoutAttestation(fingerprint)),
+                buildApplicantVerifyRequest(
+                  state,
+                  res.applicantKeyPersonId!,
+                  withoutAttestation(fingerprint),
+                  // The applicant's request carries the selfie, so the proof over it rides here.
+                  captureProof,
+                ),
               ),
             ).catch((err) => {
               console.warn(
@@ -829,6 +856,7 @@ export function createVerificationStore(
           selfiePreviewUri: null,
           selfieUpload: IDLE_SELFIE_UPLOAD,
           mediaIds: {},
+          uploadSha256: {},
           submissionResult: null,
           documentScanPhase: 'front',
           documentCapturePhase: 'front',

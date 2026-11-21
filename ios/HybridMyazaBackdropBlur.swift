@@ -33,32 +33,62 @@ final class HybridMyazaBackdropBlur: HybridMyazaBackdropBlurSpec {
   }
 }
 
+/// How much of the material's full blur is used. A system material has no
+/// radius setting, so its strength is set the way expo-blur's `intensity` is:
+/// the effect is applied by a property animator paused part of the way, and the
+/// effect view draws that share of it. The web blurs 2px round the window
+/// (LIVENESS_BLUR in src/lib/livenessCutout.ts): softened, not frosted (user,
+/// 2026-11-17). The full ultra-thin material read as frosted glass, so a small
+/// share of it is the match; confirm by eye on a device beside the web.
+let BACKDROP_BLUR_FRACTION: CGFloat = 0.12
+
 final class BackdropBlurView: UIView {
   private let effectView = UIVisualEffectView(effect: nil)
   private var hole: CGRect = .zero
   private var dark: Bool?
+  /// Holds the effect part of the way. Left running when the view goes, a
+  /// paused animator raises, so it is always stopped before it is let go.
+  private var animator: UIViewPropertyAnimator?
+  private var foreground: NSObjectProtocol?
 
   override init(frame: CGRect) {
     super.init(frame: frame)
     isUserInteractionEnabled = false
     backgroundColor = .clear
     addSubview(effectView)
+    // Coming back to the app can run a paused animator to its end, which would
+    // leave the full material on screen: set it again.
+    foreground = NotificationCenter.default.addObserver(
+      forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
+    ) { [weak self] _ in self?.applyEffect() }
   }
 
   required init?(coder: NSCoder) { nil }
 
+  deinit {
+    animator?.stopAnimation(true)
+    if let foreground { NotificationCenter.default.removeObserver(foreground) }
+  }
+
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    // A view taken off screen and back can lose its paused state too.
+    if window != nil { applyEffect() }
+  }
+
   func update(window: CGRect, dark: Bool) {
-    if self.dark != dark {
-      self.dark = dark
-      // The thinnest material: nearly all blur and very little colour of its
-      // own. The flow lays its own tint over it. Named light or dark outright,
-      // because the flow's theme is not always the phone's.
-      effectView.effect = UIBlurEffect(
-        style: dark ? .systemUltraThinMaterialDark : .systemUltraThinMaterialLight)
-    }
+    let themeChanged = self.dark != dark
+    self.dark = dark
     if hole != window {
       hole = window
       applyMask()
+      // A new mask rebuilds the effect view from its MODEL effect, which the
+      // paused animator has already set to the full material: the weak blur
+      // is lost (seen on an iPhone, iOS 27.2, 2026-11-18, as the full frosted
+      // material). So the effect is set again after every mask.
+      applyEffect()
+    } else if themeChanged {
+      applyEffect()
     }
   }
 
@@ -67,7 +97,24 @@ final class BackdropBlurView: UIView {
     if effectView.frame != bounds {
       effectView.frame = bounds
       applyMask()
+      applyEffect()
     }
+  }
+
+  /// The thinnest material, light or dark as the flow is (its theme is not
+  /// always the phone's), held at BACKDROP_BLUR_FRACTION of its strength. The
+  /// flow lays its own tint over it.
+  private func applyEffect() {
+    guard let dark else { return }
+    animator?.stopAnimation(true)
+    effectView.effect = nil
+    let effect = UIBlurEffect(style: dark ? .systemUltraThinMaterialDark : .systemUltraThinMaterialLight)
+    let held = UIViewPropertyAnimator(duration: 1, curve: .linear) { [weak effectView] in
+      effectView?.effect = effect
+    }
+    held.pausesOnCompletion = true
+    held.fractionComplete = BACKDROP_BLUR_FRACTION
+    animator = held
   }
 
   /// Everything but the window. Built fresh each time: the effect view takes

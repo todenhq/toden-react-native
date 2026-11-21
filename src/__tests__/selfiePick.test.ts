@@ -298,8 +298,8 @@ describe('the final shutter', () => {
     expect(gate.frame({ verdict: 'turned', placed: true, hasBest: false, now: 1 })).toEqual({ fire: null, guidance: 'lookStraight' });
     expect(gate.frame({ verdict: 'far', placed: true, hasBest: false, now: 2 })).toEqual({ fire: null, guidance: 'moveCloser' });
     expect(gate.frame({ verdict: 'kept', placed: false, hasBest: false, now: 3 })).toEqual({ fire: null, guidance: 'position' });
-    expect(captureGuidanceText('lookStraight', face(), null, defaultText)).toBe('Kindly look straight at the camera');
-    expect(captureGuidanceText('moveCloser', face(), null, defaultText)).toBe('Kindly move closer');
+    expect(captureGuidanceText('lookStraight', face(), null, defaultText)).toBe('Look straight at the camera');
+    expect(captureGuidanceText('moveCloser', face(), null, defaultText)).toBe('Move closer');
   });
 
   it("uses the run's best still once the person has had a fair chance", () => {
@@ -343,11 +343,11 @@ describe('the wiring', () => {
     expect(stills).toContain('cutSelfie(raw, face)');
   });
 
-  it('shows the selfie as a 3:4 rounded rectangle, not a circle', () => {
-    for (const rel of ['screens/liveness/SelfiePreview.tsx', 'screens/liveness/LivenessReview.tsx']) {
-      const src = read(rel);
-      expect(src).toContain('SELFIE_ASPECT');
-      expect(src).not.toMatch(/borderRadius: (S|window\.width) \/ 2/);
-    }
+  it('shows the selfie on the sheet as a 3:4 rounded rectangle, not a circle', () => {
+    // The full-screen review shows the still it was cut from instead, as the
+    // camera did (selfieReview.test.ts).
+    const src = read('screens/liveness/SelfiePreview.tsx');
+    expect(src).toContain('SELFIE_ASPECT');
+    expect(src).not.toMatch(/borderRadius: S \/ 2/);
   });
 });

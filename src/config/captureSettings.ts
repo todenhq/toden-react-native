@@ -44,11 +44,16 @@ export const VIDEO_CAPTURE_RESOLUTION = { width: 360, height: 640 } as const;
 // down with react-native-compressor before upload (see services/mediaCompress
 // `compressVideo`) — the real file-size lever. The raw recording is duration-capped
 // only to bound the temp file we hand to the transcoder.
-export const MAX_VIDEO_DURATION_MS = 12_000; // bounds the raw 4K temp file
+// 30 s, not the 12 s it was (2026-11-19): head directions, then the flash and
+// the pause before the selfie, run past 12 s (a real iPhone run's last turn
+// passed at 12.6 s), and a 12 s cap cut the recording off before the end of
+// what Core reads. Still only a ceiling on a stuck recording; the transcode
+// keeps 30 s near 2.3 MB.
+export const MAX_VIDEO_DURATION_MS = 30_000; // bounds the raw 4K temp file
 
 /** Transcode target — longest edge (≈480p) and bitrate for the uploaded clip. */
 export const VIDEO_COMPRESS_MAX_SIZE = 640;
-export const VIDEO_COMPRESS_BITRATE = 600_000; // 600 kbps → 12s ≈ 0.9 MB
+export const VIDEO_COMPRESS_BITRATE = 600_000; // 600 kbps → 30s ≈ 2.3 MB
 // The second try when the first transcode fails (mediaCompress.ts).
 export const VIDEO_COMPRESS_FALLBACK_SIZE = 480;
 export const VIDEO_COMPRESS_FALLBACK_BITRATE = 400_000;

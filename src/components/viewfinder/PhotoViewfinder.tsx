@@ -21,6 +21,7 @@ import {
   photoOverlayParts,
   type CapturedPhoto,
 } from './photoMode';
+import { recordCameraError } from '../../lib/step-log';
 
 // A photo, not a scan: the immersive document camera's top bar and bottom row
 // over a plain back-camera preview. No auto-capture, no corner, framing or text
@@ -92,7 +93,7 @@ export function PhotoViewfinder(p: PhotoViewfinderProps): React.ReactElement {
       }}
     >
       {ready && p.active ? (
-        <Camera ref={cameraRef} style={{ flex: 1 }} device={device} isActive={p.active} outputs={[photoOutput]} />
+        <Camera ref={cameraRef} style={{ flex: 1 }} device={device} isActive={p.active} outputs={[photoOutput]} onError={recordCameraError} />
       ) : (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Spinner color="#FFFFFF" />

@@ -64,6 +64,15 @@ export function captureCheckProblems(results: readonly DocumentCaptureCheckResul
   return problems;
 }
 
+/**
+ * The closed detail drop-off insights records for a problem (lib/step-log
+ * `capture_rejected`): a document not wholly in the frame is cut off; a face
+ * or barcode that could not be read has no closer code.
+ */
+export function captureRejectionDetail(kind: CaptureProblemKind): 'cut_off' | 'other' {
+  return kind === 'not_complete' ? 'cut_off' : 'other';
+}
+
 /** The sides a retake button is offered for, once each and in problem order. */
 export function captureRetakeSides(problems: readonly CaptureProblem[]): DocumentCaptureSide[] {
   const sides: DocumentCaptureSide[] = [];

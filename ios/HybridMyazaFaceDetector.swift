@@ -80,7 +80,11 @@ final class HybridMyazaFaceDetector: HybridMyazaFaceDetectorSpec {
     }
 
     let toDeg = 180.0 / Double.pi
-    let yawDeg = (face.yaw?.doubleValue ?? 0) * toDeg
+    // Vision's yaw on the mirrored front-camera image runs opposite to ML Kit's
+    // (positive = the person's own LEFT, which the shared code reads). Measured
+    // on an iPhone 16 Pro Max, iOS 27.2, 2026-11-18: "turn left" passed only
+    // when the person turned right. Negated to ML Kit's convention.
+    let yawDeg = -(face.yaw?.doubleValue ?? 0) * toDeg
     let rollDeg = (face.roll?.doubleValue ?? 0) * toDeg
 
     // Pitch: Vision's `face.pitch` is iOS 15+ and frequently returns nil/0 for
@@ -343,6 +347,10 @@ final class HybridMyazaFaceDetector: HybridMyazaFaceDetectorSpec {
     let gap = eyeY - n
     let neutralGap = 0.18
     let degPerUnit = 220.0
-    return (gap - neutralGap) * degPerUnit
+    // Measured on an iPhone 16 Pro Max, iOS 27.2, 2026-11-18: the gap grows
+    // looking DOWN (the reasoning above had it shrinking), so "look up" passed
+    // only when the person looked down. The sign is set so up is positive,
+    // ML Kit's convention, which the shared code reads.
+    return (neutralGap - gap) * degPerUnit
   }
 }

@@ -25,6 +25,7 @@ import { displayFileName } from '../lib/display-file-name';
 import { GroupEnter, type GroupDirection } from './business-documents/GroupEnter';
 import { GroupEdge, TuckedRow } from './business-documents/GroupRow';
 import { BUSINESS_DOCUMENTS_COPY as COPY } from './business-documents/copy';
+import { recordUploadFailure } from '../lib/step-log';
 
 // ---------------------------------------------------------------------------
 // Supporting documents — artefacts the organisation keeps ON FILE.
@@ -100,6 +101,7 @@ export function SupportingDocumentsStep(): React.ReactElement {
           ...(isPdf ? { isPdf: true } : { previewUri: uri }),
         });
       } catch {
+        recordUploadFailure('supporting_document');
         setError(`We could not upload ${slot.label.toLowerCase()}. Please try again.`);
         setErrorSlot(slot.key);
       } finally {
@@ -129,6 +131,7 @@ export function SupportingDocumentsStep(): React.ReactElement {
         });
       } catch (err) {
         const empty = err instanceof VerificationApiError && err.code === 'signature_empty';
+        if (!empty) recordUploadFailure('signature');
         setError(empty ? SIGNATURE_EMPTY : SIGNATURE_FAILED);
         setErrorSlot(slot.key);
       } finally {

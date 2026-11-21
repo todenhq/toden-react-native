@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { CountrySummarySelect } from '../components/CountrySummarySelect';
 import { useFlowState, useVerificationConfig, useVerificationStore } from '../components/runtime';
 import { useText } from '../i18n/useText';
+import { logChoice } from '../lib/click-log';
 
 // ---------------------------------------------------------------------------
 // The country that issued the ID, at the top of the ID-type step: the
@@ -37,7 +38,10 @@ export function IdCountryField({ options }: { options: string[] }): React.ReactE
       label={t('selectDocument.country.label')}
       geoCountry={geo}
       onPick={(code) => {
-        if (code !== store.getState().selectedCountry) store.getState().setCountry(code);
+        if (code !== store.getState().selectedCountry) {
+          logChoice('country');
+          store.getState().setCountry(code);
+        }
       }}
       copy={{
         placeholder: t('selectDocument.country.placeholder'),

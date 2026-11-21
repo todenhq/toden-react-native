@@ -6,7 +6,7 @@ import { useTheme } from './runtime';
 import { UiText } from './Typography';
 import { UiButton } from './UiButton';
 import { Icon } from './Icon';
-import type { ReadyContent } from './readyPrimerContent';
+import { primerWords, type ReadyContent } from './readyPrimerContent';
 import { useText } from '../i18n/useText';
 
 // ---------------------------------------------------------------------------
@@ -23,26 +23,33 @@ import { useText } from '../i18n/useText';
 // A port of the Flutter SDK's ReadyPrimer and the web SDK's — same single-column
 // shape (one hero, at most three expectations, one primary action) and the same
 // copy, so the flow reads identically whichever SDK an org embeds.
+//
+// The hero is a picture of the step itself where the step has one (the
+// liveness camera's window with a cartoon person in it, the document being
+// scanned), else the glyph with its ring. Whatever moves there is the ONLY
+// looping element on the screen; more than one competing animation reads as
+// noise.
 // ---------------------------------------------------------------------------
 
 export function ReadyPrimer({
   content,
+  hero,
   onReady,
   buttonLabel,
 }: {
   content: ReadyContent;
+  /** A picture of the step itself, shown in place of the glyph. */
+  hero?: React.ReactNode;
   onReady: () => void;
   buttonLabel?: string;
 }): React.ReactElement {
   const { colors } = useTheme();
   const t = useText();
-  const keys = content.textKeys;
-  const title = keys ? t(keys.title) : content.title;
-  const body = keys ? t(keys.body) : content.body;
-  const checklist = content.checklist.map((row, i) => {
-    const key = keys?.checklist[i];
-    return key ? { ...row, label: t(key) } : row;
-  });
+  const { title, body, checklist } = primerWords(content, t);
+  // The liveness picture stands on the page by itself; a glyph keeps the
+  // tinted box, which gives it something to sit on, and so does the
+  // document's picture (heroBoxed).
+  const boxed = !hero || content.heroBoxed === true;
 
   return (
     // TOP-ALIGNED, like the web and Flutter. The sheet body guarantees the
@@ -55,40 +62,50 @@ export function ReadyPrimer({
       {/* Hero — matches the permission primer's icon treatment so the two
           screens read as one sequence rather than two different designs. */}
       <View
-        style={{
-          paddingHorizontal: 24,
-          paddingVertical: 36,
-          backgroundColor: `${colors.primary}0D`, // 5%
-          borderWidth: 1,
-          borderColor: `${colors.primary}26`, // 15%
-          borderRadius: radius.lg,
-          alignItems: 'center',
-        }}
+        style={
+          boxed
+            ? {
+                paddingHorizontal: hero ? 16 : 24,
+                paddingVertical: hero ? 24 : 36,
+                backgroundColor: `${colors.primary}0D`, // 5%
+                borderWidth: 1,
+                borderColor: `${colors.primary}26`, // 15%
+                borderRadius: radius.lg,
+                alignItems: 'center',
+              }
+            : { paddingHorizontal: 8, paddingTop: 8, paddingBottom: 4, alignItems: 'center' }
+        }
       >
-        <View style={{ width: 80, height: 80, alignItems: 'center', justifyContent: 'center' }}>
-          <PulseRing color={colors.primary} />
-          <View
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 32,
-              backgroundColor: `${colors.primary}26`, // 15%
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Icon name={content.icon} size={28} color={colors.primary} />
+        {hero ?? (
+          <View style={{ width: 80, height: 80, alignItems: 'center', justifyContent: 'center' }}>
+            <PulseRing color={colors.primary} />
+            <View
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: `${colors.primary}26`, // 15%
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Icon name={content.icon} size={28} color={colors.primary} />
+            </View>
           </View>
-        </View>
+        )}
 
-        <View style={{ height: spacing.md }} />
-        <UiText variant="heading3" style={{ textAlign: 'center' }}>
-          {title}
-        </UiText>
-        <View style={{ height: 6 }} />
-        <UiText variant="bodySmall" color={colors.textSecondary} style={{ textAlign: 'center' }}>
-          {body}
-        </UiText>
+        {title || body ? <View style={{ height: spacing.md }} /> : null}
+        {title ? (
+          <UiText variant="heading3" style={{ textAlign: 'center' }}>
+            {title}
+          </UiText>
+        ) : null}
+        {title && body ? <View style={{ height: 6 }} /> : null}
+        {body ? (
+          <UiText variant="bodySmall" color={colors.textSecondary} style={{ textAlign: 'center' }}>
+            {body}
+          </UiText>
+        ) : null}
       </View>
 
       <View style={{ height: 20 }} />

@@ -10,6 +10,8 @@ import type {
 import type { FlashResult } from './flashDetector';
 import type { PromptTime } from './promptTimeline';
 import type { TextFn } from '../i18n/types';
+import type { DirectionPlan, PlanRequest } from './directionPlan';
+import type { DirectionSides } from './directions';
 
 // ---------------------------------------------------------------------------
 // The liveness machine's vocabulary: its UI state, its options, its guidance
@@ -35,10 +37,18 @@ import type { HeldSelfie, SelfieShot } from '../lib/selfie-candidates';
 import type { StillFace } from '../lib/selfie-pick';
 import type { VoiceGuidanceOption } from '../types/config';
 
-export const CHALLENGE_PASSED_MS = 700; // brief "Great!" before the next challenge
+export const CHALLENGE_PASSED_MS = 700; // brief "Good." before the next challenge
 export const POSITION_TOO_FAR = 'too_far';
 export const POSITION_TOO_CLOSE = 'too_close';
 export const MULTIPLE_FACES_GUIDANCE = 'Make sure only your face is visible';
+
+// The machine's own lines, shown and spoken. Each is the exact text of a Toden
+// voice clip (kyc-core docs/VOICE_GUIDANCE.md); a change here sends that line
+// to the device voice until the clip is regenerated.
+export const CHALLENGE_PASSED_LINE = 'Good.';
+export const FLASH_HOLD_INSTRUCTION = 'Hold still. The screen will flash briefly';
+export const TIMEOUT_LINE = "Time's up. Please try again.";
+export const FACE_LOST_LINE = 'Face lost. Please try again.';
 
 /** Full screen only: the face is beside the window, not in it. */
 export const POSITION_OFF_CENTRE = 'off_centre';
@@ -68,6 +78,16 @@ export interface UseLivenessOptions {
   config?: Partial<LivenessConfig>;
   voiceGuidance?: VoiceGuidanceOption;
   /**
+   * Toden's API origin, for the voice clips of `voiceGuidance.voice`. Without
+   * it every prompt uses the device voice.
+   */
+  voiceServer?: string;
+  /**
+   * Whether the liveness recording carries sound, so the voice clips play
+   * beside the microphone without interrupting it (iOS audio session).
+   */
+  recordsAudio?: boolean;
+  /**
    * Fires once on the final capture, when the shutter should close: `live`
    * with the frame that qualified (take the still now), or `best` with the
    * run's best still (lib/selfie-capture-gate.ts).
@@ -92,7 +112,15 @@ export interface UseLivenessOptions {
   announce?: boolean;
   /** The workflow's copy for the challenge and positioning prompts (shown AND spoken). */
   t?: TextFn;
+  /**
+   * Asks Core for the gestures of one attempt, head directions or classic
+   * (liveness/directionPlan.ts). Called once per attempt with gestures; null
+   * or a failure leaves the SDK's own pick in place, with no plan named.
+   */
+  requestDirectionPlan?: (plan: PlanRequest) => Promise<DirectionPlan | null>;
 }
+
+export type { DirectionSides } from './directions';
 
 export interface UseLivenessReturn extends LivenessUiState {
   /** Push a face frame into the machine (call from the frame processor via runOnJS). */
@@ -150,21 +178,44 @@ export interface UseLivenessReturn extends LivenessUiState {
   reportIntegrityFailure: () => void;
   /** A still asked for by `onSelfieShot` landed (`uri`) or failed (null). */
   landSelfieShot: (shot: SelfieShot, uri: string | null, face: StillFace | null) => void;
+  /**
+   * When the person last did anything with their face (Date.now(), 0 for
+   * never), from liveness/responseWatch. A ref, so the frame loop never
+   * re-renders the step: read it on a timer, never in render.
+   */
+  respondedAtRef: { readonly current: number };
+  /** Counts each time the person has held a head direction the wrong way: the
+   *  narrator shows the way again when it changes. Never a failure. */
+  wrongWayCount: number;
+  /** Set when the run asks head directions; null for every other test. */
+  directionSides: DirectionSides | null;
+  /** The plan Core picked for this attempt, for the claim; undefined when the SDK picked its own. */
+  directionPlanId: () => string | undefined;
+  /**
+   * Called as the flash begins: the colours Core picked for this attempt, in
+   * its order, or null for the SDK's own pick. From then on a late plan is
+   * refused, so the claim never names a plan whose colours were not shown.
+   */
+  flashColours: () => string[] | null;
 }
 
 /** What the final capture uses: the live frame now, or the run's best still. */
 export type SelfieChoice = { source: 'live'; face: LivenessFaceData } | { source: 'best'; selfie: HeldSelfie };
 
-/** Position guidance text (spoken + shown), matching the Flutter SDK exactly. */
+/** Position guidance text (spoken + shown), the voice contract's wording on every SDK. */
 export function positionGuidanceText(g: PositionGuidance): string {
-  if (g === POSITION_OFF_CENTRE) return 'Centre your face in the frame';
-  return g === POSITION_TOO_FAR ? 'Kindly move closer' : 'Kindly move further away';
+  if (g === POSITION_OFF_CENTRE) return 'Centre your face';
+  return g === POSITION_TOO_FAR ? 'Move closer' : 'Move further away';
 }
-/** Lighting warning banner text — the full Flutter strings (shown, not spoken). */
+/** Lighting warning banner text — the full Flutter strings (shown; the short line below is spoken). */
 export function lightingGuidanceText(g: LightingGuidance): string {
   return g === 'dark'
     ? 'It looks dark here. Move to a brighter area or near a light source for better detection.'
     : 'Too bright. Reduce glare or move away from direct light for better detection.';
+}
+/** The short lighting line spoken when the banner appears, as web and Flutter say it. */
+export function lightingSpokenText(g: LightingGuidance): string {
+  return g === 'dark' ? 'Move to a brighter area' : 'Too bright. Reduce the glare';
 }
 
 /**

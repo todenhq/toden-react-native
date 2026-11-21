@@ -4,7 +4,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { cameraBottomInset } from '../components/viewfinder/cameraInsets';
 
 import { spacing } from '../config/theme';
-import { ID_TYPES, documentGuideAspect, getScanSides } from '../config/idTypes';
+import { ID_TYPES, documentGuideAspect, getScanSides, shortDocumentLabel, specimenTitle } from '../config/idTypes';
+import { regionCountryName } from '../config/regions';
 import { withRetry } from '../services/retry';
 import { mapToVerificationError, safeReportError } from '../services/errors';
 import { declinedRefusalOf } from '../lib/session-declined';
@@ -28,7 +29,8 @@ import { CameraPhase, type CaptureTurn } from './document/CameraPhase';
 import { CameraPermissionView, CameraUnavailableView, CameraPermissionPrimingView } from '../components/CameraPermissionView';
 import { ReadyPrimer } from '../components/ReadyPrimer';
 import { RequiredDocumentPill } from '../components/RequiredDocumentPill';
-import { READY_DOCUMENT } from '../components/readyPrimerContent';
+import { documentReady } from '../components/readyPrimerContent';
+import { DocumentScanPreview } from './document/DocumentScanPreview';
 import { DocumentCropper } from '../components/DocumentCropper';
 import { DocumentReview } from '../components/DocumentReview';
 import { scanMrzFromImage } from '../mrz/textRecognizer';
@@ -43,7 +45,7 @@ import { SilentFrontCapture } from './document/SilentFrontCapture';
 import { silentCaptureEnabled } from '../lib/silentCapture';
 import { useText } from '../i18n/useText';
 import { isBusinessFlow } from '../config/business';
-import { captureCheckProblems, runCaptureChecks, type CaptureProblem } from '../lib/documentCaptureCheck';
+import { captureCheckProblems, captureRejectionDetail, runCaptureChecks, type CaptureProblem } from '../lib/documentCaptureCheck';
 import type { DocumentCaptureCheckRequest, DocumentCaptureSide } from '../services/api';
 import {
   dropCapture,
@@ -52,6 +54,7 @@ import {
   uploadDocumentSides,
   type DocumentRecordingSide,
 } from '../lib/documentRecordings';
+import { recordJourneyEvent, recordUploadFailure } from '../lib/step-log';
 
 // Document capture — the RN mirror of the Flutter/web DocumentCaptureStep.
 // Phases: front → front-preview → back → review (two-sided); front → review
@@ -128,6 +131,8 @@ function DocumentCapture({
 
   const documentLabel =
     (selectedIdType && Object.values(ID_TYPES).flat().find((d) => d.key === selectedIdType)?.label) || 'Document';
+  // What the step calls it: "Passport", not "International Passport".
+  const documentName = shortDocumentLabel(selectedIdType ?? null, documentLabel);
   const scanSides = selectedIdType ? getScanSides(selectedIdType) : 'front_only';
   const isTwoSided = scanSides === 'front_and_back';
 
@@ -136,7 +141,7 @@ function DocumentCapture({
   // viewfinder: that screen is full-bleed and owns the display.
   const requiredPill = (side: 'front' | 'back' | null) => (
     <RequiredDocumentPill
-      idTypeLabel={documentLabel}
+      idTypeLabel={documentName}
       sideBadge={isTwoSided && side ? (side === 'back' ? 'Back Side' : 'Front Side') : null}
       stepLabel={isTwoSided && side ? (side === 'back' ? 'Step 2 of 2' : 'Step 1 of 2') : null}
     />
@@ -335,7 +340,10 @@ function DocumentCapture({
         const small = await compressVideo(videoPath);
         if (!small) return null; // could not be shrunk below the ceiling: skip it
         const type = side === 'back' ? 'document_back_video' : 'document_front_video';
-        return await withRetry(() => api.upload({ uri: small, type: 'video/mp4' }, type, MAX_VIDEO_BYTES));
+        return await withRetry(() => api.upload({ uri: small, type: 'video/mp4' }, type, MAX_VIDEO_BYTES)).catch((err: unknown) => {
+          recordUploadFailure(type);
+          throw err;
+        });
       } catch {
         /* supplementary — verification proceeds without the document video
            (dropped if it failed to upload or exceeded the 5MB ceiling) */
@@ -389,6 +397,7 @@ function DocumentCapture({
       // A declined session ends the flow on its own screen (the API client
       // marked it), which reports onError once: no toast, no second report.
       if (declinedRefusalOf(err)) return;
+      recordUploadFailure('document_front');
       const verificationError = mapToVerificationError(err, 'upload');
       setUploadError(verificationError.message);
       toast.show({ variant: 'error', title: 'Upload failed', message: verificationError.message });
@@ -416,6 +425,8 @@ function DocumentCapture({
     const problems = captureCheckProblems(results);
     setUploading(false);
     if (problems.length > 0) {
+      // Each problem a rejection (drop-off insights): the second and later save at once.
+      for (const problem of problems) recordJourneyEvent('capture_rejected', captureRejectionDetail(problem.kind));
       setCaptureProblems(problems);
       return;
     }
@@ -496,7 +507,7 @@ function DocumentCapture({
           <View style={{ marginBottom: spacing.md }}>{requiredPill(phase === 'back' ? 'back' : 'front')}</View>
           <UploadPhase
             isBack={phase === 'back'}
-            documentLabel={documentLabel}
+            documentLabel={documentName}
             isTwoSided={isTwoSided}
             busy={busy}
             onUpload={pickFromGallery}
@@ -521,7 +532,23 @@ function DocumentCapture({
         <>
           {cropper}
           <View style={{ marginBottom: spacing.md }}>{requiredPill(phase === 'back' ? 'back' : 'front')}</View>
-          <ReadyPrimer content={READY_DOCUMENT} onReady={() => setReady(true)} />
+          <ReadyPrimer
+            content={documentReady(documentName)}
+            // The camera guide's own sample of the document being read,
+            // turning over only when it has two sides.
+            hero={
+              <DocumentScanPreview
+                subject={{
+                  idType: selectedIdType ?? null,
+                  title: specimenTitle(selectedIdType ?? null, documentLabel),
+                  country: country ? regionCountryName(country) : null,
+                }}
+                twoSided={isTwoSided}
+                accent={colors.primary}
+              />
+            }
+            onReady={() => setReady(true)}
+          />
         </>
       );
     }
@@ -566,7 +593,7 @@ function DocumentCapture({
           isBack={isBack}
           cameraLive={cameraLive}
           active={camera.perm === 'granted'}
-          documentLabel={documentLabel}
+          documentLabel={documentName}
           guideAspect={guideAspect}
           isTwoSided={isTwoSided}
           busy={busy || picking || !!cropUri}

@@ -109,10 +109,17 @@ const BUSINESS_COUNTRY: Readonly<Record<string, string>> = {
   'business.details.countryPinnedLocation': 'Your location',
 };
 
-/** The selfie's final capture: what to fix before the shutter (liveness/captureGuidance.ts). */
+/** The selfie's final capture: what to fix before the shutter (liveness/captureGuidance.ts),
+ *  the ready pause before the first gesture (liveness/readyPause.ts) and the
+ *  head directions (liveness/types.ts DIRECTION_POOL). */
 const PRESENCE_CAPTURE: Readonly<Record<string, string>> = {
-  'presence.position.lookStraight': 'Kindly look straight at the camera',
-  'presence.position.moveCloser': 'Kindly move closer',
+  'presence.position.lookStraight': 'Look straight at the camera',
+  'presence.position.moveCloser': 'Move closer',
+  'presence.position.holdStill': 'Hold still',
+  'presence.challenge.turnLeft': 'Turn your head to the left',
+  'presence.challenge.turnRight': 'Turn your head to the right',
+  'presence.challenge.lookUp': 'Look up',
+  'presence.challenge.lookDown': 'Look down',
 };
 
 /** The consent screen's time sentence (screens/consent/copy.ts). */

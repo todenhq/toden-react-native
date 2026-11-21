@@ -14,8 +14,9 @@ import { collectDeviceMetadata } from '../services/deviceMetadata';
 import { generateRequestId } from '../utils/uuid';
 import { splitFullName } from '../config/keyPeople';
 import { effectiveCountry } from './derive';
-import { nfcPayload } from './submit';
+import { nfcPayload, submittedIntegrity } from './submit';
 import { silentCaptureSubmission } from '../lib/silentCapture';
+import type { CaptureProof } from '../liveness/signedCapture';
 import type { ClientFingerprint } from '../services/fingerprint';
 import type { VerifyRequest } from '../services/api';
 import type { VerificationState } from './state';
@@ -32,6 +33,7 @@ export function buildApplicantVerifyRequest(
   state: VerificationState,
   applicantKeyPersonId: string,
   fingerprint: ClientFingerprint | undefined,
+  captureProof?: CaptureProof,
 ): VerifyRequest {
   // Name: the consumer's userData wins; the applicant-role step's optional
   // full name fills the gaps. Same precedence as the web SDK.
@@ -45,6 +47,7 @@ export function buildApplicantVerifyRequest(
       : undefined;
   // The applicant's own silent frames: the business submission carries none.
   const silent = silentCaptureSubmission(state.silentFrames);
+  const integrity = submittedIntegrity(state.captureIntegrity, captureProof);
 
   return {
     // The application's session rides along: the server refuses an applicant
@@ -76,8 +79,9 @@ export function buildApplicantVerifyRequest(
       device: {
         ...(collectDeviceMetadata() as unknown as Record<string, unknown>),
         ...(fingerprint ? { fingerprint } : {}),
-        // The applicant's liveness claim, as on the individual submission.
-        ...(state.captureIntegrity ? { integrity: state.captureIntegrity } : {}),
+        // The applicant's liveness claim and the proof over their selfie and
+        // video, as on the individual submission.
+        ...(integrity ? { integrity } : {}),
         ...(silent ? { silentCapture: silent.device } : {}),
       },
       // The link back to the application — written last so nothing clobbers it.

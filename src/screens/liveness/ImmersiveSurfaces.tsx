@@ -104,8 +104,30 @@ export function Reassurance({ visible = true }: { visible?: boolean }): React.Re
 }
 
 /** How far through the gestures the person is, under the window: what the row
- *  of dots says in the sheet, in words. */
-export function StepCount({ step, total }: { step: number; total: number }): React.ReactElement {
+ *  of dots says in the sheet, in words. With head directions the line round
+ *  the window already shows how far along the check is, so the count is for
+ *  screen readers only (the line is a picture to them), as on web. */
+export function StepCount({
+  step,
+  total,
+  visuallyHidden = false,
+}: {
+  step: number;
+  total: number;
+  visuallyHidden?: boolean;
+}): React.ReactElement {
+  if (visuallyHidden) {
+    // An empty point of a view: nothing on screen, still read and announced.
+    // Not opacity 0, which a screen reader may skip.
+    return (
+      <View
+        accessible
+        accessibilityLabel={`Step ${step} of ${total}`}
+        accessibilityLiveRegion="polite"
+        style={{ width: 1, height: 1 }}
+      />
+    );
+  }
   return (
     <View style={{ alignItems: 'center' }}>
       <Pill>
@@ -113,48 +135,6 @@ export function StepCount({ step, total }: { step: number; total: number }): Rea
           {`Step ${step} of ${total}`}
         </UiText>
       </Pill>
-    </View>
-  );
-}
-
-/**
- * The plate the gesture animation sits on over the camera: a solid white disc
- * with a ring and a shadow, so the cartoon reads against any room. `compact`
- * is the one inside the instruction's pill on a short phone: a thinner ring
- * and no shadow, since the pill is already its surface.
- */
-export function GesturePlate({
-  children,
-  compact = false,
-}: {
-  children: React.ReactNode;
-  compact?: boolean;
-}): React.ReactElement {
-  const { colors } = useTheme();
-  return (
-    <View
-      style={[
-        {
-          padding: compact ? 2 : 4,
-          borderRadius: radius.full,
-          backgroundColor: '#FFFFFF',
-          borderWidth: compact ? 1.5 : 2,
-          borderColor: colors.primary,
-          overflow: 'hidden',
-        },
-        compact
-          ? null
-          : {
-              shadowColor: '#000000',
-              shadowOpacity: 0.25,
-              shadowRadius: 16,
-              shadowOffset: { width: 0, height: 4 },
-              elevation: 6,
-              overflow: 'visible',
-            },
-      ]}
-    >
-      {children}
     </View>
   );
 }

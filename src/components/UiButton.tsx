@@ -6,6 +6,8 @@ import { useTheme } from './runtime';
 import { UiText } from './Typography';
 import { Icon, type IconName } from './Icon';
 import { Spinner } from './Spinner';
+import { useText } from '../i18n/useText';
+import { logPress } from '../lib/click-log';
 
 // Branded button — 1:1 with the Flutter SDK's UiButton:
 //   • primary     — solid primary fill, onPrimary label
@@ -48,7 +50,10 @@ export function UiButton({
   accessibilityHint,
 }: UiButtonProps): React.ReactElement {
   const { colors } = useTheme();
+  const t = useText();
   const isDisabled = disabled || loading || !onPress;
+  // Named by its catalogue key for the verification timeline (lib/click-log.ts).
+  const press = onPress ? () => { logPress([label, accessibilityLabel], t); onPress(); } : undefined;
 
   const fg =
     labelColor ??
@@ -68,7 +73,7 @@ export function UiButton({
 
   return (
     <Pressable
-      onPress={isDisabled ? undefined : onPress}
+      onPress={isDisabled ? undefined : press}
       disabled={isDisabled}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}

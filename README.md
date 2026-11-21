@@ -44,7 +44,7 @@ Nitro module), so it needs a **custom native build** and **does not run in Expo 
 | `react-native-safe-area-context` | `>=4` | Safe-area insets for the modal |
 | `react-native-svg` | `>=15` | Liveness/overlay graphics |
 
-> Voice guidance is **text-to-speech output only** — the SDK never records audio,
+> Voice guidance is **output only** (Toden voice clips, or the device's text-to-speech) — the SDK never records audio for it,
 > so it needs **no microphone**. The only thing that records sound is a workflow
 > with `documentAudio` or `livenessAudio` on, which needs `microphone: true` on the config plugin (or
 > `NSMicrophoneUsageDescription` and `RECORD_AUDIO` in a bare app). Without them,
@@ -168,7 +168,7 @@ npm install @toden/react-native \
   react-native-vision-camera react-native-vision-camera-worklets \
   react-native-worklets react-native-nitro-modules react-native-nitro-image \
   react-native-safe-area-context react-native-svg \
-  expo expo-image-manipulator expo-image-picker expo-speech expo-font \
+  expo expo-image-manipulator expo-image-picker expo-speech expo-audio expo-font \
   expo-glass-effect expo-crypto \
   expo-location
 
@@ -313,8 +313,11 @@ export default function VerifyScreen() {
 | `enableLiveness`        | `boolean`                                 | `true`              | Run the liveness challenge step. The server can still disable it per ID type.                                        |
 | `livenessMode`          | `'gestures' \| 'flash' \| 'both'`         | `'gestures'`        | How liveness is proven. See [Liveness](#liveness).                                                                   |
 | `flashSequenceLength`   | `number` (2–5)                            | `4`                 | Colours in the flash sequence, for `'flash'` / `'both'`.                                                             |
+| `livenessGestureGuide`  | `boolean`                                 | `true`              | On the liveness camera, a face icon pops up in the window, acts out the gesture being asked for once, then goes, coming back only if the person stops responding. The instruction is shown in words either way. Usually set with the workflow builder's "Show each gesture" switch. |
+| `livenessGestureSet`    | `'directions' \| 'classic'`               | `'classic'`         | `'directions'` asks for head directions (turn left, turn right, look up, look down), picked by Toden for each attempt, in place of nod, turn, blink and smile. Usually set with the workflow builder, where new workflows start on directions. |
+| `livenessDirectionCount` | `number`                                 | `3`                 | With `livenessGestureSet: 'directions'`: how many directions, 2 to 4. Every run includes a head turn. |
 | `selfieReview`          | `boolean`                                 | `false`             | Show the selfie with Retake and Continue after the liveness capture. Off by default: the capture hands straight on to the next step. A failed upload still shows it. |
-| `voiceGuidance`         | `boolean \| { enabled?, language? }`      | `true`              | Spoken liveness instructions (accessibility, TTS **output** — no microphone). `false` mutes it; pass `{ language: 'fr-FR' }` to set the voice. See [Robustness & error handling](#robustness--error-handling). |
+| `voiceGuidance`         | `boolean \| { enabled?, language?, voice? }` | `true`           | Spoken liveness instructions (accessibility, **output** only, no microphone). `false` mutes it; pass `{ language: 'fr-FR' }` to set the language. `voice` names a Toden voice (e.g. `'lyra'`), normally picked on the workflow: see [Toden voices](#toden-voices). This prop sits over the workflow's value key by key. See [Robustness & error handling](#robustness--error-handling). |
 | `emailVerification`     | `EmailVerificationConfig`                 | off                 | Email OTP step after consent. See [Optional steps](#optional-steps).                                                 |
 | `phoneVerification`     | `PhoneVerificationConfig`                 | off                 | Phone OTP step (SMS or WhatsApp). See [Optional steps](#optional-steps).                                             |
 | `proofOfAddress`        | `ProofOfAddressConfig`                    | off                 | Proof-of-address upload after capture. See [Optional steps](#optional-steps).                                        |
@@ -551,6 +554,32 @@ success={{
 }}
 ```
 
+## Toden voices
+
+From 4.3.0 the liveness prompts can play a Toden voice instead of the device's
+speech engine. An organisation admin picks the voice on the workflow; your app
+can also set one, or override the workflow's, with `voiceGuidance.voice`:
+
+```tsx
+voiceGuidance={{ voice: 'rory' }}   // keeps the workflow's enabled and language
+voiceGuidance={false}              // no spoken guidance at all
+```
+
+The voice ids are Toden's own (`lyra`, `rory`, `amara` and the rest of the
+catalogue in the dashboard's workflow builder). When the liveness step opens, the
+SDK fetches the voice list from Toden's server and keeps that voice's clips on the
+device. Any prompt it has no clip for (a workflow's own wording, a language with
+no clips yet, a clip that did not download) is spoken by the device voice, as
+before; nothing in the flow waits for the clips. Your app's `voiceGuidance` sits
+over the workflow's key by key: `{ voice: 'rory' }` keeps the workflow's `enabled`
+and `language`, and a bare boolean changes `enabled` only.
+
+The clips play through **`expo-audio`**, a dependency of the SDK with native code:
+**rebuild your app once** after upgrading (`pod install` on iOS, or a new dev
+client / EAS build). An app that has not rebuilt keeps the device voice. On iOS
+the clips play beside the running camera, and beside the microphone when the
+workflow records sound on the liveness video, without interrupting the recording.
+
 ## Robustness & error handling
 
 The SDK is resilient to flaky networks, denied permissions, and poor capture
@@ -744,6 +773,10 @@ Full documentation, configuration options, and webhook setup: **[docs.toden.co/i
 ## License
 
 MIT © Flitstack Technologies Inc.
+
+## Credits
+
+The cartoon person on the screen before the liveness camera is "Toon Head" by [Johan Melin](https://www.johanmelin.com), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). It has been changed: it is cut into parts so it can move, it is painted in shades of the workflow's colour, and its long hair is replaced with short hair of our own.
 
 ## Presence reporting (Address Intelligence)
 

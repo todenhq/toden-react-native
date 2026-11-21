@@ -1,6 +1,6 @@
 {
   "name": "@toden/react-native",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "description": "Toden SDK for React Native (Expo): ID verification, liveness detection and document capture",
   "author": "Flitstack Technologies Inc.",
   "repository": {
@@ -94,6 +94,7 @@
     "@hugeicons/core-free-icons": "4.3.5",
     "@hugeicons/react-native": "1.0.16",
     "country-flag-icons": "^1.6.17",
+    "expo-audio": "~56.0.13",
     "expo-brightness": "~56.0.5",
     "expo-clipboard": "~56.0.0",
     "expo-crypto": "~56.0.4",

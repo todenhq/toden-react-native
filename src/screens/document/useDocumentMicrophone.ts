@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useMicrophonePermission } from 'react-native-vision-camera';
 
 import { askForMicrophone, microphoneDeclared } from '../../services/device-intel/microphone';
+import { recordJourneyEvent } from '../../lib/step-log';
 
 // The microphone for a workflow that records sound on the document clip.
 //
@@ -26,7 +27,11 @@ export function useDocumentMicrophone(): DocumentMicrophone {
   const ask = useCallback(() => {
     if (askedRef.current) return;
     askedRef.current = true;
-    void askForMicrophone({ hasPermission, declared: microphoneDeclared, request: requestPermission }).then(setAnswer);
+    void askForMicrophone({ hasPermission, declared: microphoneDeclared, request: requestPermission }).then((granted) => {
+      // Only a real refusal: an app that never declared the microphone was not asked.
+      if (!granted && !hasPermission && microphoneDeclared()) recordJourneyEvent('microphone_denied');
+      setAnswer(granted);
+    });
   }, [hasPermission, requestPermission]);
 
   return { settled: answer !== null, granted: answer === true, ask };

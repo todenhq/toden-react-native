@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform, View } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 
 import { documentSpecimen, specimenKind } from '../../lib/documentSpecimen';
+import { useReduceMotion } from '../StaggerIn';
 
 // ---------------------------------------------------------------------------
 // The sample document in the capture guide.
@@ -15,7 +16,18 @@ import { documentSpecimen, specimenKind } from '../../lib/documentSpecimen';
 //
 // It sits exactly on the guide, under the corners, so the two cannot disagree
 // about where the document goes. The drawing itself is lib/documentSpecimen.ts.
+//
+// Between the two sides of a card it is also the turn-over: mounted with
+// `turnFrom`, it shows the side just taken and turns over, in its place in the
+// frame and at the same size, to the side asked for next, then stays for that
+// side's scan and fades as the front's did. A separate, smaller card turning
+// over a dimmed camera did not read as one movement (the web SDK's
+// components/viewfinder/DocumentGhost.tsx, 2026-11-18).
 // ---------------------------------------------------------------------------
+
+/** How long the side just taken is shown before it turns, and the turn. */
+export const GHOST_TURN_DELAY_MS = 600;
+const GHOST_TURN_MS = 800;
 
 /** When it starts to leave if nothing is framed: long enough to read it, find the
  *  document and bring it up to the camera. */
@@ -72,6 +84,8 @@ export function DocumentGhost({
   accent,
   subject,
   documentFound,
+  turnFrom = null,
+  holding = false,
 }: {
   /** The guide rect, in the same coordinates the overlay uses. */
   x: number;
@@ -84,12 +98,23 @@ export function DocumentGhost({
   /** Ends it early, after MIN_SPECIMEN_MS: once a document is framed the guidance
    *  has done its job and would only sit on top of the thing being captured. */
   documentFound: boolean;
+  /** The side to turn over from, when it opens as the turn-over. Read once, at
+   *  mount: it is the same sample before and after the turn. */
+  turnFrom?: 'front' | 'back' | null;
+  /** Stays, and its timing does not start, while true: the turn-over is still
+   *  on screen and nothing is being scanned yet. */
+  holding?: boolean;
 }): React.ReactElement | null {
   const opacity = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useReduceMotion();
 
   // An upright guide (a turned NIN slip) shows the landscape sample turned.
   const turned = aspect < 1;
-  const xml = useSpecimenXml(subject, subject.side, turned ? 1 / aspect : aspect, accent);
+  const sampleAspect = turned ? 1 / aspect : aspect;
+  const xml = useSpecimenXml(subject, subject.side, sampleAspect, accent);
+  const [from] = useState(turnFrom);
+  const fromXml = useSpecimenXml(subject, from ?? subject.side, sampleAspect, accent);
+  const flip = useRef(new Animated.Value(0)).current;
   const shownAt = useRef(Date.now());
   const fading = useRef(false);
 
@@ -113,22 +138,75 @@ export function DocumentGhost({
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start();
+  }, [opacity]);
+
+  // The turn: the side just taken, a moment to see it, then over.
+  useEffect(() => {
+    if (!from) return undefined;
+    if (reduceMotion) {
+      flip.setValue(1);
+      return undefined;
+    }
+    const run = Animated.sequence([
+      Animated.delay(GHOST_TURN_DELAY_MS),
+      Animated.timing(flip, {
+        toValue: 1,
+        duration: GHOST_TURN_MS,
+        easing: Easing.bezier(0.65, 0, 0.35, 1),
+        useNativeDriver: true,
+      }),
+    ]);
+    run.start();
+    return () => run.stop();
+  }, [from, flip, reduceMotion]);
+
+  // Its time on screen counts from when the scan it guides starts.
+  useEffect(() => {
+    if (holding) return undefined;
+    shownAt.current = Date.now();
     const t = setTimeout(fadeOut, SPECIMEN_MS);
     return () => clearTimeout(t);
-  }, [opacity, fadeOut]);
+  }, [holding, fadeOut]);
 
   useEffect(() => {
-    if (!documentFound) return undefined;
+    if (!documentFound || holding) return undefined;
     const wait = Math.max(0, MIN_SPECIMEN_MS - (Date.now() - shownAt.current));
     const t = setTimeout(fadeOut, wait);
     return () => clearTimeout(t);
-  }, [documentFound, fadeOut]);
+  }, [documentFound, holding, fadeOut]);
 
   if (width <= 0 || height <= 0) return null;
 
+  if (!from) {
+    return (
+      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: x, top: y, width, height, opacity }}>
+        <SpecimenImage xml={xml} width={width} height={height} turned={turned} />
+      </Animated.View>
+    );
+  }
+
+  // One face of the turning card each, swapped when the card is edge-on, as
+  // only the face towards the camera shows on a real card.
+  const face = (rotateFrom: string, rotateTo: string, shown: number[]) => ({
+    position: 'absolute' as const,
+    left: 0,
+    top: 0,
+    width,
+    height,
+    opacity: flip.interpolate({ inputRange: [0, 0.499, 0.5, 1], outputRange: shown }),
+    transform: [
+      { perspective: 900 },
+      { rotateY: flip.interpolate({ inputRange: [0, 1], outputRange: [rotateFrom, rotateTo] }) },
+    ],
+  });
   return (
     <Animated.View pointerEvents="none" style={{ position: 'absolute', left: x, top: y, width, height, opacity }}>
-      <SpecimenImage xml={xml} width={width} height={height} turned={turned} />
+      <Animated.View style={face('0deg', '180deg', [1, 1, 0, 0])}>
+        <SpecimenImage xml={fromXml} width={width} height={height} turned={turned} />
+      </Animated.View>
+      <Animated.View style={face('-180deg', '0deg', [0, 0, 1, 1])}>
+        <SpecimenImage xml={xml} width={width} height={height} turned={turned} />
+      </Animated.View>
     </Animated.View>
   );
 }

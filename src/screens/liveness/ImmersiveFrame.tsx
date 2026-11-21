@@ -17,9 +17,7 @@ import { windowRect, type Rect, type Size, aboveHeight } from '../../lib/livenes
 //             around it, or the photo blurred
 //   cutout    what is drawn over the window: its line and its marks, or the
 //             photo on the review
-//   above     the instruction, resting just above the window, and over it
-//             whatever is narrow enough to stand BETWEEN the back and close
-//             buttons (the gesture picture)
+//   above     the instruction, resting just above the window
 //   below     what starts just under it: the step count
 //   footer    what rests on the bottom edge
 // ---------------------------------------------------------------------------
@@ -42,10 +40,8 @@ export function ImmersiveFrame({
   /** Given the window and the box it sits in, so the review can lay its photo
    *  out as the camera was: across the whole box, seen through the window. */
   cutout: (window: Rect, frame: Size) => React.ReactNode;
-  /** Given the height there is under the back and close buttons (`room`),
-   *  and the height up to the top of those buttons (`reach`): what is wide
-   *  keeps to the first, what is narrow and centred may use the second. */
-  above: (room: number, reach: number) => React.ReactNode;
+  /** Given the height there is under the back and close buttons. */
+  above: (room: number) => React.ReactNode;
   below?: React.ReactNode;
   footer?: React.ReactNode;
   /** The height `footer` needs, kept clear of `below`. */
@@ -65,7 +61,6 @@ export function ImmersiveFrame({
   const aboveTop = insets.top + CONTROLS_TOP_GAP;
   const underControls = IMMERSIVE_CONTROLS_BAND - CONTROLS_TOP_GAP;
   const room = Math.max(0, windowTop - 20 - insets.top - IMMERSIVE_CONTROLS_BAND);
-  const reach = Math.max(0, windowTop - 20 - aboveTop);
 
   return (
     <View
@@ -108,7 +103,7 @@ export function ImmersiveFrame({
               overflow: 'hidden',
             }}
           >
-            {above(room, reach)}
+            {above(room)}
           </View>
           {below ? (
             <ScrollView

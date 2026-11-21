@@ -15,6 +15,12 @@ export type LivenessChallenge =
   | 'turn'
   | 'blink'
   | 'smile'
+  // Head directions (the `directions` gesture set): each asks for one way,
+  // the person's own left and right.
+  | 'turnLeft'
+  | 'turnRight'
+  | 'lookUp'
+  | 'lookDown'
   // Passive Liveness: hold still and look at the camera. Passes on its own
   // after a steady moment; the server's liveness model does the judging.
   | 'hold';
@@ -22,12 +28,36 @@ export type LivenessChallenge =
 /** A challenge the avatar can demonstrate (the passive hold has no gesture). */
 export type GestureChallenge = Exclude<LivenessChallenge, 'hold'>;
 
+/**
+ * Which gestures the camera asks for (modes `gestures` and `both`), as on web:
+ *
+ *   directions  Head directions: two to four of turn left, turn right, look up
+ *               and look down (`directionCount`, 3 unless set), always with a
+ *               head turn, in an order picked for the attempt (by Core when it
+ *               answers: liveness/directionPlan.ts).
+ *   classic     Classic gestures: two or three of nod, turn, blink and smile.
+ *
+ * Unset is `classic`, so a workflow saved before the setting keeps what it had.
+ */
+export type LivenessGestureSet = 'directions' | 'classic';
+
+/** The four head directions, as challenge types. */
+export type DirectionChallenge = 'turnLeft' | 'turnRight' | 'lookUp' | 'lookDown';
+export const DIRECTION_CHALLENGES: readonly DirectionChallenge[] = ['turnLeft', 'turnRight', 'lookUp', 'lookDown'];
+export function isDirectionChallenge(type: LivenessChallenge | null | undefined): type is DirectionChallenge {
+  return type === 'turnLeft' || type === 'turnRight' || type === 'lookUp' || type === 'lookDown';
+}
+
 /** The catalogue key of each challenge's instruction (shown AND spoken). */
 export const CHALLENGE_TEXT_KEYS: Record<LivenessChallenge, string> = {
   nod: 'presence.challenge.nod',
   turn: 'presence.challenge.turn',
   blink: 'presence.challenge.blink',
   smile: 'presence.challenge.smile',
+  turnLeft: 'presence.challenge.turnLeft',
+  turnRight: 'presence.challenge.turnRight',
+  lookUp: 'presence.challenge.lookUp',
+  lookDown: 'presence.challenge.lookDown',
   hold: 'presence.challenge.hold',
 };
 
@@ -54,6 +84,13 @@ export const CHALLENGE_POOL: ChallengeConfig[] = [
   { type: 'blink', instruction: challengeInstruction('blink'), timeoutSeconds: 6 },
   { type: 'smile', instruction: challengeInstruction('smile'), timeoutSeconds: 6 },
 ];
+
+/** The head directions set's four movements. A run asks for two to four of them (pickDirections). */
+export const DIRECTION_POOL: ChallengeConfig[] = DIRECTION_CHALLENGES.map((type) => ({
+  type,
+  instruction: challengeInstruction(type),
+  timeoutSeconds: 8,
+}));
 
 /**
  * Passive Liveness: the ONE prompt. The face holds still in the circle for
@@ -117,6 +154,10 @@ export interface LivenessConfig {
   mode?: LivenessMode;
   /** Colours in the flash sequence (2–5, default 4). Flash modes only. */
   flashSequenceLength?: number;
+  /** Which gestures are asked for. Undefined is `classic`. */
+  gestureSet?: LivenessGestureSet;
+  /** How many head directions, with `directions`: 2 to 4. Undefined is 3. */
+  directionCount?: number;
 }
 
 export type LivenessMode = 'gestures' | 'flash' | 'both' | 'passive';

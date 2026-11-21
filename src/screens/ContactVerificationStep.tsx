@@ -19,6 +19,8 @@ import { describeSendError } from '../services/contactErrors';
 import { stepAfterContactVerified } from '../lib/contact-recovery';
 import { INITIAL_CODE_ENTRY, codeEntryReducer } from '../lib/contact-code-state';
 import { declinedRefusalOf } from '../lib/session-declined';
+import { VerificationApiError } from '../services/api';
+import { recordJourneyEvent } from '../lib/step-log';
 
 // ---------------------------------------------------------------------------
 // Contact-verification OTP step — email or phone, one component, two mounts.
@@ -107,6 +109,8 @@ export function ContactVerificationStep({
 
   /** `switchTo` re-sends over the other channel when the first one didn't land. */
   const send = async (switchTo?: PhoneOtpChannel): Promise<void> => {
+    // A code already out means this is the person asking again (drop-off insights).
+    if (challengeId) recordJourneyEvent('code_resent', isEmail ? 'email' : 'phone');
     const sendVia = switchTo ?? via;
     if (switchTo) setVia(switchTo);
     setBusy(true);
@@ -163,6 +167,9 @@ export function ContactVerificationStep({
       if (declined) {
         store.getState().markDeclined(declined, channel);
         return;
+      }
+      if (err instanceof VerificationApiError && (err.code === 'invalid_code' || err.code === 'too_many_attempts')) {
+        recordJourneyEvent('code_invalid', isEmail ? 'email' : 'phone');
       }
       dispatch({ type: 'checkFailed', err });
     } finally {

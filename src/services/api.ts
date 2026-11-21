@@ -2,6 +2,7 @@ import { compactDrawing, type SignatureDrawing } from '../lib/signature';
 import { SDK_VERSION } from './deviceMetadata';
 import { businessSearchQuery, type BusinessSearchParams } from '../config/businessSearch';
 import { readLivenessFailed, type LivenessFailedResult } from '../lib/liveness-attempts';
+import { parseDirectionPlan, type DirectionPlan, type PlanRequest } from '../liveness/directionPlan';
 import type {
   AddressBookAddressesResponse,
   AddressBookCodeResponse,
@@ -32,6 +33,7 @@ import type {
   VerifyResponse,
   WorkflowResolutionResponse,
 } from './api-types';
+import { isNetworkFailure, networkErrorDetail, recordJourneyEvent } from '../lib/step-log';
 
 // The HTTP contract lives in ./api-types and is re-exported here, so importers
 // keep a single entry point for both the client and the shapes it exchanges.
@@ -205,16 +207,33 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
     }
   }
 
+  // A request that never got an answer (offline, DNS, a timeout) is recorded
+  // for drop-off insights, then rethrown untouched. `quiet` leaves out the
+  // background progress saves: one failing offline must not record an event
+  // that asks for another save.
+  async function send(url: string, init: RequestInit, quiet = false): Promise<Response> {
+    try {
+      return await fetch(url, init);
+    } catch (err) {
+      if (!quiet && isNetworkFailure(err)) recordJourneyEvent('network_error', networkErrorDetail(err));
+      throw err;
+    }
+  }
+
   // JSON request to our own server (verify, status, config, health).
-  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const res = await fetch(`${base}${path}`, {
-      ...init,
-      headers: {
-        ...headers,
-        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-        ...init.headers,
+  async function request<T>(path: string, init: RequestInit = {}, quiet = false): Promise<T> {
+    const res = await send(
+      `${base}${path}`,
+      {
+        ...init,
+        headers: {
+          ...headers,
+          ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+          ...init.headers,
+        },
       },
-    });
+      quiet,
+    );
     return respond<T>(res);
   }
 
@@ -250,7 +269,7 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
       form.append('type', type);
 
       // Don't set Content-Type — the fetch impl adds the multipart boundary.
-      const res = await fetch(`${base}/upload`, {
+      const res = await send(`${base}/upload`, {
         method: 'POST',
         headers: await uploadHeaders(headers, options.deviceId),
         body: form,
@@ -358,6 +377,31 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
       return readLivenessFailed(res);
     },
 
+    /**
+     * The gestures Core picked for one liveness attempt, head directions or
+     * classic, or null when it could not say (an older Core, or no answer):
+     * the SDK then picks its own. Ask once per attempt; a retry asks again
+     * (liveness/directionPlan.ts). The pool is sent only for classic, and only
+     * when the integration narrowed it; the flash colour count only when the
+     * check runs a flash. A flash-only check asks no gestures, so no count.
+     */
+    async livenessDirections(plan: PlanRequest): Promise<DirectionPlan | null> {
+      try {
+        const raw = await request<unknown>('/liveness/directions', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...(plan.set === 'none' ? {} : { count: plan.count }),
+            set: plan.set,
+            ...(plan.set === 'classic' && plan.pool && plan.pool.length > 0 ? { pool: plan.pool } : {}),
+            ...(plan.flash != null ? { flash: plan.flash } : {}),
+          }),
+        });
+        return parseDirectionPlan(raw, plan);
+      } catch {
+        return null;
+      }
+    },
+
     /** Whether the email has a saved address this flow could take. */
     async addressBookLookup(email: string, presence: boolean): Promise<AddressBookLookupResponse> {
       return request<AddressBookLookupResponse>('/address-book/lookup', {
@@ -463,10 +507,14 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
      * resume and must never interrupt them now — callers swallow failures.
      */
     async saveProgress(sessionId: string, progress: unknown): Promise<void> {
-      await request(`/session/${encodeURIComponent(sessionId)}/progress`, {
-        method: 'PUT',
-        body: JSON.stringify(progress),
-      });
+      await request(
+        `/session/${encodeURIComponent(sessionId)}/progress`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(progress),
+        },
+        true,
+      );
     },
 
     /**

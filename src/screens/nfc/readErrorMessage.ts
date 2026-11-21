@@ -91,3 +91,24 @@ export function readErrorMessage(err: unknown, stageAtFailure?: string): string 
   }
   return "Couldn't read the chip. Please try again.";
 }
+
+/**
+ * The closed detail drop-off insights records for a failed chip read
+ * (lib/step-log `nfc_failed`), or null for the person dismissing the sheet,
+ * which is a choice and not a failure. Never the platform's own string.
+ */
+export function nfcFailureDetail(
+  err: unknown,
+): 'not_supported' | 'read_error' | 'timeout' | 'access_denied' | 'other' | null {
+  const raw = err instanceof Error ? err.message : String(err ?? '');
+  if (/Code=200\b/.test(raw)) return null;
+  if (err instanceof EmrtdSessionError) {
+    if (err.code === 'bac_failed') return 'access_denied';
+    if (err.code === 'read_failed' || err.code === 'transport') return 'read_error';
+    if (err.code === 'select_failed') return 'not_supported';
+  }
+  if (/not supported|unsupported|NFC is not available|nfc.*disabled/i.test(raw)) return 'not_supported';
+  if (/Code=201\b|no chip was detected/i.test(raw)) return 'timeout';
+  if (/Code=20[23]\b|Code=10[0-4]\b|tag was lost/i.test(raw)) return 'read_error';
+  return 'other';
+}

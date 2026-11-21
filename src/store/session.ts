@@ -2,7 +2,8 @@ import type { VerificationState, VerificationStore } from './state';
 import { withoutRestoredSelfie } from '../lib/livenessResume';
 import { collectDeviceMetadata } from '../services/deviceMetadata';
 import { restoreAddress } from './address';
-import { getStepLog } from '../lib/step-log';
+import { getStepLog, onJourneySaveNeeded } from '../lib/step-log';
+import { journeyClient } from '../services/deviceMetadata';
 import { emptyKeyPerson, type KeyPersonEntry } from '../config/keyPeople';
 import { restoredBusinessDocuments } from '../config/businessDocumentGroups';
 import type { SessionStartResponse } from '../services/api-types';
@@ -207,7 +208,7 @@ export function progressFromState(s: ReturnType<VerificationStore['getState']>):
   );
   return {
     step: s.currentStep,
-    stepLog: getStepLog(),
+    stepLog: getStepLog(journeyClient()),
     mediaIds,
     data: {
       selectedCountry: s.selectedCountry ?? undefined,
@@ -240,6 +241,10 @@ export function progressFromState(s: ReturnType<VerificationStore['getState']>):
  */
 export function isUntouchedProgress(payload: Record<string, unknown>, opening: string = 'consent'): boolean {
   if (payload['step'] !== opening) return false;
+  // Something got in the way on the opening screen (Close pressed on consent,
+  // the app left): that is the journey drop-off insights needs, so it is saved.
+  const events = (payload['stepLog'] as { events?: unknown[] } | null | undefined)?.events;
+  if (Array.isArray(events) && events.length > 0) return false;
   return Object.keys((payload['mediaIds'] as object) ?? {}).length === 0;
 }
 
@@ -251,29 +256,51 @@ export function watchSessionProgress(store: VerificationStore): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let lastSaved = '';
 
+  const save = () => {
+    const s = store.getState();
+    if (!s.sessionId || s.cancelled || s.declined) return;
+    const payload = progressFromState(s);
+    if (isUntouchedProgress(payload, openingStep(s))) return;
+    // The fingerprint leaves out the log's sentAt, which changes on every
+    // collect and would make every snapshot look new.
+    const log = payload['stepLog'] as { sentAt?: string } | null | undefined;
+    const fingerprint = JSON.stringify({ ...payload, stepLog: log ? { ...log, sentAt: undefined } : log });
+    if (fingerprint === lastSaved) return;
+    lastSaved = fingerprint;
+    void s.api.saveProgress(s.sessionId, payload).catch((err: unknown) => {
+      // A lost save is swallowed (it costs some re-typing on resume), but a
+      // cancellation stops the flow: no later save or submit can succeed.
+      // A decline (session_declined) is caught by the API client's
+      // onRefusal, which marks the store before this runs.
+      const cancelled = cancelledRefusalOf(err);
+      if (cancelled) store.getState().markCancelled(cancelled.message);
+    });
+  };
+
   const unsubscribe = store.subscribe(() => {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      const s = store.getState();
-      if (!s.sessionId || s.cancelled || s.declined) return;
-      const payload = progressFromState(s);
-      if (isUntouchedProgress(payload, openingStep(s))) return;
-      const fingerprint = JSON.stringify(payload);
-      if (fingerprint === lastSaved) return;
-      lastSaved = fingerprint;
-      void s.api.saveProgress(s.sessionId, payload).catch((err: unknown) => {
-        // A lost save is swallowed (it costs some re-typing on resume), but a
-        // cancellation stops the flow: no later save or submit can succeed.
-        // A decline (session_declined) is caught by the API client's
-        // onRefusal, which marks the store before this runs.
-        const cancelled = cancelledRefusalOf(err);
-        if (cancelled) store.getState().markCancelled(cancelled.message);
-      });
-    }, SAVE_DEBOUNCE_MS);
+    timer = setTimeout(save, SAVE_DEBOUNCE_MS);
   });
+  // Something that got in the way (lib/step-log): saved now, not after the
+  // debounce, because the person may be leaving. The step log is one per app
+  // and each open builds a new store whose watcher is never torn down, so the
+  // newest flow takes the listener over: an old store must never save the
+  // next session's journey into its own session.
+  stopPreviousJourneyListener?.();
+  const unlisten = onJourneySaveNeeded(() => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    save();
+  });
+
+  stopPreviousJourneyListener = unlisten;
 
   return () => {
     unsubscribe();
+    unlisten();
+    if (stopPreviousJourneyListener === unlisten) stopPreviousJourneyListener = null;
     if (timer) clearTimeout(timer);
   };
 }
+
+let stopPreviousJourneyListener: (() => void) | null = null;

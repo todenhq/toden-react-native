@@ -6,15 +6,18 @@
 
 export const PRESENCE_TEXTS: Record<string, string> = {
   // Sheet headers (components/stepHeaderCopy.ts, stepHeaderMeta.tsx).
-  'presence.title': 'Face Verification',
+  'presence.title': 'Face check',
   'presence.camera.description': 'Follow the on-screen instructions',
 
   // The instruction above the camera circle, also spoken (liveness/types.ts).
+  // The voice contract's wording (kyc-core docs/VOICE_GUIDANCE.md): a Toden
+  // voice clip plays only for exactly this text, so a workflow's own words
+  // are spoken by the device voice.
   'presence.position.placeFace': 'Position your face in the circle',
-  'presence.challenge.nod': 'Kindly nod your head',
-  'presence.challenge.turn': 'Kindly turn your head',
+  'presence.challenge.nod': 'Nod your head',
+  'presence.challenge.turn': 'Turn your head',
   'presence.challenge.blink': 'Blink your eyes',
-  'presence.challenge.smile': 'Smile please',
+  'presence.challenge.smile': 'Smile',
   // Passive Liveness: the single hold prompt (liveness/types.ts HOLD_CHALLENGE).
   'presence.challenge.hold': 'Hold still and look at the camera',
 };

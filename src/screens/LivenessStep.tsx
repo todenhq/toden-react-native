@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { Platform, View } from 'react-native';
 import {
   useCameraDevice,
+  useCameraDevices,
   useCameraPermission,
   useFrameOutput,
   usePhotoOutput,
@@ -17,12 +18,14 @@ import { isSelfieBlurry, measureSelfieSharpness } from '../lib/selfie-sharpness'
 import { VerificationError } from '../types/verification';
 import { useStore } from 'zustand';
 import { useFlowState, useVerificationConfig, useVerificationStore, useTheme } from '../components/runtime';
+import { OwnTheme } from '../components/theme-provider';
 import { useText } from '../i18n/useText';
 import { UiText } from '../components/Typography';
 import { UiButton } from '../components/UiButton';
 import { UiPulseLoader } from '../components/UiPulseLoader';
 import { useVideoRecorder } from '../components/useVideoRecorder';
 import { recordsLivenessAudio } from '../config/livenessAudio';
+import { voiceClipServer } from '../services/resolveUrl';
 import { useDocumentMicrophone } from './document/useDocumentMicrophone';
 import {
   LIVENESS_VIDEO_BITRATE,
@@ -35,10 +38,10 @@ import { CameraPermissionView, CameraUnavailableView, CameraPermissionPrimingVie
 import { useFaceModelReady } from '../liveness/useModelReady';
 import { ReadyPrimer } from '../components/ReadyPrimer';
 import { READY_LIVENESS, READY_LIVENESS_PASSIVE } from '../components/readyPrimerContent';
-import { livenessLayout } from '../lib/livenessLayout';
 import { detectFaceOnFrame } from '../liveness/visionCameraFaceDetector';
 import { buildLivenessIntegrity } from '../liveness/integritySignals';
 import { DEFAULT_LIVENESS_CONFIG } from '../liveness/types';
+import type { PlanRequest } from '../liveness/directionPlan';
 import { livenessProgress } from '../lib/captureRing';
 import { useFlashSequence } from './useFlashSequence';
 import { useFlashHole } from './useFlashHole';
@@ -64,9 +67,14 @@ import { successHaptic, tapHaptic } from '../services/haptics';
 import { showsSelfieReview } from '../config/biometricOptions';
 import { useLiveness, type SelfieChoice } from '../liveness/useLiveness';
 import type { SelfieShot } from '../lib/selfie-candidates';
+import type { SelfieScene } from '../lib/selfie-review';
 import { useSelfieStills } from './liveness/useSelfieStills';
+import { GesturePreview } from './liveness/GesturePreview';
 import type { LivenessFaceData } from '../liveness/types';
 import { lightingOf } from '../liveness/light-level';
+import { depthSelfieCamera, enablePhotoDepth } from '../liveness/depthFrame';
+import { gestureGuideEnabled, narratedGesture } from '../liveness/narratorPose';
+import { recordJourneyEvent } from '../lib/step-log';
 
 // Liveness — the RN mirror of the Flutter/web liveness flow. A front-camera
 // VisionCamera preview drives a frame processor that calls the native face
@@ -95,7 +103,14 @@ export function LivenessStep(): React.ReactElement {
   const nextStep = useFlowState((s) => s.nextStep);
   const clearSelfie = useFlowState((s) => s.clearSelfie);
 
-  const device = useCameraDevice('front');
+  // The Face ID camera where there is one, so the selfie can carry depth
+  // (liveness/depthFrame.ts); the usual front camera everywhere else.
+  const cameraDevices = useCameraDevices();
+  const frontCamera = useCameraDevice('front');
+  const device = useMemo(
+    () => depthSelfieCamera(cameraDevices, Platform.OS) ?? frontCamera,
+    [cameraDevices, frontCamera],
+  );
   const { hasPermission, requestPermission } = useCameraPermission();
 
   // v5 capture is via output objects attached to <Camera outputs={[...]}> —
@@ -119,6 +134,7 @@ export function LivenessStep(): React.ReactElement {
     enablePersistentRecorder: true,
   });
   const videoRecorder = useVideoRecorder(videoOutput, !!device && !waitingForMicrophone);
+  const voiceServer = useMemo(() => voiceClipServer(config.apiKey, config.devUrl), [config.apiKey, config.devUrl]);
 
   // 'priming' shows the "Allow camera access" screen BEFORE the OS prompt
   // (Stripe-style); the prompt only fires (→ 'requesting') once the user taps
@@ -142,6 +158,12 @@ export function LivenessStep(): React.ReactElement {
     return () => clearTimeout(t);
   }, []);
   const cameraUnavailable = cameraGrace && !device;
+  // Read by the permission request without re-running it when the camera list settles.
+  const hasCameraRef = useRef(false);
+  hasCameraRef.current = !!device;
+  useEffect(() => {
+    if (cameraUnavailable) recordJourneyEvent('camera_unavailable', 'not_found');
+  }, [cameraUnavailable]);
   // Gate the whole camera path on the user acknowledging the primer.
   const [ready, setReady] = useState(false);
   const showPrimer = perm === 'priming' && !!device;
@@ -158,6 +180,8 @@ export function LivenessStep(): React.ReactElement {
     let cancelled = false;
     void (async () => {
       const granted = await requestPermission();
+      // Each refusal counts: drop-off insights tells "refused twice" apart.
+      if (!granted && hasCameraRef.current) recordJourneyEvent('camera_denied');
       if (!cancelled) setPerm(granted ? 'granted' : 'denied');
     })();
     return () => {
@@ -193,6 +217,7 @@ export function LivenessStep(): React.ReactElement {
     setUploadError,
     selfieIdRef,
     videoPathRef,
+    depthPathRef,
     uploadSelfieAndVideo,
   } = upload;
 
@@ -200,6 +225,8 @@ export function LivenessStep(): React.ReactElement {
   // that lands after a retake can never flag the next photo. A notice only,
   // never a gate: see lib/selfie-sharpness.
   const [softSelfieUri, setSoftSelfieUri] = useState<string | null>(null);
+  // The still the selfie was cut from, for the review (lib/selfie-review.ts).
+  const [selfieScene, setSelfieScene] = useState<{ forUri: string; scene: SelfieScene } | null>(null);
 
   // A stored selfie with no uploaded mediaId is an interrupted upload (failed,
   // or the user left mid-flight): resume it once on mount. Idempotent — with a
@@ -218,8 +245,12 @@ export function LivenessStep(): React.ReactElement {
   // The run's silent stills (./liveness/useSelfieStills), reached through a
   // ref for the same reason: the machine is built before them.
   const runStillRef = useRef<(face: LivenessFaceData, shot: SelfieShot) => void>(() => {});
+  const requestDirectionPlan = useCallback((plan: PlanRequest) => api.livenessDirections(plan), [api]);
   const liveness = useLiveness({
     voiceGuidance: config.voiceGuidance,
+    // Where the workflow's Toden voice clips come from (liveness/voiceClips).
+    voiceServer,
+    recordsAudio: wantsAudio && microphone.granted,
     // Silent until the primer is dismissed and the camera is actually up: the
     // machine is built behind the primer and would talk to nobody.
     announce: ready && !showPrimer && !waitingForMicrophone,
@@ -230,13 +261,24 @@ export function LivenessStep(): React.ReactElement {
       ...DEFAULT_LIVENESS_CONFIG,
       mode: config.livenessMode ?? 'gestures',
       flashSequenceLength: config.flashSequenceLength,
+      gestureSet: config.livenessGestureSet,
+      directionCount: config.livenessDirectionCount,
     },
+    // Core picks the gestures of each attempt (liveness/directionPlan.ts).
+    requestDirectionPlan,
   });
 
   // A failed check is reported when the workflow limits attempts; the answer
   // adds the attempts left to the panel, or ends the flow on the declined
   // screen at the limit (./liveness/useLivenessFailureReport).
   const attempts = useLivenessFailureReport(liveness.phase, liveness.failureReason);
+
+  // Depth on the selfie's stills, switched on as the session starts: before
+  // the recording, since the switch rebuilds the capture pipeline. A camera
+  // without depth answers no and nothing changes.
+  const onCameraStarted = useCallback(() => {
+    enablePhotoDepth(photoOutput);
+  }, [photoOutput]);
 
   const stills = useSelfieStills(photoOutput, liveness.landSelfieShot);
   runStillRef.current = stills.takeRunStill;
@@ -261,7 +303,10 @@ export function LivenessStep(): React.ReactElement {
         return;
       }
       // Cut to the standard selfie frame (lib/selfie-pick.ts).
-      const compressed = await stills.finalSelfie(choice);
+      const { uri: compressed, scene, depthUri } = await stills.finalSelfie(choice);
+      // The still it was cut from, for the review: held beside the selfie it
+      // belongs to, so a restored or retaken selfie never shows another's.
+      setSelfieScene(scene ? { forUri: compressed, scene } : null);
       setSelfieUri(compressed);
       // Measured on the still the applicant is about to see. It never holds
       // the review back: the notice appears when the answer does.
@@ -277,6 +322,7 @@ export function LivenessStep(): React.ReactElement {
           liveness.flashResult,
           liveness.challenges,
           liveness.promptTimes(),
+          liveness.directionPlanId(),
         ),
       });
       liveness.markComplete();
@@ -285,6 +331,7 @@ export function LivenessStep(): React.ReactElement {
       // keep it so the review-screen retry can re-upload it.
       const videoPath = await videoRecorder.stop();
       videoPathRef.current = videoPath;
+      depthPathRef.current = depthUri;
       void uploadSelfieAndVideo(compressed, videoPath, videoPath ? null : videoRecorder.failure());
     } catch {
       liveness.reset();
@@ -307,12 +354,6 @@ export function LivenessStep(): React.ReactElement {
   // always reads the latest state-machine callbacks.
   const livenessRef = useRef(liveness);
   livenessRef.current = liveness;
-
-  // The circle and the gesture avatar are sized from the WINDOW, not the width
-  // alone, so a short phone keeps the avatar on screen (lib/livenessLayout).
-  // A hook, so it lives up here with the ring refs, above the gates below.
-  const windowSize = useWindowDimensions();
-  const layout = livenessLayout(windowSize);
 
   // Progress for the ring, read every frame from a ref — never from render.
   // Declared HERE, above the early returns below: a hook after a conditional
@@ -513,6 +554,8 @@ export function LivenessStep(): React.ReactElement {
     shouldContinue: () => !livenessRef.current.isCompromised(),
     sequenceLength: config.flashSequenceLength,
     readFaceRgb: () => faceRgbRef.current,
+    // Core picks the colours with the attempt's plan (liveness/directionPlan.ts).
+    plannedColours: () => livenessRef.current.flashColours(),
     onComplete: (result) => livenessRef.current.completeFlash(result),
     attempt: liveness.flashAttempt,
   });
@@ -584,7 +627,17 @@ export function LivenessStep(): React.ReactElement {
     // With a photo to show, the review keeps the whole screen: the photo where
     // the camera was. A restored session has none and keeps the sheet.
     if (selfieUri) {
-      return handedOver ? <LivenessReview selfieUri={selfieUri} {...review} /> : <View />;
+      const scene = selfieScene?.forUri === selfieUri ? selfieScene.scene : null;
+      // The review has no face to light: it is drawn in the person's own theme
+      // while the step stays latched lit (Flutter's LivenessOwnTheme). On a dark
+      // flow its panel was light (user, 2026-11-18).
+      return handedOver ? (
+        <OwnTheme>
+          <LivenessReview selfieUri={selfieUri} scene={scene} {...review} />
+        </OwnTheme>
+      ) : (
+        <View />
+      );
     }
     return <LivenessComplete selfieUri={selfieUri} {...review} />;
   }
@@ -610,9 +663,16 @@ export function LivenessStep(): React.ReactElement {
   // of the user, not about access. Opening the camera unannounced is what makes
   // people fumble the first attempt.
   if (!ready) {
-    // Passive Liveness asks for no prompts, so its description says so.
-    const primer = config.livenessMode === 'passive' ? READY_LIVENESS_PASSIVE : READY_LIVENESS;
-    return <ReadyPrimer content={primer} onReady={() => setReady(true)} />;
+    // A small copy of the camera's window, with a cartoon person running
+    // through the gestures; for Passive Liveness, holding still.
+    const passive = config.livenessMode === 'passive';
+    return (
+      <ReadyPrimer
+        content={passive ? READY_LIVENESS_PASSIVE : READY_LIVENESS}
+        hero={<GesturePreview passive={passive} />}
+        onReady={() => setReady(true)}
+      />
+    );
   }
   if (showPrimer) {
     return <CameraPermissionPrimingView onGrant={() => setPerm('requesting')} />;
@@ -671,6 +731,7 @@ export function LivenessStep(): React.ReactElement {
       device={device}
       cameraActive={perm === 'granted'}
       outputs={[photoOutput, videoOutput, frameOutput]}
+      onCameraStarted={onCameraStarted}
       getRingTarget={getRingTarget}
       windowRef={flashHoleRef}
       dimRoom={dimRoom}
@@ -683,6 +744,16 @@ export function LivenessStep(): React.ReactElement {
             }
           : null
       }
+      // The face icon acts out the gesture while it is being asked for, and
+      // goes once it lands. It keeps out of the way while the person is asked
+      // to move into place, and a workflow can switch it off.
+      narratedGesture={narratedGesture({
+        enabled: gestureGuideEnabled(config),
+        phase: liveness.phase,
+        challenge: liveness.activeChallenge,
+        movingIntoPlace:
+          liveness.positionGuidance != null || liveness.multipleFaces || liveness.lightingGuidance != null,
+      })}
       onFrameSize={onFrameSize}
     />
   );

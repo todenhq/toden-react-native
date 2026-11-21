@@ -8,6 +8,7 @@ import { useBusinessDocumentAttach, type AttachableSlot } from '../useBusinessDo
 import { BUSINESS_DOCUMENTS_COPY as COPY } from './copy';
 import { readsDocumentPeople } from '../../config/documentPeople';
 import { useVerificationConfig } from '../../components/runtime';
+import { recordUploadFailure } from '../../lib/step-log';
 
 // ---------------------------------------------------------------------------
 // Uploading and removing a group's document. Each file uploads at once (type
@@ -97,6 +98,7 @@ export function useGroupUpload() {
         );
         readPeople(slot.group, mediaId);
       } catch {
+        recordUploadFailure('business_document');
         setError(COPY.errorUpload);
       } finally {
         setUploading(null);

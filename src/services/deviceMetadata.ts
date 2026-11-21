@@ -4,7 +4,7 @@
 // `utils/device-metadata.ts` and the Flutter SDK's `device_metadata_service.dart`.
 
 import { OS } from '../utils/platform';
-import { getStepLog } from '../lib/step-log';
+import { getStepLog, type JourneyClient } from '../lib/step-log';
 
 export const SDK_TYPE = 'react-native' as const;
 
@@ -15,7 +15,7 @@ export type DeviceType = 'mobile' | 'tablet' | 'desktop' | 'unknown';
  * Single source of truth for the SDK version — also used by `services/api.ts`
  * for the `X-SDK-Version` header. Keep in sync with `package.json`.
  */
-export const SDK_VERSION = '4.2.0';
+export const SDK_VERSION = '4.3.0';
 
 export interface ReactNativeDeviceMetadata {
   sdkType: 'react-native';
@@ -183,11 +183,41 @@ export function collectDeviceMetadata(): ReactNativeDeviceMetadata {
   }
 
   // Step journey recorded during the session — powers the dashboard's
-  // verification timeline. See lib/step-log.
-  const stepLog = getStepLog();
+  // verification timeline and drop-off insights. See lib/step-log.
+  const stepLog = getStepLog(journeyClientOf(meta));
   if (stepLog) {
     (meta as ReactNativeDeviceMetadata & { stepLog?: unknown }).stepLog = stepLog;
   }
 
   return meta;
+}
+
+/** major.minor at most: enough to tell versions apart, no build numbers. */
+export function shortOsVersion(version: string | undefined | null): string | undefined {
+  if (!version) return undefined;
+  const parts = version.split('.').filter((p) => /^\d+$/.test(p)).slice(0, 2);
+  return parts.length > 0 ? parts.join('.') : undefined;
+}
+
+/** The step log's `client` (drop-off insights) from collected metadata: the SDK and device, no identifiers. */
+export function journeyClientOf(meta: ReactNativeDeviceMetadata): JourneyClient {
+  const type = meta.device?.type;
+  const formFactor = type === 'mobile' ? 'phone' : type === 'tablet' ? 'tablet' : type === 'desktop' ? 'desktop' : undefined;
+  const osVersion = shortOsVersion(meta.os?.version);
+  return {
+    sdk: 'react-native',
+    version: SDK_VERSION,
+    platform: OS === 'ios' ? 'ios' : OS === 'android' ? 'android' : 'web',
+    ...(meta.os?.name ? { os: meta.os.name } : {}),
+    ...(osVersion ? { osVersion } : {}),
+    ...(formFactor ? { formFactor } : {}),
+  };
+}
+
+let cachedClient: JourneyClient | null = null;
+
+/** The step log's `client` for progress saves: read once, the device does not change mid-flow. */
+export function journeyClient(): JourneyClient {
+  if (!cachedClient) cachedClient = journeyClientOf(collectDeviceMetadata());
+  return cachedClient;
 }

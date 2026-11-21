@@ -165,7 +165,10 @@ internal class BackdropBlurView(context: Context) : View(context) {
 
   private companion object {
     const val SCALE = 4f
-    const val RADIUS_DP = 24f
+    // The web's blur(2px) round the window (user, 2026-11-17: 5px still read
+    // as frosted glass; the room stays readable, softened). Kept equal to
+    // LIVENESS_BLUR in src/lib/livenessCutout.ts (livenessBlurParity.test).
+    const val RADIUS_DP = 2f
 
     /** The nativeID of the view laid out over the window (components/BackdropBlur). */
     const val MARKER_ID = "myaza-blur-window"

@@ -20,8 +20,21 @@ import { outlineSegments, segmentFill } from '../../lib/windowSegments';
 // rect's stroke begins differs between the two platforms' renderers, and a
 // line that starts at nine o'clock on one of them is the kind of thing nobody
 // notices until it ships.
+//
+// It runs a little way OUTSIDE the window, with a clear gap between the two,
+// as Apple's face recognition ring does: the line reads as a ring round the
+// face rather than as the window's own edge. The web SDK's numbers
+// (steps/liveness/WindowRing.tsx).
 
-const STROKE = 4;
+/** Heavier than the frame's other lines, so it reads round the face over a busy picture. */
+export const RING_STROKE = 6;
+const STROKE = RING_STROKE;
+/** The clear gap between the window's edge and the inside of the line. */
+export const RING_GAP = 7;
+/** How far the line reaches past the window, its stroke included. */
+export const RING_REACH = RING_GAP + STROKE;
+/** The outline the line's centre follows: grown past the window by the gap. */
+export const RING_INSET = -(RING_GAP + STROKE / 2);
 
 type PathRef = React.ElementRef<typeof Path>;
 
@@ -44,8 +57,8 @@ export function WindowRing({
   const refs = useRef<(PathRef | null)[]>([]);
   const targetRef = useRef(0);
   const shownRef = useRef(0);
-  const length = useMemo(() => windowOutline(window, STROKE / 2).length, [window]);
-  const parts = useMemo(() => outlineSegments(window, STROKE / 2, segments), [window, segments]);
+  const length = useMemo(() => windowOutline(window, RING_INSET).length, [window]);
+  const parts = useMemo(() => outlineSegments(window, RING_INSET, segments), [window, segments]);
   const cap = parts.length > 1 ? 'round' : 'butt';
 
   useEffect(() => {
@@ -76,9 +89,10 @@ export function WindowRing({
   return (
     <Svg
       pointerEvents="none"
-      style={{ position: 'absolute', top: 0, left: 0 }}
-      width={window.width}
-      height={window.height}
+      style={{ position: 'absolute', top: -RING_REACH, left: -RING_REACH }}
+      width={window.width + RING_REACH * 2}
+      height={window.height + RING_REACH * 2}
+      viewBox={`${-RING_REACH} ${-RING_REACH} ${window.width + RING_REACH * 2} ${window.height + RING_REACH * 2}`}
     >
       {parts.map((part, i) => (
         <Path key={`t${i}`} d={part.d} fill="none" stroke={track} strokeWidth={STROKE} strokeLinecap={cap} />

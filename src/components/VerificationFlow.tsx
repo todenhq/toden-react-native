@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View } from 'react-native';
 
 import { radius, spacing } from '../config/theme';
@@ -24,6 +24,8 @@ import { stepHeaderMeta } from './stepHeaderMeta';
 import { useText } from '../i18n/useText';
 import { countrySelectOptions, idCountryOnStep, poaCountryFor } from '../store/derive';
 import { contactBackHidden } from '../lib/contact-recovery';
+import { recordJourneyEvent } from '../lib/step-log';
+import { useJourneyAppState } from './flow/useJourneyAppState';
 
 // The step router — 1:1 with the Flutter SDK's _VerificationFlowWidget. Computes per-step
 // header title/description, the 4-step indicator info, back/country, fetches the
@@ -183,6 +185,14 @@ export function VerificationFlow({
   // dismiss behaviour, handled by the Modal.)
   const canGoBack = !isFatal && !cancelled && !declined && onBack != null;
   const disableClose = config.disableClose === true;
+  // The person closing the flow before the end (drop-off insights). Not the
+  // app's own close(), and not closing the submitted screen: that is finishing.
+  const submitted = currentStep === 'submitted';
+  const closeByPerson = useCallback(() => {
+    if (!submitted) recordJourneyEvent('flow_closed');
+    onClose();
+  }, [submitted, onClose]);
+  useJourneyAppState();
   useEffect(() => {
     if (!backRef) return undefined;
     backRef.current = (): BackResult => {
@@ -190,12 +200,14 @@ export function VerificationFlow({
         store.getState().previousStep();
         return 'navigated';
       }
-      return disableClose || recoveringContact ? 'blocked' : 'close';
+      if (disableClose || recoveringContact) return 'blocked';
+      if (!submitted) recordJourneyEvent('flow_closed');
+      return 'close';
     };
     return () => {
       backRef.current = null;
     };
-  }, [backRef, canGoBack, disableClose, recoveringContact, store]);
+  }, [backRef, canGoBack, disableClose, recoveringContact, store, submitted]);
 
   if (isFatal) {
     return <FatalConfigError message={fatalMessage} onClose={onClose} />;
@@ -212,7 +224,7 @@ export function VerificationFlow({
         stepCount={stepInfo?.stepCount ?? null}
         country={headerCountry}
         onBack={onBack}
-        onClose={onClose}
+        onClose={closeByPerson}
         // The searchable country picker (>5 countries) pins its search box
         // above a ~240-row list; the address pin and entrance steps fill it
         // too, since a map or panorama owns every touch and their actions
@@ -237,7 +249,7 @@ export function VerificationFlow({
         }
         immersiveControls={currentStep === 'liveness'}
       >
-        <StepView step={currentStep} onClose={onClose} />
+        <StepView step={currentStep} onClose={closeByPerson} />
       </VerificationSheet>
     </ToastProvider>
   );

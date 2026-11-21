@@ -6,15 +6,15 @@ import type { Size } from './livenessCutout';
 // line shows how many stages there are and which one is filling.
 //
 // The same outline as windowOutline (clockwise from twelve o'clock), split by
-// distance along it. Mirrors the Flutter SDK's _CaptureRingPainter, which
+// distance along it. Mirrors the web SDK's lib/window-segments.ts and the Flutter SDK's _CaptureRingPainter, which
 // takes its parts from the path's own metric; here each part is written out as
 // its own path, because the line is revealed with a dash offset and a part
 // that is its own path needs only that one number per frame.
 // ---------------------------------------------------------------------------
 
 /** Gap between two parts, along the line. The ends are round, so what is seen
- *  is this less one stroke width. */
-export const SEGMENT_GAP = 10;
+ *  is this less one stroke width: 6 with the line at 6 (WindowRing). */
+export const SEGMENT_GAP = 12;
 
 export interface OutlineSegment {
   d: string;
@@ -61,6 +61,27 @@ function pieces(window: Size, inset: number): { list: Piece[]; r: number } {
 
 const n = (v: number): string => v.toFixed(2);
 
+/** The path from [from] to [to] along the outline, carrying on from [d]. */
+function trace(list: Piece[], r: number, from: number, to: number, d = ''): string {
+  let out = d;
+  let start = 0;
+  for (const piece of list) {
+    const end = start + piece.length;
+    const a = Math.max(from, start);
+    const b = Math.min(to, end);
+    if (piece.length > 0 && b > a) {
+      if (out === '') {
+        const [mx, my] = piece.at(a - start);
+        out = `M${n(mx)} ${n(my)}`;
+      }
+      const [x, y] = piece.at(b - start);
+      out += piece.arc ? ` A${n(r)} ${n(r)} 0 0 1 ${n(x)} ${n(y)}` : ` L${n(x)} ${n(y)}`;
+    }
+    start = end;
+  }
+  return out;
+}
+
 /**
  * The outline in [parts] equal parts. One part is the whole outline with no
  * gap. [inset] pulls the line in by half its stroke, as windowOutline does.
@@ -76,25 +97,34 @@ export function outlineSegments(window: Size, inset: number, parts: number, gap 
   for (let i = 0; i < count; i++) {
     const from = i * each + g / 2;
     const to = (i + 1) * each - g / 2;
-    let d = '';
-    let start = 0;
-    for (const piece of list) {
-      const end = start + piece.length;
-      const a = Math.max(from, start);
-      const b = Math.min(to, end);
-      if (piece.length > 0 && b > a) {
-        if (d === '') {
-          const [mx, my] = piece.at(a - start);
-          d = `M${n(mx)} ${n(my)}`;
-        }
-        const [x, y] = piece.at(b - start);
-        d += piece.arc ? ` A${n(r)} ${n(r)} 0 0 1 ${n(x)} ${n(y)}` : ` L${n(x)} ${n(y)}`;
-      }
-      start = end;
-    }
-    out.push({ d, from, to });
+    out.push({ d: trace(list, r, from, to), from, to });
   }
   return out;
+}
+
+/** A side of the window, as the person sees it on screen. */
+export type WindowSide = 'top' | 'right' | 'bottom' | 'left';
+export const WINDOW_SIDES: readonly WindowSide[] = ['top', 'right', 'bottom', 'left'];
+
+/**
+ * The outline in four equal parts, one per SIDE of the window: each is centred
+ * on its side, so the gaps fall at the window's four shoulders rather than at
+ * twelve, three, six and nine o'clock. The head directions light the side the
+ * head should go to (screens/liveness/SideRing).
+ */
+export function sideSegments(window: Size, inset: number, gap = SEGMENT_GAP): Record<WindowSide, string> {
+  const { list, r } = pieces(window, inset);
+  const total = list.reduce((sum, p) => sum + p.length, 0);
+  const each = total / 4;
+  const g = gap >= each ? 0 : gap;
+  const part = (i: number): string => {
+    const from = (i - 0.5) * each + g / 2;
+    const to = (i + 0.5) * each - g / 2;
+    // The top side starts before twelve o'clock, where the outline begins: it
+    // is the end of the outline, then its beginning.
+    return from < 0 ? trace(list, r, 0, to, trace(list, r, from + total, total)) : trace(list, r, from, to);
+  };
+  return { top: part(0), right: part(1), bottom: part(2), left: part(3) };
 }
 
 /**

@@ -21,6 +21,7 @@ import {
   SIDE_BUTTON_SIZE,
   SIDE_MARGIN,
 } from '../../capture/immersiveLayout';
+import { logControl } from '../../lib/click-log';
 
 /**
  * Three equal slots across the row, so the shutter stays centred whether or
@@ -266,7 +267,8 @@ export function BottomBar({
           </Svg>
         ) : null}
         <Pressable
-          onPress={onCapture}
+          // A tap on the shutter is the applicant's press; auto-capture is not (lib/click-log.ts).
+          onPress={() => { logControl('capture.shutter', 'Take photo'); onCapture(); }}
           disabled={busy || !ready}
           accessibilityRole="button"
           accessibilityLabel={blockedHint ? `Capture photo. ${blockedHint}` : 'Capture photo'}

@@ -44,6 +44,8 @@ export interface VerifyRequest {
     documentFrontVideo?: string;
     documentBackVideo?: string;
     livenessVideo?: string;
+    /** The iPhone's depth frame of the selfie (iOS with a Face ID camera only). */
+    livenessDepth?: string;
     proofOfAddress?: string;
     /** Address Intelligence door photo (individual flows only). */
     addressPhoto?: string;

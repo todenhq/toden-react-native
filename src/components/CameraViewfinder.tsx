@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, View } from 'react-native';
+import { AccessibilityInfo, Platform, View } from 'react-native';
 import { Camera, usePhotoOutput, useVideoOutput } from 'react-native-vision-camera';
 
 import { radius, spacing } from '../config/theme';
@@ -9,6 +9,7 @@ import { useTheme } from './runtime';
 import { documentHintIsAction, documentHintText, useAutoCapture, type AutoCaptureState, type CornerFraming } from '../capture';
 import { shortDocumentLabel, specimenTitle } from '../config/idTypes';
 import { useTurnOverHold } from './viewfinder/TurnOverPrompt';
+import { useText } from '../i18n/useText';
 import { recordsDocumentClip } from './viewfinder/documentClip';
 import { regionCountryName } from '../config/regions';
 import type { MrzScan } from '../mrz/parse';
@@ -22,6 +23,7 @@ import { useTorch } from './viewfinder/useTorch';
 import { useBackCamera } from './viewfinder/useBackCamera';
 import { cameraTopInset } from './viewfinder/cameraInsets';
 import { guideFractions, guideRect, immersiveBand, screenGuideAspect, turnsDocument, type GuideRect } from '../capture/documentTurn';
+import { recordCameraError } from '../lib/step-log';
 
 // Back-camera viewfinder for document capture — the RN mirror of the Flutter
 // SDK's _DocumentViewfinder. Shows a VisionCamera preview with an ID-card guide
@@ -113,6 +115,7 @@ export function CameraViewfinder({
   turnOver,
 }: CameraViewfinderProps): React.ReactElement {
   const { colors } = useTheme();
+  const t = useText();
   // A back camera that can torch, when there is one (useBackCamera.ts).
   const device = useBackCamera();
   // v5: document-conservative still (OCR). Capture via the photo output, not a
@@ -135,7 +138,17 @@ export function CameraViewfinder({
 
   // Only over the full-screen camera, where the prompt can be drawn.
   const turnedOver = !!turnOver && !!fill && side === 'back';
-  const { turning, finish: finishTurn } = useTurnOverHold(turnedOver);
+  const { turning } = useTurnOverHold(turnedOver);
+  // Read at press time, as the corner gate is: the shutter is held while the
+  // card is turned over, so the front still in hand is not taken as the back.
+  const turningRef = useRef(turning);
+  turningRef.current = turning;
+  // What the hint line says, and the shutter's reason, while it is held.
+  const turnText = t('uploadDocument.flipBanner');
+  // The words change in the hint line without anything moving, so say them.
+  useEffect(() => {
+    if (turning) AccessibilityInfo.announceForAccessibility(turnText);
+  }, [turning, turnText]);
 
   // Record while the side's camera is live; restart when the side changes. The
   // back's clip waits for the turn-over to end (viewfinder/documentClip.ts).
@@ -182,6 +195,7 @@ export function CameraViewfinder({
   const autoRef = useRef<AutoCaptureState | null>(null);
   const capture = useCallback(async () => {
     if (busy || !ready || capturingRef.current) return;
+    if (turningRef.current) return;
     if (autoRef.current?.shutterBlocked()) return;
     const framing = autoRef.current?.cornerFraming() ?? null;
     // Guarded because auto-capture and the manual shutter can now both fire —
@@ -253,6 +267,10 @@ export function CameraViewfinder({
       ? hintText
       : `Align the ${side === 'back' ? 'BACK' : 'FRONT'} of your ${documentLabel}`;
   const hintIsAction = !!blockedHint || documentHintIsAction(auto.guidance.hint);
+  // Between the sides: the turn-over words in the hint line, in a neutral
+  // tone, and the shutter held with them as its reason.
+  const shownHint = turning ? turnText : hint;
+  const shownBlockedHint = turning ? turnText : blockedHint;
 
 
   return (
@@ -284,6 +302,7 @@ export function CameraViewfinder({
           isActive={active}
           outputs={[photoOutput, videoOutput, auto.frameOutput]}
           orientationSource={DOCUMENT_ORIENTATION_SOURCE}
+          onError={recordCameraError}
         />
       ) : (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -297,21 +316,25 @@ export function CameraViewfinder({
           country={country ?? ''}
           documentLabel={shortDocumentLabel(idType ?? null, documentLabel)}
           guideAspect={screenAspect}
-          hint={hint}
-          hintIsAction={hintIsAction}
-          hintTone={immersiveHintTone({
-            hint: auto.guidance.hint,
-            framing: auto.guidance.framing,
-            hintIsAction,
-            blocked: !!blockedHint,
-          })}
+          hint={shownHint}
+          hintIsAction={!turning && hintIsAction}
+          hintTone={
+            turning
+              ? 'neutral'
+              : immersiveHintTone({
+                  hint: auto.guidance.hint,
+                  framing: auto.guidance.framing,
+                  hintIsAction,
+                  blocked: !!blockedHint,
+                })
+          }
           progress={auto.progress}
           busy={busy}
           torch={torch}
           hasTorch={hasTorch}
           onToggleTorch={() => void toggleTorch()}
           onCapture={capture}
-          blockedHint={blockedHint}
+          blockedHint={shownBlockedHint}
           onBack={onBack ?? null}
           onUpload={onUpload ?? null}
           bottomInset={bottomInset}
@@ -321,7 +344,6 @@ export function CameraViewfinder({
           framing={auto.guidance.framing}
           turnedOver={turnedOver}
           turning={turning}
-          onTurned={finishTurn}
           subject={{
             idType: idType ?? null,
             title: specimenTitle(idType ?? null, documentLabel),

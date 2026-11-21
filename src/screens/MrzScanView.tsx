@@ -17,6 +17,7 @@ import { extractMrz } from '../mrz/extract';
 import { recognizeMrzLines, MRZ_BAND_FRACTION } from '../mrz/textRecognizer';
 import { useTextModelReady } from '../mrz/useTextModelReady';
 import type { MrzScan } from '../mrz/parse';
+import { recordCameraError, recordJourneyEvent } from '../lib/step-log';
 
 // ---------------------------------------------------------------------------
 // Live MRZ scan — the camera fallback that unlocks the chip.
@@ -87,7 +88,10 @@ export function MrzScanView({
 
   const askForCamera = useCallback(() => {
     void requestPermission().then((granted) => {
-      if (!granted) setDenied(true);
+      if (!granted) {
+        recordJourneyEvent('camera_denied');
+        setDenied(true);
+      }
     });
   }, [requestPermission]);
 
@@ -163,6 +167,7 @@ export function MrzScanView({
         device={device}
         isActive
         outputs={[frameOutput]}
+        onError={recordCameraError}
       />
 
       {/* The band the recogniser actually reads, drawn so the user aims the

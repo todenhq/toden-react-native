@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { runFlashSequence } from '../liveness/flashRunner';
 import { holdCameraSteady } from '../liveness/cameraSteady';
-import { DEFAULT_FLASH_SEQUENCE, generateFlashSequence } from '../liveness/flashDetector';
+import { DEFAULT_FLASH_SEQUENCE, flashSequenceNamed, generateFlashSequence } from '../liveness/flashDetector';
 import type { FlashResult, Rgb } from '../liveness/flashDetector';
 
 // ---------------------------------------------------------------------------
@@ -28,6 +28,7 @@ export function useFlashSequence({
   shouldContinue,
   sequenceLength,
   readFaceRgb,
+  plannedColours,
   onComplete,
   attempt = 0,
 }: {
@@ -41,6 +42,11 @@ export function useFlashSequence({
   shouldContinue?: () => boolean;
   sequenceLength: number | undefined;
   readFaceRgb: () => Rgb | null;
+  /**
+   * Read once as each sequence starts: the colours Core picked for the
+   * attempt, in its order, or null for the SDK's own pick.
+   */
+  plannedColours?: () => string[] | null;
   onComplete: (result: FlashResult) => void;
   /** Bumped to run a fresh sequence while still in the flash phase (the retry). */
   attempt?: number;
@@ -57,6 +63,8 @@ export function useFlashSequence({
   readRef.current = readFaceRgb;
   const continueRef = useRef(shouldContinue);
   continueRef.current = shouldContinue;
+  const plannedRef = useRef(plannedColours);
+  plannedRef.current = plannedColours;
   const attemptRef = useRef(attempt);
 
   useEffect(
@@ -91,13 +99,17 @@ export function useFlashSequence({
     void holdCameraSteady()
       .then((handBack) => {
         release = handBack;
+        // Core's colours when its plan came in time; the SDK's own pick
+        // otherwise, which Core records as unplanned.
+        const names = plannedRef.current?.() ?? null;
+        const planned = names ? flashSequenceNamed(names) : null;
         return runFlashSequence(
           {
             setColor: setFlashColor,
             readFaceRgb: () => readRef.current(),
             isActive: () => liveRef.current && (continueRef.current?.() ?? true),
           },
-          generateFlashSequence(sequenceLength ?? DEFAULT_FLASH_SEQUENCE),
+          planned ?? generateFlashSequence(sequenceLength ?? DEFAULT_FLASH_SEQUENCE),
         );
       })
       .finally(() => release())

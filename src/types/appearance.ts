@@ -111,6 +111,14 @@ export interface VoiceGuidanceConfig {
   enabled?: boolean;
   /** BCP-47 voice tag (e.g. `'en-US'`, `'fr-FR'`). Default `'en-US'`. */
   language?: string;
+  /**
+   * A Toden voice id (e.g. `'lyra'`, `'rory'`), normally chosen by an org
+   * admin on the workflow. The prompts then play that voice's clips from
+   * Toden's server; anything without a clip (a reworded prompt, a language
+   * with no clips, a clip that did not load) uses the device voice. Omit it
+   * for the device voice only.
+   */
+  voice?: string;
 }
 
 /** Accepts a bare boolean for ergonomics or the full {@link VoiceGuidanceConfig}. */

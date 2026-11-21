@@ -25,6 +25,11 @@ export interface LivenessIntegrity {
   challenges?: string[];
   /** When each gesture prompt appeared and passed (promptTimeline.ts). */
   promptTimes?: PromptTime[];
+  /**
+   * The head-direction plan Core picked for this attempt (directionPlan.ts),
+   * whose directions `challenges` then lists. Absent when the SDK picked its own.
+   */
+  directionPlanId?: string;
   /** How many consecutive-frame discontinuities the continuity guard saw. */
   faceGlitches: number;
   flash?: {
@@ -67,11 +72,13 @@ export function buildLivenessIntegrity(
   flash: FlashResult | null,
   challenges?: readonly string[],
   promptTimes?: PromptTime[],
+  directionPlanId?: string,
 ): LivenessIntegrity {
   return {
     mode,
     ...(challenges ? { challenges: [...challenges] } : {}),
     ...(promptTimes ? { promptTimes } : {}),
+    ...(directionPlanId ? { directionPlanId } : {}),
     faceGlitches,
     ...(flash
       ? {

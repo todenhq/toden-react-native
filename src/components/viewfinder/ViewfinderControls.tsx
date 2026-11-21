@@ -8,6 +8,7 @@ import { UiText } from '../Typography';
 import { Icon } from '../Icon';
 import { ChromeGlass } from '../glass/ChromeGlass';
 import { Spinner } from '../Spinner';
+import { logControl } from '../../lib/click-log';
 
 /** This overlay's own scrim, kept so non-glass devices look unchanged. */
 const OVERLAY_SCRIM = 'rgba(0,0,0,0.4)';
@@ -157,7 +158,7 @@ export function Shutter({
         </Svg>
       ) : null}
       <Pressable
-        onPress={onPress}
+        onPress={() => { logControl('capture.shutter', 'Take photo'); onPress(); }}
         disabled={busy || !ready}
         accessibilityRole="button"
         accessibilityLabel={blockedHint ? `Capture photo. ${blockedHint}` : 'Capture photo'}

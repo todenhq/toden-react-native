@@ -27,6 +27,7 @@ import {
   DEFAULT_LIVENESS_CONFIG,
   FACE_TOO_CLOSE_RATIO,
   FACE_TOO_FAR_RATIO,
+  isDirectionChallenge,
   type LivenessChallenge,
   type LivenessConfig,
   type LivenessFaceData,
@@ -47,13 +48,20 @@ import {
   modeRunsGestures,
   pickChallenges,
   pickFallbackGestures,
+  planChallenges,
+  planRequestFor,
 } from './challengeManager';
+import { DirectionPlanner } from './directionPlan';
+import { directionSidesOf, DirectionWatch } from './directions';
+import { READY_PAUSE_MS, readyPauseStep } from './readyPause';
+import { defaultText } from '../i18n/translate';
 import { faceWindowGuidance, type FaceWindow } from '../lib/faceWindow';
 import { HoldTimer, faceCentred } from './holdDetector';
 import { FlashReadyGate } from './flashReadyGate';
 import { FaceContinuityGuard } from './faceContinuity';
 import { recordingStart } from './flashTimeline';
 import { PromptTimeline } from './promptTimeline';
+import { ResponseWatch } from './responseWatch';
 import type { FlashResult } from './flashDetector';
 import { useFlashPhase } from './useFlashPhase';
 import { flashOutcome, flashUnmeasurable, FLASH_RETRY_GUIDANCE } from './flashOutcome';
@@ -68,6 +76,7 @@ export {
   positionGuidanceText,
   lightingGuidanceText,
   type PositionGuidance,
+  type DirectionSides,
   type LightingGuidance,
   type LivenessUiState,
   type SelfieChoice,
@@ -81,9 +90,14 @@ import {
   POSITION_TOO_FAR,
   POSITION_TOO_CLOSE,
   MULTIPLE_FACES_GUIDANCE,
+  CHALLENGE_PASSED_LINE,
+  FACE_LOST_LINE,
+  FLASH_HOLD_INSTRUCTION,
+  TIMEOUT_LINE,
   isSettled,
   isTerminal,
   positionGuidanceText,
+  lightingSpokenText,
   type LightingGuidance,
   type PositionGuidance,
   type LivenessUiState,
@@ -92,7 +106,7 @@ import {
 } from './livenessState';
 
 export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
-  const { config, voiceGuidance, announce = true } = opts;
+  const { config, voiceGuidance, voiceServer, recordsAudio = false, announce = true } = opts;
   // The capture callbacks are read through a ref: they fire from frame
   // handlers created long before the screen's latest render.
   const callbacksRef = useRef(opts);
@@ -102,12 +116,33 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
 
   // Resolve the challenge set once per session (and on reset).
   const trackerRef = useRef<ChallengeTracker | null>(null);
+  // Read by the plan's answer, which lands after the render that asked.
+  const configRef = useRef(config);
+  configRef.current = config;
+  const mountedRef = useRef(true);
+  // Core's head directions for the current attempt (liveness/directionPlan.ts).
+  const plannerRef = useRef(new DirectionPlanner());
+  // When the face first held in place: the ready pause runs from here
+  // (liveness/readyPause.ts). Null while it is not in place.
+  const readyAtRef = useRef<number | null>(null);
+  // The person's pitch at rest, taken as the first gesture is asked for:
+  // looking up and down are measured from it (liveness/directions.ts).
+  const restPitchRef = useRef(0);
+  // The head direction being asked for, frame by frame.
+  const directionWatchRef = useRef(new DirectionWatch());
+  const [wrongWayCount, setWrongWayCount] = useState(0);
 
   // Tracks that the face performing the challenges is the face still in frame.
   // Liveness without it proves a live human was present, not WHICH human.
   const continuityRef = useRef<FaceContinuityGuard>(new FaceContinuityGuard());
   // When each prompt appeared and passed, for the claim (promptTimeline.ts).
   const promptsRef = useRef(new PromptTimeline());
+  // When the person last did anything with their face (Date.now(), 0 for
+  // never). Read by the gesture narrator, which comes back to show a gesture
+  // only to someone who has stopped responding. A REF: the frame loop updates
+  // it on every face without re-rendering the step.
+  const responseWatchRef = useRef(new ResponseWatch());
+  const respondedAtRef = useRef(0);
   // Flash-only has no challenges to act as a buffer, so it needs its own
   // "framed, lit and held still" gate before the screen lights up.
   const flashGateRef = useRef<FlashReadyGate | null>(null);
@@ -131,6 +166,9 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
 
   const speakerRef = useRef<LivenessSpeaker | null>(null);
   if (speakerRef.current === null) speakerRef.current = new LivenessSpeaker(voiceGuidance);
+  // Read by the lighting handler, which runs outside render.
+  const announceRef = useRef(announce);
+  announceRef.current = announce;
 
   // Gesture history windows (nod pitch, avg eye-open) + per-challenge guards.
   const xHistoryRef = useRef<number[]>([]);
@@ -168,6 +206,58 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
 
   const speak = useCallback((text: string) => speakerRef.current?.speak(text), []);
 
+  // Core picks the gestures, head directions or classic, and the flash
+  // colours, one plan per attempt.
+  // The SDK's own pick stands in until the plan arrives, and is replaced only
+  // if the first instruction has not been given yet; the first instruction
+  // waits a moment for it (positioning, below). An answer for an earlier
+  // attempt is ignored.
+  const askPlan = useCallback(() => {
+    const cfg = configRef.current;
+    const request = callbacksRef.current.requestDirectionPlan;
+    const wanted = planRequestFor(cfg);
+    const asking = !!wanted && !!request;
+    const attempt = plannerRef.current.ask(asking, Date.now());
+    if (!wanted || !request) return;
+    void request(wanted)
+      .catch(() => null)
+      .then((plan) => {
+        if (!mountedRef.current) return;
+        const taken = plannerRef.current.settle(attempt, plan);
+        // A flash-only plan carries colours alone: the planner keeps them for
+        // the flash (flashColours below), and there are no gestures to replace.
+        if (!taken || wanted.set === 'none') return;
+        const tracker = new ChallengeTracker(planChallenges(taken.prompts, cfg));
+        trackerRef.current = tracker;
+        setState((s) => ({ ...s, totalCount: tracker.totalCount }));
+      });
+  }, []);
+
+  /** The ready pause's line, in the workflow's copy. */
+  const holdStillLine = useCallback(() => (tRef.current ?? defaultText)('presence.position.holdStill'), []);
+  /** The face left its place (or the frame): the ready pause starts again,
+   *  and the line goes back to asking for the face. */
+  const leaveReadyPause = useCallback(() => {
+    if (readyAtRef.current === null) return;
+    readyAtRef.current = null;
+    const holdStill = holdStillLine();
+    setState((st) =>
+      st.phase === 'positioning' && st.instruction === holdStill
+        ? { ...st, instruction: placeFaceInstruction(tRef.current) }
+        : st,
+    );
+  }, [holdStillLine]);
+
+  // The first attempt asks once the camera is up (`announce`): the machine is
+  // built behind the primer, and a plan asked for there could sit unused for
+  // as long as the person reads it. Retries and restarts ask for their own.
+  const firstPlanAskedRef = useRef(false);
+  useEffect(() => {
+    if (!announce || firstPlanAskedRef.current) return;
+    firstPlanAskedRef.current = true;
+    askPlan();
+  }, [announce, askPlan]);
+
   const cancelTimer = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -186,7 +276,7 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
           setState((s) =>
             isTerminal(s.phase)
               ? s
-              : { ...s, phase: 'failed', failureReason: 'timeout', instruction: 'Time ran out' },
+              : { ...s, phase: 'failed', failureReason: 'timeout', instruction: TIMEOUT_LINE },
           );
         } else {
           setState((s) => (s.phase === 'challenge' ? { ...s, timeoutRemaining: remaining } : s));
@@ -218,6 +308,20 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
     if (!announce || !state.instruction || state.multipleFaces) return;
     speak(state.instruction);
   }, [announce, state.instruction, state.multipleFaces, speak]);
+
+  // The Toden voice's clips start loading when the step opens, behind the
+  // primer, so they are ready by the first prompt; until one has loaded its
+  // phrase uses the device voice (speech.ts).
+  useEffect(() => {
+    const speaker = speakerRef.current;
+    speaker?.prepareVoice(voiceServer);
+    return () => speaker?.dispose();
+  }, [voiceServer]);
+  // Whether the recording carries sound is settled once the step announces
+  // (the microphone has been answered by then).
+  useEffect(() => {
+    if (announce) speakerRef.current?.setRecordsAudio(recordsAudio);
+  }, [announce, recordsAudio]);
   // Whether the flash occupies a slot in the progress indicator.
   const flashIsStep = config?.mode === 'flash' || config?.mode === 'both';
 
@@ -233,7 +337,7 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
         setState((s) => ({
           ...s,
           phase: 'flash',
-          instruction: 'Hold still and look at the screen',
+          instruction: FLASH_HOLD_INSTRUCTION,
           activeChallenge: null,
           positionGuidance: null,
         }));
@@ -251,7 +355,10 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
     xHistoryRef.current = [];
     earHistoryRef.current = [];
     holdRef.current.reset();
+    directionWatchRef.current.reset();
     processingRef.current = false;
+    // The directions are fixed from the first instruction on.
+    plannerRef.current.start();
     promptsRef.current.shown(current.config.type, Date.now());
     const timeout = config?.timeoutPerChallenge ?? current.config.timeoutSeconds;
     setState((s) => ({
@@ -276,18 +383,18 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
     setState((s) => ({
       ...s,
       phase: 'challenge_passed',
-      instruction: 'Great!',
+      // Spoken once, by the instruction effect above.
+      instruction: CHALLENGE_PASSED_LINE,
       completedCount: s.completedCount + 1,
       timeoutRemaining: 0,
       positionGuidance: null,
       wrongGesture: false,
     }));
-    speak('Great');
     passTimeoutRef.current = setTimeout(() => {
       if (stateRef.current.phase !== 'challenge_passed') return;
       startNextChallenge();
     }, CHALLENGE_PASSED_MS);
-  }, [cancelTimer, speak, startNextChallenge]);
+  }, [cancelTimer, startNextChallenge]);
 
   // ── Flash result → pass / retry / gesture fallback / fail (flashOutcome.ts) ──
   const completeFlash = useCallback(
@@ -359,7 +466,7 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
           centreY: data.faceCenterY,
           moving:
             s.phase === 'challenge' &&
-            (s.activeChallenge === 'turn' || s.activeChallenge === 'nod'),
+            (s.activeChallenge === 'turn' || s.activeChallenge === 'nod' || isDirectionChallenge(s.activeChallenge)),
         });
       } else if (ratio < FACE_TOO_FAR_RATIO) next = POSITION_TOO_FAR;
       else if (ratio > FACE_TOO_CLOSE_RATIO) next = POSITION_TOO_CLOSE;
@@ -423,8 +530,12 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
         return;
       }
 
-      // Re-acquired: start again from positioning with a fresh challenge set.
+      // Re-acquired: start again from positioning with a fresh challenge set,
+      // and a fresh plan for it.
       trackerRef.current = new ChallengeTracker(pickChallenges(config));
+      askPlan();
+      readyAtRef.current = null;
+      responseWatchRef.current.reset();
       captureGateRef.current.reset();
       // The returning face has to earn the hold again — otherwise a face that
       // left and came back would flash immediately on a gate that is still
@@ -444,7 +555,7 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
         positionGuidance: null,
       }));
     },
-    [cancelTimer, config, flash],
+    [askPlan, cancelTimer, config, flash],
   );
 
   const onFace = useCallback(
@@ -520,6 +631,9 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
         return;
       }
 
+      responseWatchRef.current.seen(data, Date.now());
+      respondedAtRef.current = responseWatchRef.current.respondedAt;
+
       checkPosition(data);
       // Every face feeds the resting pose and the stillness check, whatever
       // the phase: the person rests while positioning and during the flash.
@@ -558,11 +672,31 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
           if (verdict.ready) startNextChallenge();
           return;
         }
-        // Advance only at the right distance AND with acceptable lighting.
+        // Advance only at the right distance AND with acceptable lighting,
+        // and only after the ready pause: a beat of "Hold still" so the person
+        // has settled and is listening when the first gesture is asked for.
         if (s.positionGuidance == null && s.lightingGuidance == null) {
+          const now = Date.now();
+          const ready = readyPauseStep(readyAtRef.current, now);
+          readyAtRef.current = ready.readyAt;
+          // Core's head directions are on their way: a moment more of the
+          // pause rather than an order the SDK picked itself.
+          const waiting = !ready.go || plannerRef.current.gate(now) === 'wait';
+          if (waiting) {
+            // The pause is over but the plan is not here: keep it over.
+            if (ready.go) readyAtRef.current = now - READY_PAUSE_MS;
+            const holdStill = holdStillLine();
+            if (s.instruction !== holdStill) setState((st) => (st.phase === 'positioning' ? { ...st, instruction: holdStill } : st));
+            return;
+          }
+          readyAtRef.current = null;
+          // Held still and facing the camera: this is the person at rest.
+          restPitchRef.current = data.headEulerAngleX;
           startNextChallenge();
-        } else if (s.positionGuidance) {
-          speak(positionGuidanceText(s.positionGuidance));
+        } else {
+          // Out of place: the pause starts again once they are back.
+          leaveReadyPause();
+          if (s.positionGuidance) speak(positionGuidanceText(s.positionGuidance));
         }
         return;
       }
@@ -603,7 +737,7 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
     },
     // checkGesture is defined below and stable via refs
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cancelTimer, checkPosition, config, onChallengePassed, onFaceIntegrityBroken, speak, startNextChallenge, startTimer],
+    [cancelTimer, checkPosition, config, holdStillLine, leaveReadyPause, onChallengePassed, onFaceIntegrityBroken, speak, startNextChallenge, startTimer],
   );
 
   // checkGesture reads the current challenge + histories from refs.
@@ -613,6 +747,14 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
       if (!current) return;
       const type = current.config.type;
       if (type === 'hold') return; // timed in onFace, not detected here
+      if (isDirectionChallenge(type)) {
+        // The wrong way is never a failure and never a red warning: it does
+        // not count, and after a second of it the narrator shows the way again.
+        const step = directionWatchRef.current.frame(type, data, restPitchRef.current, Date.now());
+        if (step.done) onChallengePassed();
+        else if (step.wrongWay) setWrongWayCount((n) => n + 1);
+        return;
+      }
       // The iOS Vision pitch is a landmark proxy that gets contaminated when the
       // head turns (turning shifts the nose-vs-eyeline geometry and reads as a
       // nod). Reject nod while the head is meaningfully turned so a turn can't
@@ -683,12 +825,15 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
       selfiesRef.current.clear();
       cancelTimer();
       setState((s) => ({ ...s, phase: 'failed', failureReason: 'face_lost', activeChallenge: null, positionGuidance: null }));
+      // Said, as web says it; the panel shows its own message.
+      speak(FACE_LOST_LINE);
       return;
     }
+    leaveReadyPause();
     if (!stateRef.current.faceDetected) return;
     if (isTerminal(stateRef.current.phase)) return;
     setState((s) => ({ ...s, faceDetected: false, positionGuidance: null, multipleFaces: false }));
-  }, [cancelTimer]);
+  }, [cancelTimer, leaveReadyPause, speak]);
 
   const setLighting = useCallback(
     (guidance: LightingGuidance | null) => {
@@ -705,10 +850,15 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
         }
         return { ...s, lightingGuidance: guidance };
       });
+      // The banner stays as it is; its short line is said once when it
+      // appears, as web and Flutter do.
+      if (guidance != null && guidance !== prev && announceRef.current && !isSettled(phase) && !isTerminal(phase)) {
+        speak(lightingSpokenText(guidance));
+      }
       // During a challenge, pause the per-challenge timer while lighting is poor so
       // the user isn't timed out while moving to better light, and resume when it
       // recovers (mirrors the multi-face pause). Gestures themselves are blocked in
-      // the onFace handler until lighting is good. Banner only — not spoken.
+      // the onFace handler until lighting is good.
       if (phase === 'challenge') {
         if (guidance != null && prev == null) {
           cancelTimer();
@@ -723,7 +873,7 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
         }
       }
     },
-    [cancelTimer, startTimer, config],
+    [cancelTimer, startTimer, config, speak],
   );
 
   const markComplete = useCallback(() => {
@@ -747,6 +897,10 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
     cancelTimer();
     if (passTimeoutRef.current) clearTimeout(passTimeoutRef.current);
     trackerRef.current = new ChallengeTracker(pickChallenges(config));
+    // A retry is a new attempt, with a plan of its own.
+    askPlan();
+    readyAtRef.current = null;
+    directionWatchRef.current.reset();
     promptsRef.current.reset();
     xHistoryRef.current = [];
     earHistoryRef.current = [];
@@ -757,6 +911,8 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
     speakerRef.current?.reset();
     // A retry is a fresh session: whoever is in frame now becomes the reference.
     continuityRef.current.reset();
+    responseWatchRef.current.reset();
+    respondedAtRef.current = 0;
     flashGateRef.current?.reset();
     lastFaceSeenRef.current = null;
     integrityBrokenRef.current = false;
@@ -779,7 +935,7 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
       faceDetected: false,
       failureReason: null,
     });
-  }, [cancelTimer, config]);
+  }, [askPlan, cancelTimer, config]);
 
   const landSelfieShot = useCallback((shot: SelfieShot, uri: string | null, face: StillFace | null) => {
     selfiesRef.current.land(shot, uri, face);
@@ -802,7 +958,9 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
 
   // Cleanup timers + speech on unmount.
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       cancelTimer();
       if (passTimeoutRef.current) clearTimeout(passTimeoutRef.current);
       speakerRef.current?.stop();
@@ -850,8 +1008,13 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
       isCompromised: () => integrityBrokenRef.current,
       reportIntegrityFailure,
       landSelfieShot,
+      respondedAtRef,
+      wrongWayCount,
+      directionSides: directionSidesOf(trackerRef.current!, state.phase, state.activeChallenge),
+      directionPlanId: () => plannerRef.current.directionPlanId,
+      flashColours: () => plannerRef.current.startFlash(),
     }),
-    [state, onFace, onNoFace, awaitFreshFace, setLighting, markComplete, setFaceWindow, reset, reportIntegrityFailure, landSelfieShot, flash, completeFlash, flashAttempt, fellBack, config?.mode],
+    [state, onFace, onNoFace, awaitFreshFace, setLighting, markComplete, setFaceWindow, reset, reportIntegrityFailure, landSelfieShot, flash, completeFlash, flashAttempt, fellBack, config?.mode, wrongWayCount],
   );
 }
 

@@ -4,6 +4,7 @@ import { Camera, type CameraDevice, type CameraRef, type CameraViewProps } from 
 
 import { registerLivenessCamera } from '../../liveness/cameraSteady';
 import { Spinner } from '../../components/Spinner';
+import { recordCameraError } from '../../lib/step-log';
 
 // ─── The front camera inside the liveness circle ────────────────────────────
 //
@@ -47,9 +48,18 @@ interface LivenessCameraProps {
    * SurfaceView sits behind the app's window, where nothing can blur it.
    */
   texture?: boolean;
+  /** The session is running: the moment the photo output can be asked for depth. */
+  onStarted?: () => void;
 }
 
-export function LivenessCamera({ device, active, outputs, circle, texture }: LivenessCameraProps): React.ReactElement {
+export function LivenessCamera({
+  device,
+  active,
+  outputs,
+  circle,
+  texture,
+  onStarted,
+}: LivenessCameraProps): React.ReactElement {
   // The flash holds this camera's exposure and white balance still while it
   // runs (liveness/cameraSteady.ts), so it needs to reach the controller.
   const cameraRef = React.useRef<CameraRef>(null);
@@ -74,6 +84,8 @@ export function LivenessCamera({ device, active, outputs, circle, texture }: Liv
           device={device}
           isActive={active}
           outputs={outputs}
+          onStarted={onStarted}
+          onError={recordCameraError}
           implementationMode={texture ? 'compatible' : undefined}
           // Mirror the front-camera preview + capture so it reads like a
           // mirror (matches the web SDK's scaleX(-1) video).

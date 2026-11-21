@@ -39,6 +39,8 @@ export interface VerificationMediaIds {
   documentFrontVideo?: string;
   documentBackVideo?: string;
   livenessVideo?: string;
+  /** The selfie's depth frame from the iPhone's Face ID camera (liveness/depthFrame.ts). */
+  livenessDepth?: string;
 }
 
 export interface VerificationSubmissionResult {
@@ -405,6 +407,13 @@ export interface VerificationState {
    */
   selfieUpload: SelfieUploadState;
   mediaIds: VerificationMediaIds;
+  /**
+   * The SHA-256 (lowercase hex) of the exact bytes each signed upload sent,
+   * keyed by the media id the server answered with: what the signed capture
+   * covers (liveness/signedCapture.ts). Keyed by id, not slot, so a retake's
+   * new id can never pick up the old file's hash.
+   */
+  uploadSha256: Record<string, string>;
   submissionResult: VerificationSubmissionResult | null;
   serverConfig: ServerConfigState;
   documentScanPhase: DocumentScanPhase;
@@ -571,6 +580,8 @@ export interface VerificationState {
   setMediaId: (key: MediaIdKey, mediaId: string) => void;
   /** Drop uploaded media ids, e.g. a document capture's before it is uploaded again. */
   clearMediaIds: (keys: MediaIdKey[]) => void;
+  /** Record the SHA-256 of the bytes an upload sent, under the media id it got. */
+  setUploadSha256: (mediaId: string, sha256: string) => void;
   /** Record the captured selfie's local path (null on retake). */
   setSelfiePreview: (uri: string | null) => void;
   /** Retake: drop the selfie preview + its uploaded media ids in one set. */

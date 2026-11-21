@@ -99,7 +99,7 @@ function VerificationTrigger({
   const settled = state.status !== 'resolving';
   const open = wantOpen && settled;
 
-  usePrimeModels(wantOpen, config.apiKey, config.devUrl);
+  usePrimeModels(wantOpen);
 
   // Reported only once the user has actually tried to start. Prefetching must
   // not fire a consumer's error handler for a flow they never opened.
@@ -222,7 +222,7 @@ export function useVerification<C extends SupportedCountry = SupportedCountry>(
   configRef.current = config;
   const backRef = useRef<(() => BackResult) | null>(null);
 
-  usePrimeModels(wantOpen, config.apiKey, config.devUrl);
+  usePrimeModels(wantOpen);
 
   // `refresh` is defined further down (it needs `wrappedConfig`), so it is
   // reached through a ref rather than reordering the component around it.

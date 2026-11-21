@@ -78,6 +78,12 @@
         "language": "swift",
         "implementationClassName": "HybridMyazaTouchGuard"
       }
+    },
+    "MyazaDepthFrame": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridMyazaDepthFrame"
+      }
     }
   },
   "ignorePaths": [

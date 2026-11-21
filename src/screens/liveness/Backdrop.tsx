@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Image, View } from 'react-native';
+import { Animated, Easing, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { BackdropBlur, backdropBlurSupported } from '../../components/BackdropBlur';
@@ -89,23 +89,6 @@ export function CameraBackdrop({
         <BackdropBlur style={StyleAbsFill} window={window} dark={mode === 'dark'} />
       ) : null}
       {window ? <Tint frame={frame} window={window} opacity={tint} /> : null}
-    </View>
-  );
-}
-
-/** Behind the review: the selfie itself, blurred, under the same tint. A
- *  still picture needs no native view; the platform's image blur does it. */
-export function PhotoBackdrop({ uri }: { uri: string }): React.ReactElement {
-  const { colors } = useTheme();
-  return (
-    <View pointerEvents="none" style={[StyleAbsFill, { backgroundColor: colors.background }]}>
-      <Image
-        source={{ uri }}
-        blurRadius={24}
-        resizeMode="cover"
-        style={[StyleAbsFill, { width: '100%', height: '100%' }]}
-      />
-      <View style={[StyleAbsFill, { backgroundColor: colors.background, opacity: LIVENESS_TINT }]} />
     </View>
   );
 }

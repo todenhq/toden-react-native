@@ -6,8 +6,10 @@
 
 export const UPLOAD_DOCUMENT_TEXTS: Record<string, string> = {
   // Sheet headers (components/stepHeaderCopy.ts, stepHeaderMeta.tsx).
-  'uploadDocument.title.capture': 'Capture Your {document}',
-  'uploadDocument.description.capture': 'Photograph your {document}. Position it within the frame and hold steady.',
+  // One-sided documents (a passport page, a one-sided card) are scanned, in
+  // the same words as the two-sided ones.
+  'uploadDocument.title.capture': 'Scan Your {document}',
+  'uploadDocument.description.capture': 'Place your {document} within the frame.',
   'uploadDocument.title.frontCaptured': 'Front Side Captured',
   'uploadDocument.description.frontCaptured': 'Looks good? Tap Next to flip the card and scan the back side.',
   'uploadDocument.title.scanBack': 'Scan Back Side',
@@ -21,15 +23,17 @@ export const UPLOAD_DOCUMENT_TEXTS: Record<string, string> = {
   'uploadDocument.title.uploadBack': 'Upload Back Side',
   // A two-sided document's front and review: the same wording as the
   // one-sided screens, until an org words them differently.
-  'uploadDocument.title.scanFront': 'Capture Your {document}',
+  'uploadDocument.title.scanFront': 'Scan Front of Your {document}',
   'uploadDocument.description.scanFront': 'Photograph your {document}. Position it within the frame and hold steady.',
   'uploadDocument.title.uploadFront': 'Upload Your {document}',
   'uploadDocument.description.uploadFront': 'Choose a clear photo of your {document} from your device.',
   'uploadDocument.description.reviewBoth': 'Tap Continue to upload and submit your document.',
   'uploadDocument.description.reviewBothAdded': 'Tap Continue to upload and submit your document.',
   'uploadDocument.description.uploadBack': 'Now choose a photo of the back of your {document}.',
-  // The camera (screens/document/CameraPhase.tsx).
-  'uploadDocument.flipBanner': 'Flip the card over and scan the other side',
+  // The camera (screens/document/CameraPhase.tsx), and the hint line while the
+  // card turns over in the full-screen frame (components/CameraViewfinder.tsx):
+  // the contract's wording, which starts "Good." as a passed gesture does.
+  'uploadDocument.flipBanner': 'Good. Now flip your card over to scan the back.',
   'uploadDocument.camera.havingTrouble': 'Having trouble?',
   'uploadDocument.camera.uploadInstead': 'Upload a photo instead',
   // Upload-only capture (screens/document/UploadPhase.tsx).

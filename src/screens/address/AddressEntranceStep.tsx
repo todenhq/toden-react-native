@@ -18,6 +18,7 @@ import { EntranceDropzone } from './EntranceDropzone';
 import { EntrancePlaceholder } from './EntranceFraming';
 import { FramedStreetView } from './FramedStreetView';
 import { useText } from '../../i18n/useText';
+import { recordUploadFailure } from '../../lib/step-log';
 
 /**
  * The entrance step: Street View FIRST — it opens automatically wherever
@@ -109,7 +110,11 @@ function EntrancePhoto({
       // The photo arrives already resized and re-encoded by
       // useAddressPhotoAttach, which judged the size cap on that.
       await pickPhoto(
-        () => withRetry(() => store.getState().api.upload({ uri, type: mimeType, name }, 'address_photo')),
+        () =>
+          withRetry(() => store.getState().api.upload({ uri, type: mimeType, name }, 'address_photo')).catch((err: unknown) => {
+            recordUploadFailure('address_photo');
+            throw err;
+          }),
         uri,
       );
     },

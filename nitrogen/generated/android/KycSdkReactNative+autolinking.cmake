@@ -35,6 +35,7 @@ target_sources(
   # Shared Nitrogen C++ sources
   ../nitrogen/generated/shared/c++/HybridMyazaBackdropBlurSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridMyazaBackdropBlurComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridMyazaDepthFrameSpec.cpp
   ../nitrogen/generated/shared/c++/HybridMyazaDeviceIntelSpec.cpp
   ../nitrogen/generated/shared/c++/HybridMyazaEmrtdSpec.cpp
   ../nitrogen/generated/shared/c++/HybridMyazaFaceDetectorSpec.cpp

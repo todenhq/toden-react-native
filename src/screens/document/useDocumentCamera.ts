@@ -3,6 +3,7 @@ import { useCameraDevice, useCameraPermission } from 'react-native-vision-camera
 
 import { safeReportError } from '../../services/errors';
 import { VerificationError } from '../../types/verification';
+import { recordJourneyEvent } from '../../lib/step-log';
 
 // The document camera's permission and hardware state, lifted out of
 // DocumentCaptureStep so that only a workflow which SCANS ever calls
@@ -57,6 +58,12 @@ export function useDocumentCamera(onError: ((error: VerificationError) => void) 
   // No camera hardware at all → "Camera not available" (regardless of what the
   // permission API says — on a camera-less sim it may even report denied).
   const cameraUnavailable = cameraGrace && !device;
+  // Read by the permission request without re-running it when the camera list settles.
+  const hasCameraRef = useRef(false);
+  hasCameraRef.current = !!device;
+  useEffect(() => {
+    if (cameraUnavailable) recordJourneyEvent('camera_unavailable', 'not_found');
+  }, [cameraUnavailable]);
 
   // Reflect an externally-granted permission.
   useEffect(() => {
@@ -69,6 +76,8 @@ export function useDocumentCamera(onError: ((error: VerificationError) => void) 
     let cancelled = false;
     void (async () => {
       const granted = await requestPermission();
+      // Each refusal counts: drop-off insights tells "refused twice" apart.
+      if (!granted && hasCameraRef.current) recordJourneyEvent('camera_denied');
       if (!cancelled) setPerm(granted ? 'granted' : 'denied');
     })();
     return () => {

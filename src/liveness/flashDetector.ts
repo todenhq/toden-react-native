@@ -69,8 +69,21 @@ export function generateFlashSequence(
     const j = Math.floor(random() * (i + 1));
     [pool[i], pool[j]] = [pool[j]!, pool[i]!];
   }
-  const n = Math.min(MAX_FLASH_SEQUENCE, Math.max(MIN_FLASH_SEQUENCE, Math.round(count)));
-  return pool.slice(0, n);
+  return pool.slice(0, flashSequenceCount(count));
+}
+
+/**
+ * How many colours a sequence of `count` shows: 2 to 5. The plan request asks
+ * Core for this many, so its colours number what the SDK's own pick would.
+ */
+export function flashSequenceCount(count: number = DEFAULT_FLASH_SEQUENCE): number {
+  return Math.min(MAX_FLASH_SEQUENCE, Math.max(MIN_FLASH_SEQUENCE, Math.round(count)));
+}
+
+/** The palette colours by name, in the given order (Core's pick); null when any is unknown. */
+export function flashSequenceNamed(names: readonly string[]): FlashColor[] | null {
+  const colours = names.map((n) => FLASH_PALETTE.find((c) => c.name === n));
+  return colours.length > 0 && colours.every((c): c is FlashColor => !!c) ? colours : null;
 }
 
 export interface FlashSample {

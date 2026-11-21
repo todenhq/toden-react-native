@@ -7,6 +7,7 @@ import { UiText } from './Typography';
 import { radius, spacing } from '../config/theme';
 import { CHROME_SCRIM, ChromeGlass } from './glass/ChromeGlass';
 import type { DocumentReviewCopy } from './documentReviewCopy';
+import { logControl, logKey } from '../lib/click-log';
 
 /** The chip's flat backing, and still the fallback off iOS 26. */
 const CHIP_SCRIM = CHROME_SCRIM;
@@ -91,7 +92,11 @@ export function DocumentReviewThumb({
           difference between a discoverable action and a decoration. */}
       <Pressable
         testID={`kyc.review.retake.${side.id}`}
-        onPress={isBusy ? undefined : side.onRetake}
+        onPress={isBusy || !side.onRetake ? undefined : () => {
+          if (copy.redo === 'Replace') logControl('document.replace', 'Replace');
+          else logKey('common.retake');
+          side.onRetake?.();
+        }}
         disabled={isBusy}
         accessibilityRole="button"
         accessibilityLabel={copy.redoAccessibility(side.label)}

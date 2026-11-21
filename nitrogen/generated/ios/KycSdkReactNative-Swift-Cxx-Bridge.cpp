@@ -9,6 +9,7 @@
 
 // Include C++ implementation defined types
 #include "HybridMyazaBackdropBlurSpecSwift.hpp"
+#include "HybridMyazaDepthFrameSpecSwift.hpp"
 #include "HybridMyazaDeviceIntelSpecSwift.hpp"
 #include "HybridMyazaEmrtdSpecSwift.hpp"
 #include "HybridMyazaFaceDetectorSpecSwift.hpp"
@@ -37,10 +38,30 @@ namespace margelo::nitro::myazakyc::bridge::swift {
     return swiftPart.toUnsafe();
   }
   
-  // pragma MARK: std::function<void(const std::vector<std::string>& /* result */)>
-  Func_void_std__vector_std__string_ create_Func_void_std__vector_std__string_(void* NON_NULL swiftClosureWrapper) noexcept {
-    auto swiftClosure = KycSdkReactNative::Func_void_std__vector_std__string_::fromUnsafe(swiftClosureWrapper);
-    return [swiftClosure = std::move(swiftClosure)](const std::vector<std::string>& result) mutable -> void {
+  // pragma MARK: std::shared_ptr<margelo::nitro::camera::HybridCameraOutputSpec>
+  std::shared_ptr<margelo::nitro::camera::HybridCameraOutputSpec> create_std__shared_ptr_margelo__nitro__camera__HybridCameraOutputSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    // Implemented in VisionCamera
+    return margelo::nitro::camera::bridge::swift::create_std__shared_ptr_HybridCameraOutputSpec_(swiftUnsafePointer);
+  }
+  void* NON_NULL get_std__shared_ptr_margelo__nitro__camera__HybridCameraOutputSpec_(std__shared_ptr_margelo__nitro__camera__HybridCameraOutputSpec_ cppType) {
+    // Implemented in VisionCamera
+    return margelo::nitro::camera::bridge::swift::get_std__shared_ptr_HybridCameraOutputSpec_(cppType);
+  }
+  
+  // pragma MARK: std::shared_ptr<margelo::nitro::camera::HybridCameraPhotoOutputSpec>
+  std::shared_ptr<margelo::nitro::camera::HybridCameraPhotoOutputSpec> create_std__shared_ptr_margelo__nitro__camera__HybridCameraPhotoOutputSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    // Implemented in VisionCamera
+    return margelo::nitro::camera::bridge::swift::create_std__shared_ptr_HybridCameraPhotoOutputSpec_(swiftUnsafePointer);
+  }
+  void* NON_NULL get_std__shared_ptr_margelo__nitro__camera__HybridCameraPhotoOutputSpec_(std__shared_ptr_margelo__nitro__camera__HybridCameraPhotoOutputSpec_ cppType) {
+    // Implemented in VisionCamera
+    return margelo::nitro::camera::bridge::swift::get_std__shared_ptr_HybridCameraPhotoOutputSpec_(cppType);
+  }
+  
+  // pragma MARK: std::function<void(const std::string& /* result */)>
+  Func_void_std__string create_Func_void_std__string(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = KycSdkReactNative::Func_void_std__string::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const std::string& result) mutable -> void {
       swiftClosure.call(result);
     };
   }
@@ -53,18 +74,34 @@ namespace margelo::nitro::myazakyc::bridge::swift {
     };
   }
   
-  // pragma MARK: std::function<void(const AppAttestKey& /* result */)>
-  Func_void_AppAttestKey create_Func_void_AppAttestKey(void* NON_NULL swiftClosureWrapper) noexcept {
-    auto swiftClosure = KycSdkReactNative::Func_void_AppAttestKey::fromUnsafe(swiftClosureWrapper);
-    return [swiftClosure = std::move(swiftClosure)](const AppAttestKey& result) mutable -> void {
+  // pragma MARK: std::shared_ptr<HybridMyazaDepthFrameSpec>
+  std::shared_ptr<HybridMyazaDepthFrameSpec> create_std__shared_ptr_HybridMyazaDepthFrameSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    KycSdkReactNative::HybridMyazaDepthFrameSpec_cxx swiftPart = KycSdkReactNative::HybridMyazaDepthFrameSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::myazakyc::HybridMyazaDepthFrameSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridMyazaDepthFrameSpec_(std__shared_ptr_HybridMyazaDepthFrameSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::myazakyc::HybridMyazaDepthFrameSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::myazakyc::HybridMyazaDepthFrameSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridMyazaDepthFrameSpec\" is not implemented in Swift!");
+    }
+    #endif
+    KycSdkReactNative::HybridMyazaDepthFrameSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::function<void(const std::vector<std::string>& /* result */)>
+  Func_void_std__vector_std__string_ create_Func_void_std__vector_std__string_(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = KycSdkReactNative::Func_void_std__vector_std__string_::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const std::vector<std::string>& result) mutable -> void {
       swiftClosure.call(result);
     };
   }
   
-  // pragma MARK: std::function<void(const std::string& /* result */)>
-  Func_void_std__string create_Func_void_std__string(void* NON_NULL swiftClosureWrapper) noexcept {
-    auto swiftClosure = KycSdkReactNative::Func_void_std__string::fromUnsafe(swiftClosureWrapper);
-    return [swiftClosure = std::move(swiftClosure)](const std::string& result) mutable -> void {
+  // pragma MARK: std::function<void(const AppAttestKey& /* result */)>
+  Func_void_AppAttestKey create_Func_void_AppAttestKey(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = KycSdkReactNative::Func_void_AppAttestKey::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const AppAttestKey& result) mutable -> void {
       swiftClosure.call(result);
     };
   }

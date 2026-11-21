@@ -9,6 +9,9 @@
 // Mirrors the web SDK's `lib/workflow-merge.ts`.
 // ---------------------------------------------------------------------------
 
+import type { VoiceGuidanceOption } from '../types/appearance';
+import { mergeVoiceGuidance } from './voiceGuidance';
+
 /**
  * The prop keys a published flow may override. Exactly the template surface —
  * runtime data (apiKey, devUrl, userId, userData, metadata, callbacks) is never
@@ -39,6 +42,13 @@ export const WORKFLOW_KEYS = [
   // The light theme and full brightness while the liveness camera is on
   // (lib/bright-screen).
   'livenessBrightScreen',
+  // The face icon that acts out each liveness gesture
+  // (screens/liveness/GestureNarrator).
+  'livenessGestureGuide',
+  // Head directions or the classic gestures, and how many directions
+  // (liveness/challengeManager.ts).
+  'livenessGestureSet',
+  'livenessDirectionCount',
   'selfieReview',
   'biometric',
   'deviceIntelligence',
@@ -79,6 +89,9 @@ export type WorkflowKey = (typeof WORKFLOW_KEYS)[number];
  * prop-supplied `logo`, and a flow that only switches the selfie review on
  * doesn't wipe a host app's `doneButton: false`.
  *
+ * `voiceGuidance` is the exception: the prop sits over the flow's value, key
+ * by key (config/voiceGuidance.ts).
+ *
  * Pure and side-effect free.
  */
 export function mergeWorkflowConfig<P extends Record<string, unknown>>(
@@ -96,6 +109,10 @@ export function mergeWorkflowConfig<P extends Record<string, unknown>>(
         ...(typeof propBlock === 'object' && propBlock !== null ? propBlock : {}),
         ...(value as Record<string, unknown>),
       };
+    } else if (key === 'voiceGuidance') {
+      // The one key where the PROP wins, key by key: the voice contract lets
+      // an app override the voice an org admin picked (config/voiceGuidance).
+      merged[key] = mergeVoiceGuidance(value, props[key] as VoiceGuidanceOption | undefined);
     } else {
       merged[key] = value;
     }
@@ -149,6 +166,11 @@ const APPLICANT_LEG_KEYS = [
   'flashSequenceLength',
   'maxLivenessAttempts',
   'livenessBrightScreen',
+  'livenessGestureGuide',
+  // Head directions or the classic gestures, and how many directions
+  // (liveness/challengeManager.ts).
+  'livenessGestureSet',
+  'livenessDirectionCount',
   'selfieReview',
   'nfc',
 ] as const;

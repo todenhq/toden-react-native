@@ -150,18 +150,26 @@ describe('the blur around the window', () => {
   });
 });
 
-describe('the gesture picture on a short screen', () => {
-  it('is full size with room, shrinks with less, and never disappears into the pill', () => {
+describe('the block above the window', () => {
+  const read = (rel: string): string => readFileSync(join(__dirname, '..', rel), 'utf8');
+
+  it('holds only the instruction, and the lighting note when there is room for both', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { gestureSize, GESTURE_MIN_SIZE } = require('../lib/livenessCutout');
-    expect(gestureSize(220, 76)).toBe(76);
-    expect(gestureSize(150, 76)).toBe(76);
-    expect(gestureSize(120, 76)).toBe(56);
-    expect(gestureSize(90, 76)).toBe(GESTURE_MIN_SIZE);
-    expect(gestureSize(0, 76)).toBe(GESTURE_MIN_SIZE);
-    expect(gestureSize(220, 52)).toBe(GESTURE_MIN_SIZE);
-    expect(gestureSize(170, 96)).toBe(96);
-    expect(gestureSize(140, 96)).toBe(74);
+    const { ROOM_FOR_LIGHTING_NOTE, INSTRUCTION_ROOM, WINDOW_TOP_ROOM } = require('../lib/livenessCutout');
+    expect(INSTRUCTION_ROOM).toBe(66);
+    expect(ROOM_FOR_LIGHTING_NOTE).toBe(128);
+    // The window stays where it was in all three SDKs.
+    expect(WINDOW_TOP_ROOM).toBe(190);
+    const live = read('screens/liveness/LivenessLive.tsx');
+    expect(live).toContain('room >= ROOM_FOR_LIGHTING_NOTE');
+    expect(live).toContain('above={(room) => {');
+    expect(read('screens/liveness/ImmersiveFrame.tsx')).toContain('{above(room)}');
+  });
+
+  it('no longer has a gesture picture or its plate', () => {
+    expect(read('screens/liveness/LivenessLive.tsx')).not.toMatch(/LivenessAvatar|GesturePlate|gestureSize/);
+    expect(read('screens/liveness/ImmersiveSurfaces.tsx')).not.toContain('GesturePlate');
+    expect(read('lib/prime-models.ts')).not.toMatch(/Avatar/);
   });
 });
 
@@ -205,7 +213,11 @@ describe('windowDrop', () => {
     expect(
       faceWindowGuidance(face, { faceWidth: face.width * 0.6, centreX: 0.5, centreY: face.centreY - face.height * 0.3 }),
     ).toBe('off_centre');
-    expect(aboveHeight(96)).toBe(122);
+    // Nothing but the instruction stands above the window. Too little room
+    // for the words: the block keeps its height and runs over the window's
+    // top edge.
+    expect(aboveHeight(40)).toBe(66);
+    expect(aboveHeight(96)).toBe(96);
     expect(aboveHeight(180)).toBe(180);
   });
 });

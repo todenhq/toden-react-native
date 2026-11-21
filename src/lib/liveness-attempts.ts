@@ -47,6 +47,18 @@ export function countsAsFailedCheck(reason: LivenessFailureReason | null): boole
   return reason === 'timeout' || reason === 'face_lost' || reason === 'face_swap' || reason === 'flash_failed';
 }
 
+/**
+ * The closed detail drop-off insights records for a failed check (lib/step-log
+ * `liveness_failed`): the face left the frame, a different face appeared, the
+ * time ran out, or (the flash) something else.
+ */
+export function livenessFailureDetail(reason: LivenessFailureReason | null): 'no_face' | 'face_changed' | 'timeout' | 'other' {
+  if (reason === 'face_lost') return 'no_face';
+  if (reason === 'face_swap') return 'face_changed';
+  if (reason === 'timeout') return 'timeout';
+  return 'other';
+}
+
 /** Read the 200 answer; anything unexpected reads as "no limit". */
 export function readLivenessFailed(body: unknown): LivenessFailedResult {
   if (body === null || typeof body !== 'object') return { limited: false };

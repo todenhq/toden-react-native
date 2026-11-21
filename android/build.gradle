@@ -131,6 +131,9 @@ dependencies {
   // the detector reads, plus its C++ prefab (headers for the generated spec).
   // `implementation` (not compileOnly) so the prefab is consumable by our CMake.
   implementation project(':react-native-vision-camera')
+  // NitroImage — VisionCamera's photo types (the depth frame's spec takes its
+  // photo output) include its headers; its prefab puts them on our CMake path.
+  implementation project(':react-native-nitro-image')
 
   // CameraX core — for the ImageProxy / ExperimentalGetImage APIs.
   compileOnly 'androidx.camera:camera-core:1.3.4'

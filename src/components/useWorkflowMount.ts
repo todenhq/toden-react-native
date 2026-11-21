@@ -4,6 +4,7 @@ import { VerificationError } from '../types/verification';
 import type { VerificationConfig, ResolvedVerificationConfig } from '../types/config';
 import type { ServerConfigState } from '../store/serverConfig';
 import { requireCountry, resolveWorkflow } from '../services/workflowGate';
+import { preloadFlowVoice } from '../liveness/voicePreload';
 
 // ---------------------------------------------------------------------------
 // Resolving a workflow, separated from anything that draws.
@@ -109,6 +110,14 @@ export function useWorkflowMount(config: VerificationConfig): WorkflowMount {
     };
     // `attempt` re-runs this on Retry.
   }, [workflowId, apiKey, devUrl, attempt]);
+
+  // The flow's Toden voice starts downloading as soon as the flow knows it, so
+  // its clips are on the device before the liveness step's first prompt
+  // (liveness/voicePreload.ts). Each settled config, so a reopened flow picks
+  // up a voice the org changed meanwhile.
+  useEffect(() => {
+    if (state.status === 'ready') preloadFlowVoice(state.mount.config);
+  }, [state]);
 
   // Marks the state `resolving` in the SAME update as the re-run, not one
   // commit later from the effect. A caller opens with `refresh()` and its own

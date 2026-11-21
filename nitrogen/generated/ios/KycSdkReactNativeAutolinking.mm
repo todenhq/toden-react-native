@@ -17,6 +17,7 @@
 #include "HybridMyazaDeviceIntelSpecSwift.hpp"
 #include "HybridMyazaBackdropBlurSpecSwift.hpp"
 #include "HybridMyazaTouchGuardSpecSwift.hpp"
+#include "HybridMyazaDepthFrameSpecSwift.hpp"
 
 @interface KycSdkReactNativeAutolinking : NSObject
 @end
@@ -73,6 +74,13 @@
     "MyazaTouchGuard",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridMyazaTouchGuardSpec> hybridObject = KycSdkReactNative::KycSdkReactNativeAutolinking::createMyazaTouchGuard();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "MyazaDepthFrame",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridMyazaDepthFrameSpec> hybridObject = KycSdkReactNative::KycSdkReactNativeAutolinking::createMyazaDepthFrame();
       return hybridObject;
     }
   );

@@ -4,9 +4,11 @@ import { useEffectiveCountry, useFlowState, useVerificationConfig } from '../../
 import {
   countsAsFailedCheck,
   livenessAttemptLimit,
+  livenessFailureDetail,
   type LivenessFailedResult,
 } from '../../lib/liveness-attempts';
 import { reportLivenessFailure } from '../../lib/liveness-failure-report';
+import { recordJourneyEvent } from '../../lib/step-log';
 import type { LivenessFailureReason, LivenessPhase } from '../../liveness/types';
 
 /**
@@ -36,6 +38,17 @@ export function useLivenessFailureReport(
   const runRef = useRef(0);
 
   const failed = phase === 'failed';
+  // Every failed check is recorded for drop-off insights, limit or not; re-armed on Try Again.
+  const journeyRecordedRef = useRef(false);
+  useEffect(() => {
+    if (!failed) {
+      journeyRecordedRef.current = false;
+      return;
+    }
+    if (journeyRecordedRef.current || !countsAsFailedCheck(failureReason)) return;
+    journeyRecordedRef.current = true;
+    recordJourneyEvent('liveness_failed', livenessFailureDetail(failureReason));
+  }, [failed, failureReason]);
   useEffect(() => {
     if (!failed) {
       reportedRef.current = false;

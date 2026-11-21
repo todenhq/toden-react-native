@@ -18,6 +18,10 @@ include(${CMAKE_SOURCE_DIR}/../nitrogen/generated/android/KycSdkReactNative+auto
 # its headers on the include path. (Nitrogen doesn't auto-link external-module
 # prefabs, so we add it by hand.)
 find_package(react-native-vision-camera REQUIRED CONFIG)
+# The depth frame's spec takes VisionCamera's photo output, whose header
+# includes <NitroImage/HybridImageSpec.hpp> (VisionCamera's HybridPhotoSpec), so
+# NitroImage's headers go on the path too, the way VisionCamera links them.
+find_package(react-native-nitro-image REQUIRED CONFIG)
 
 find_library(LOG_LIB log)
 
@@ -26,4 +30,5 @@ target_link_libraries(
         ${LOG_LIB}
         android
         react-native-vision-camera::VisionCamera
+        react-native-nitro-image::NitroImage
 )

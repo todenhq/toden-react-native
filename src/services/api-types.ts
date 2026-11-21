@@ -20,6 +20,9 @@ export type MediaUploadType =
   | 'document_front_video'
   | 'document_back_video'
   | 'liveness_video'
+  // One depth frame from the iPhone's Face ID camera: a 16-bit greyscale PNG
+  // of millimetres (liveness/depthFrame.ts).
+  | 'liveness_depth'
   // The two kinds that accept a PDF — a proof of address is usually a
   // downloaded statement, and company paperwork is almost always a scan.
   | 'proof_of_address'

@@ -263,6 +263,31 @@ export interface VerificationConfig<C extends SupportedCountry = SupportedCountr
    * applies either way. See lib/bright-screen.
    */
   livenessBrightScreen?: boolean;
+  /**
+   * Gesture guide: on the liveness camera, a face icon pops up in the window,
+   * acts out the gesture being asked for once, then goes, coming back only if
+   * the person stops responding. The instruction is shown in words either
+   * way. On by default; only `false` turns it off. Normally set by a workflow
+   * (the builder's "Show each gesture" switch). See
+   * screens/liveness/GestureNarrator.
+   */
+  livenessGestureGuide?: boolean;
+  /**
+   * Which gestures the liveness camera asks for: `'directions'` asks two to
+   * four head directions (turn left, turn right, look up, look down; see
+   * `livenessDirectionCount`), picked by Toden for each attempt; `'classic'`
+   * asks two or three of nod, turn, blink and smile. Unset is `classic`.
+   * Usually configured in the workflow builder, where new workflows start on
+   * `directions`.
+   */
+  livenessGestureSet?: 'directions' | 'classic';
+  /**
+   * How many head directions the liveness camera asks for with
+   * `livenessGestureSet: 'directions'`: 2, 3 or 4. Unset is 3. Every run
+   * includes at least one head turn, left or right. Usually configured in the
+   * workflow builder.
+   */
+  livenessDirectionCount?: number;
   /** Show the captured selfie, with Retake and Continue, before moving on.
    *  Off unless `true`; the liveness capture otherwise hands straight over. */
   selfieReview?: boolean;
@@ -350,6 +375,11 @@ export interface VerificationConfig<C extends SupportedCountry = SupportedCountr
    * Spoken liveness instructions (accessibility). `true`/omitted = on,
    * `false` = off, or a {@link VoiceGuidanceConfig}. TTS output only — no
    * microphone is used. Default: on.
+   *
+   * Unlike the other workflow keys, this prop sits OVER the workflow's value,
+   * key by key: `{ voice: 'rory' }` keeps the workflow's `enabled` and
+   * `language`, and a bare boolean overrides `enabled` only
+   * (config/voiceGuidance.ts).
    */
   voiceGuidance?: VoiceGuidanceOption;
 

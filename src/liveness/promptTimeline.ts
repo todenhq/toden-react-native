@@ -15,7 +15,10 @@
 // (liveness/prompt_timeline.dart). Change all three together.
 // ---------------------------------------------------------------------------
 
-const GESTURES = new Set(['turn', 'nod', 'blink', 'smile']);
+// The classic gestures and the head directions. The directions were left out
+// when they were added (2026-11-17), so no head-directions run sent its times
+// and Core had nothing to read the recording against (found 2026-11-18).
+const GESTURES = new Set(['turn', 'nod', 'blink', 'smile', 'turnLeft', 'turnRight', 'lookUp', 'lookDown']);
 
 export interface PromptTime {
   prompt: string;

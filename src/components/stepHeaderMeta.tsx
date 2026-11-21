@@ -1,4 +1,4 @@
-import { ID_TYPES, getScanSides } from '../config/idTypes';
+import { ID_TYPES, getScanSides, shortDocumentLabel } from '../config/idTypes';
 import { poaDocumentTypes, poaMaxAgeDays, poaNamePolicy } from '../config/proofOfAddress';
 import { poaKindDays } from '../lib/poa-subtypes';
 import { documentCaptureMethods } from '../config/documentCaptureMethods';
@@ -105,9 +105,11 @@ export function stepHeaderMeta(
         if (documentCapturePhase === 'checking') return { title: '', description: null };
         // Phase-aware title/description live in the header (synced from the
         // capture screen via `documentCapturePhase`) — mirrors Flutter.
+        // The step calls it by its short name: "Passport", not
+        // "International Passport" (the step's pill and hints say the same).
         return documentCaptureMeta(
           documentCapturePhase,
-          label,
+          shortDocumentLabel(selectedIdType, label),
           documentCaptureMethods(config).scan ? 'scan' : 'upload',
           t,
           selectedIdType ? getScanSides(selectedIdType) === 'front_and_back' : false,

@@ -6,13 +6,14 @@ import { spacing } from '../../config/theme';
 import { useTheme } from '../../components/runtime';
 import { UiText } from '../../components/Typography';
 import { UiButton } from '../../components/UiButton';
-import { GESTURE_FULL_SIZE, gestureSize, ROOM_FOR_GESTURE, type Size } from '../../lib/livenessCutout';
+import { ROOM_FOR_LIGHTING_NOTE, type Size } from '../../lib/livenessCutout';
+import type { NarratorGesture } from '../../liveness/narratorPose';
 import { lightingGuidanceText, type useLiveness } from '../../liveness/useLiveness';
-import { LivenessAvatar } from '../LivenessAvatar';
 import { AttemptsLeftNotice } from './AttemptsLeftNotice';
+import { GestureNarrator } from './GestureNarrator';
 import { ImmersiveFrame } from './ImmersiveFrame';
 import { backdropNeedsTexture, CameraBackdrop } from './Backdrop';
-import { GesturePlate, Panel, Reassurance, StepCount } from './ImmersiveSurfaces';
+import { Panel, Reassurance, StepCount } from './ImmersiveSurfaces';
 import { InstructionPill } from './InstructionPill';
 import { LightingBanner } from './LightingBanner';
 import { LivenessCamera } from './LivenessCamera';
@@ -28,10 +29,14 @@ import { LivenessWindow } from './LivenessWindow';
 // step count. Sending the person to a different screen to press one button
 // tore down the camera they were about to need again.
 //
-// The gesture's picture sits ABOVE the window with the words it illustrates.
-// The front camera is at the top of the phone: eyes that go up to read stay
-// near the lens, while eyes that drop to the bottom of the screen tip the head
-// down, which is the wrong pose for the photo and for a nod being judged.
+// A gesture is asked for in words, and (unless the workflow turns it off) a
+// face icon pops up in the window, acts it out once and goes
+// (GestureNarrator). A head direction also lights its side of the line round
+// the window, which turns green when it is done (SideRing); the step count is
+// then for screen readers only, the line showing the progress. The words stand ABOVE the window: the front camera is at
+// the top of the phone, so eyes that go up to read stay near the lens, while
+// eyes that drop to the bottom of the screen tip the head down, which is the
+// wrong pose for the photo and for a nod being judged.
 // ---------------------------------------------------------------------------
 
 export function LivenessLive({
@@ -44,13 +49,17 @@ export function LivenessLive({
   windowRef,
   dimRoom,
   failure,
+  narratedGesture,
   onFrameSize,
+  onCameraStarted,
 }: {
   liveness: ReturnType<typeof useLiveness>;
   guidance: { text: string; tone: 'normal' | 'error' };
   device: CameraDevice | undefined;
   cameraActive: boolean;
   outputs: NonNullable<CameraViewProps['outputs']>;
+  /** The camera's session is running (liveness/depthFrame.ts enables depth then). */
+  onCameraStarted?: () => void;
   getRingTarget: () => number;
   windowRef: React.RefObject<View | null>;
   dimRoom: boolean;
@@ -59,16 +68,14 @@ export function LivenessLive({
    * is the attempts left, shown as a small warning under the reason.
    */
   failure: { message: string; note?: string | null; onRetry: () => void } | null;
+  /** The gesture the narrator acts out in the window, or null for none
+   *  (liveness/narratorPose.ts narratedGesture). */
+  narratedGesture: NarratorGesture | null;
   onFrameSize: (size: Size) => void;
 }): React.ReactElement {
   const { colors } = useTheme();
   const phase = liveness.phase;
   const loading = phase === 'loading';
-  const challenge = liveness.activeChallenge;
-  const showsGesture =
-    challenge != null &&
-    challenge !== 'hold' &&
-    (phase === 'challenge' || phase === 'challenge_passed' || phase === 'positioning');
   const warning =
     liveness.wrongGesture ||
     liveness.multipleFaces ||
@@ -90,13 +97,6 @@ export function LivenessLive({
   const beforeCapture = phase !== 'complete';
   const lighting = liveness.lightingGuidance;
 
-  const gesture = (size: number, compact: boolean): React.ReactNode =>
-    showsGesture && challenge ? (
-      <GesturePlate compact={compact}>
-        <LivenessAvatar challenge={challenge} size={size} iconSize={size / 2} />
-      </GesturePlate>
-    ) : null;
-
   return (
     <ImmersiveFrame
       onSize={onFrameSize}
@@ -111,6 +111,7 @@ export function LivenessLive({
               active={cameraActive}
               outputs={outputs}
               texture={backdropNeedsTexture}
+              onStarted={onCameraStarted}
             />
           }
         />
@@ -124,29 +125,36 @@ export function LivenessLive({
           getRingTarget={getRingTarget}
           // Positioning, each step, the capture: livenessProgress's own parts.
           segments={liveness.totalCount + 2}
+          sides={liveness.directionSides}
           windowRef={windowRef}
-        />
+        >
+          <GestureNarrator
+            gesture={failure ? null : narratedGesture}
+            respondedAtRef={liveness.respondedAtRef}
+            showAgain={liveness.wrongWayCount}
+            window={window}
+          />
+        </LivenessWindow>
       )}
-      above={(room, reach) => {
+      above={(room) => {
         if (failure) return null;
-        // The picture stands on its own above the words, and it is narrow, so
-        // it may rise between the back and close buttons: its size comes from
-        // the room up to the TOP of those buttons (lib/livenessCutout.ts
-        // gestureSize). The long lighting note is wide, so it only shows when
-        // everything fits under the buttons, and the picture gives it room.
-        const showsLighting = lighting != null && room >= ROOM_FOR_GESTURE + 70;
-        const size = gestureSize(showsLighting ? room - 70 : reach, GESTURE_FULL_SIZE);
+        // The long lighting note is wide, so it only shows when it fits under
+        // the back and close buttons with the instruction.
+        const showsLighting = lighting != null && room >= ROOM_FOR_LIGHTING_NOTE;
         return (
           <RNView style={{ alignItems: 'center', gap: spacing.sm }}>
             {showsLighting && lighting ? (
               <LightingBanner text={lightingGuidanceText(lighting)} />
             ) : null}
-            {gesture(size, false)}
             <InstructionPill text={phase === 'flash' ? '' : guidance.text} tone={tone} />
           </RNView>
         );
       }}
-      below={!failure && showsCount ? <StepCount step={step} total={total} /> : undefined}
+      below={
+        !failure && showsCount ? (
+          <StepCount step={step} total={total} visuallyHidden={!!liveness.directionSides} />
+        ) : undefined
+      }
       // A failed check rests its panel on the bottom edge at its full height.
       // Squeezed into the strip under the window it was cut off on a short
       // phone; the window has nothing left to show, so the panel may cover its

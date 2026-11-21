@@ -9,7 +9,8 @@ import { Icon } from '../components/Icon';
 import { cancelChipRead, nfcUnavailableReason, readPassportChip, type EmrtdReadResult } from '../emrtd';
 import { fromBase64 } from '../emrtd/bytes';
 import { useNfcAvailability } from './nfc/useNfcAvailability';
-import { readErrorMessage } from './nfc/readErrorMessage';
+import { nfcFailureDetail, readErrorMessage } from './nfc/readErrorMessage';
+import { recordJourneyEvent } from '../lib/step-log';
 import { successHaptic } from '../services/haptics';
 import { NfcSuccessPanel } from './nfc/NfcSuccessPanel';
 import { NfcMrzPrompt } from './nfc/NfcMrzPrompt';
@@ -187,6 +188,8 @@ export function NfcStep(): React.ReactElement {
       successHaptic();
     } catch (err) {
       if (!liveRef.current || seq !== readSeqRef.current) return;
+      const failure = nfcFailureDetail(err);
+      if (failure) recordJourneyEvent('nfc_failed', failure);
       setPhase('failed');
       // A real attempt just failed — the skip is earned now, no need to make
       // the user wait out the reveal timer on top of a failure.

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Image, View } from 'react-native';
+import { View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 import { spacing } from '../../config/theme';
 import { useTheme } from '../../components/runtime';
@@ -8,30 +9,39 @@ import { UiText } from '../../components/Typography';
 import { UiButton } from '../../components/UiButton';
 import { UiPulseLoader } from '../../components/UiPulseLoader';
 import { Icon } from '../../components/Icon';
-import { PhotoBackdrop } from './Backdrop';
+import { CameraBackdrop } from './Backdrop';
 import { StyleAbsFill } from './constants';
 import { ImmersiveFrame } from './ImmersiveFrame';
 import { Panel, Pill } from './ImmersiveSurfaces';
 import { SELFIE_DONE_BODY, SELFIE_DONE_TITLE } from './LivenessOutcome';
+import { ReviewScene } from './ReviewScene';
 import type { SelfieUpload } from './useSelfieUpload';
-import { SELFIE_ASPECT } from '../../lib/selfie-pick';
+import { windowOutline } from '../../lib/livenessCutout';
+import type { SelfieScene } from '../../lib/selfie-review';
 
 // ---------------------------------------------------------------------------
-// The review, full screen: the selfie as it was cut (3:4, head and shoulders,
-// lib/selfie-pick.ts) in a rounded rectangle centred where the camera's
-// window was, over the same photo blurred.
+// The review, full screen: the photo where the camera was, in the same
+// window, so it reads as the camera held still rather than as a different
+// screen.
+//
+// What it shows is the still the selfie was cut from, drawn as the camera drew
+// it and under the same light blur and tint, moved so the face sits in the
+// window and made smaller only if the face would spill over it
+// (lib/selfie-review.ts, ./ReviewScene). The window keeps its shape, edged in
+// green. Without that still the selfie is shown in the window.
 //
 // Only with a photo to show. A restored session has the uploaded media id and
 // no local file, and keeps the sheet's own review (LivenessComplete).
 // ---------------------------------------------------------------------------
 
-/** The selfie's green edge on the review. */
+/** The window's green edge on the review. */
 const RIM = 4;
-/** The selfie's corners on the review (web's rounded-2xl, at this size). */
-const REVIEW_RADIUS = 24;
+/** Room round the window for the edge's shadow. */
+const RIM_REACH = 8;
 
 export function LivenessReview({
   selfieUri,
+  scene,
   soft: reportedSoft = false,
   upload,
   done = false,
@@ -39,6 +49,8 @@ export function LivenessReview({
   onContinue,
 }: {
   selfieUri: string;
+  /** The still the selfie was cut from. Null when there is none. */
+  scene: SelfieScene | null;
   /** The still reads out of focus. A notice, never a gate. */
   soft?: boolean;
   upload: SelfieUpload;
@@ -62,42 +74,50 @@ export function LivenessReview({
 
   return (
     <ImmersiveFrame
-      // The photo twice: blurred behind, and sharp in the window.
-      backdrop={() => <PhotoBackdrop uri={selfieUri} />}
+      // The picture goes where the camera went, under the same blur and tint.
+      backdrop={(frame, window) => (
+        <CameraBackdrop
+          frame={frame}
+          window={window}
+          dimRoom={false}
+          camera={window ? <ReviewScene scene={scene} uri={selfieUri} frame={frame} window={window} /> : null}
+        />
+      )}
       cutout={(window) => {
-        // Passport-shaped, as the selfie is cut (lib/selfie-pick.ts): the
-        // 3:4 still whole, in a rounded rectangle centred in the window,
-        // rather than the camera's circle.
-        const width = Math.min(window.width, window.height * SELFIE_ASPECT);
-        const height = width / SELFIE_ASPECT;
+        // The window's own shape, edged in green, with a soft shadow under
+        // the edge drawn in the SVG so Android shows it too.
+        const edge = windowOutline(window, RIM / 2).d;
+        const box = window.width + RIM_REACH * 2;
+        const tall = window.height + RIM_REACH * 2;
         return (
-          <View
-            style={{
-              position: 'absolute',
-              left: (window.width - width) / 2,
-              top: (window.height - height) / 2,
-              width,
-              height,
-              borderRadius: REVIEW_RADIUS,
-              borderWidth: RIM,
-              borderColor: colors.success,
-              overflow: 'hidden',
-              backgroundColor: '#111111',
-            }}
-          >
-            {/* borderRadius repeated on the Image: iOS does not reliably
-                clip an Image to a rounded parent. */}
-            <Image
-              source={{ uri: selfieUri }}
-              resizeMode="cover"
-              style={{ width: '100%', height: '100%', borderRadius: REVIEW_RADIUS - RIM }}
-            />
+          <>
+            <View pointerEvents="none" style={{ position: 'absolute', left: -RIM_REACH, top: -RIM_REACH }}>
+              <Svg
+                width={box}
+                height={tall}
+                viewBox={`${-RIM_REACH} ${-RIM_REACH} ${box} ${tall}`}
+              >
+                <Path d={windowOutline(window, -1).d} fill="none" stroke="rgba(0, 0, 0, 0.16)" strokeWidth={6} />
+                <Path d={edge} fill="none" stroke={colors.success} strokeWidth={RIM} />
+              </Svg>
+            </View>
             {busy ? (
-              <View style={[StyleAbsFill, { backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' }]}>
+              <View
+                style={[
+                  StyleAbsFill,
+                  {
+                    borderRadius: window.width / 2,
+                    overflow: 'hidden',
+                    backgroundColor: 'rgba(0,0,0,0.45)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  },
+                ]}
+              >
                 <UiPulseLoader size={64} />
               </View>
             ) : null}
-          </View>
+          </>
         );
       }}
       above={() => (

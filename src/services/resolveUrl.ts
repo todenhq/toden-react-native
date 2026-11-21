@@ -76,6 +76,19 @@ export function resolveBaseUrl(apiKey: string, devUrl?: string): string {
   return BASE_URLS[environment];
 }
 
+/**
+ * The server the liveness voice clips come from: the API base, or undefined
+ * for a key that resolves to none. The clips are best-effort, so a bad key
+ * means the device voice, never a throw.
+ */
+export function voiceClipServer(apiKey: string, devUrl?: string): string | undefined {
+  try {
+    return resolveBaseUrl(apiKey, devUrl);
+  } catch {
+    return undefined;
+  }
+}
+
 // Hosts that mean "this machine" but resolve differently per platform — a local
 // dev server reachable as `localhost` on the iOS sim and `10.0.2.2` on the
 // Android emulator.

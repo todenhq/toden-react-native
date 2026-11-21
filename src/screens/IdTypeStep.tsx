@@ -17,6 +17,7 @@ import { Icon, type IconName } from '../components/Icon';
 import { countrySelectOptions, idCountryOnStep } from '../store/derive';
 import { IdCountryField } from './IdCountryField';
 import { useIdTypeOptions } from './useIdTypeOptions';
+import { logChoice } from '../lib/click-log';
 
 // ID-type picker — 1:1 with the web SDK's IdTypeStep and Flutter's
 // IdTypeScreen: a list of cards (icon + label) that ADVANCE ON TAP. On the
@@ -77,6 +78,7 @@ export function IdTypeStep(): React.ReactElement {
   // routes off the value just written — a document ID to document-capture, a
   // number-only ID to id-input.
   const pick = (key: IdType): void => {
+    logChoice('idType');
     store.getState().setIdType(key);
     store.getState().nextStep();
   };

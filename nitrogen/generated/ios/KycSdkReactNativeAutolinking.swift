@@ -95,4 +95,16 @@ public final class KycSdkReactNativeAutolinking {
   public static func isMyazaTouchGuardRecyclable() -> Bool {
     return HybridMyazaTouchGuard.self is any RecyclableView.Type
   }
+  
+  public static func createMyazaDepthFrame() -> bridge.std__shared_ptr_HybridMyazaDepthFrameSpec_ {
+    let hybridObject = HybridMyazaDepthFrame()
+    return { () -> bridge.std__shared_ptr_HybridMyazaDepthFrameSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isMyazaDepthFrameRecyclable() -> Bool {
+    return HybridMyazaDepthFrame.self is any RecyclableView.Type
+  }
 }
