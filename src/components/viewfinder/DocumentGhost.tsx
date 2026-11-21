@@ -49,6 +49,8 @@ export interface DocumentSpecimenSubject {
   idType: string | null;
   title: string;
   country: string | null;
+  /** The country's ISO-2 code: a few IDs are drawn as that country's own card. */
+  countryCode?: string | null;
   side: 'front' | 'back';
 }
 
@@ -62,7 +64,7 @@ export function useSpecimenXml(
   return useMemo(
     () =>
       documentSpecimen({
-        kind: specimenKind(subject.idType),
+        kind: specimenKind(subject.idType, subject.countryCode),
         title: subject.title,
         country: subject.country,
         side,

@@ -200,11 +200,21 @@ describe('the device voice', () => {
 });
 
 describe('Toden voice clips', () => {
-  it('fetches nothing without a voice', async () => {
-    const s = new LivenessSpeaker(true);
+  it("fetches nothing with the device's voice chosen", async () => {
+    const s = new LivenessSpeaker({ voice: 'device' });
     s.prepareVoice(SERVER);
     await settle();
     expect(fetchMock).not.toHaveBeenCalled();
+    s.speak('Nod your head');
+    expect(speak).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks for the voices by default, and speaks with the device voice when the server has none to give', async () => {
+    // The test manifest says nothing of countries and has no fallback, as an older server.
+    const s = new LivenessSpeaker(true);
+    s.prepareVoice(SERVER);
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     s.speak('Nod your head');
     expect(speak).toHaveBeenCalledTimes(1);
   });
@@ -511,9 +521,9 @@ describe('the voice loads when the flow starts', () => {
     expect(downloadFileAsync).toHaveBeenCalledTimes(3);
   });
 
-  it('fetches nothing with guidance off, no voice or no server', async () => {
+  it("fetches nothing with guidance off, the device's voice chosen, or no server", async () => {
     preloadFlowVoice({ ...FLOW, voiceGuidance: { enabled: false, voice: 'lyra' } });
-    preloadFlowVoice({ ...FLOW, voiceGuidance: true });
+    preloadFlowVoice({ ...FLOW, voiceGuidance: { voice: 'device' } });
     preloadFlowVoice({ ...FLOW, apiKey: 'not-a-key', devUrl: undefined });
     await settle();
     expect(fetchMock).not.toHaveBeenCalled();

@@ -1,5 +1,6 @@
 import { createVerificationApi } from './api';
 import { VerificationApiError } from './api';
+import { applyAppCountry } from '../lib/app-country';
 import { normalizeAppearanceUrls, normalizeBrandingUrls, resolveBaseUrl } from './resolveUrl';
 import { mergeWorkflowConfig, overlayApplicantWorkflow } from '../config/workflowMerge';
 import { VerificationError } from '../types/verification';
@@ -95,13 +96,19 @@ export async function resolveWorkflow(
       // KYB: the mapped applicant workflow's capture template overlays the
       // merged config (and its id is recorded for stamping) — see
       // overlayApplicantWorkflow.
-      config: overlayApplicantWorkflow(
-        res.applicantWorkflow,
-        mergeWorkflowConfig(
-          normalizeAppearanceUrls(res.config, baseUrl),
-          config as unknown as Record<string, unknown>,
-        ),
-      ) as unknown as ResolvedVerificationConfig,
+      // The merge lets the workflow's country replace the app's, so the app's
+      // own `country` is applied last, onto the countries the workflow offers
+      // (lib/app-country.ts).
+      config: applyAppCountry(
+        overlayApplicantWorkflow(
+          res.applicantWorkflow,
+          mergeWorkflowConfig(
+            normalizeAppearanceUrls(res.config, baseUrl),
+            config as unknown as Record<string, unknown>,
+          ),
+        ) as unknown as ResolvedVerificationConfig,
+        config.country,
+      ),
       serverConfig: {
         status: 'ready',
         idTypes: res.idTypes,

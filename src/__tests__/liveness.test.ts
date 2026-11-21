@@ -28,22 +28,22 @@ function face(partial: Partial<LivenessFaceData> = {}): LivenessFaceData {
 
 describe('resolveVoiceGuidance', () => {
   it('treats undefined / true as enabled en-US', () => {
-    expect(resolveVoiceGuidance(undefined)).toEqual({ enabled: true, language: 'en-US' });
-    expect(resolveVoiceGuidance(true)).toEqual({ enabled: true, language: 'en-US' });
+    expect(resolveVoiceGuidance(undefined)).toMatchObject({ enabled: true, language: 'en-US' });
+    expect(resolveVoiceGuidance(true)).toMatchObject({ enabled: true, language: 'en-US' });
   });
 
   it('treats false as disabled', () => {
-    expect(resolveVoiceGuidance(false)).toEqual({ enabled: false, language: 'en-US' });
+    expect(resolveVoiceGuidance(false)).toMatchObject({ enabled: false, language: 'en-US' });
   });
 
   it('honours an object with enabled + language', () => {
-    expect(resolveVoiceGuidance({ enabled: true, language: 'fr-FR' })).toEqual({
+    expect(resolveVoiceGuidance({ enabled: true, language: 'fr-FR' })).toMatchObject({
       enabled: true,
       language: 'fr-FR',
     });
     // enabled defaults to true when omitted
-    expect(resolveVoiceGuidance({ language: 'en-GB' })).toEqual({ enabled: true, language: 'en-GB' });
-    expect(resolveVoiceGuidance({ enabled: false })).toEqual({ enabled: false, language: 'en-US' });
+    expect(resolveVoiceGuidance({ language: 'en-GB' })).toMatchObject({ enabled: true, language: 'en-GB' });
+    expect(resolveVoiceGuidance({ enabled: false })).toMatchObject({ enabled: false, language: 'en-US' });
   });
 });
 

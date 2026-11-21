@@ -112,13 +112,31 @@ export interface VoiceGuidanceConfig {
   /** BCP-47 voice tag (e.g. `'en-US'`, `'fr-FR'`). Default `'en-US'`. */
   language?: string;
   /**
-   * A Toden voice id (e.g. `'lyra'`, `'rory'`), normally chosen by an org
-   * admin on the workflow. The prompts then play that voice's clips from
-   * Toden's server; anything without a clip (a reworded prompt, a language
-   * with no clips, a clip that did not load) uses the device voice. Omit it
-   * for the device voice only.
+   * Who speaks to everyone the person's country and its neighbours have no
+   * Toden voice for: a Toden voice id (e.g. `'lyra'`), normally chosen by an
+   * org admin on the workflow, or `'device'` for the device's own voice for
+   * everyone. Omitted: an American Toden voice is the last fallback.
+   *
+   * From 4.4.0 the prompts are spoken, in order, by a Toden voice from the
+   * country of the document being verified, a neighbouring country's, this
+   * voice, then an American one. Anything without a clip (a reworded prompt, a
+   * language with no clips, a clip that did not load) uses the device voice.
+   * Before 4.4.0 an omitted voice meant the device's voice.
    */
   voice?: string;
+  /**
+   * How the voice is matched to the person's country: `'any'` (the default),
+   * `'female'` or `'male'` of that country's Toden voices, or `'off'` to skip
+   * their country and its neighbours. Where the country has no voice of the
+   * gender asked for, one of its other voices speaks. One voice per person,
+   * kept for the session.
+   */
+  localVoice?: 'female' | 'male' | 'any' | 'off';
+  /**
+   * Whether a person whose country Toden has no voice from hears a
+   * neighbouring country's voice. Toden's own short list. Default `true`.
+   */
+  localVoiceNeighbours?: boolean;
 }
 
 /** Accepts a bare boolean for ergonomics or the full {@link VoiceGuidanceConfig}. */

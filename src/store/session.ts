@@ -1,5 +1,6 @@
 import type { VerificationState, VerificationStore } from './state';
 import { withoutRestoredSelfie } from '../lib/livenessResume';
+import { stillOffered } from '../lib/app-country';
 import { collectDeviceMetadata } from '../services/deviceMetadata';
 import { restoreAddress } from './address';
 import { getStepLog, onJourneySaveNeeded } from '../lib/step-log';
@@ -101,6 +102,11 @@ export function restoreAttemptProgress(
 ): void {
   const s = store.getState();
   const d = (progress.data ?? {}) as Record<string, unknown>;
+  // A country picked before that this flow no longer offers (the app has since
+  // named or locked another: lib/app-country.ts) makes the saved position
+  // meaningless: its ID type and captures belong to that country. Start again
+  // rather than resume into a country the flow cannot change away from.
+  if (typeof d['selectedCountry'] === 'string' && !stillOffered(d['selectedCountry'], s.config)) return;
   // The liveness claim cannot be restored, so the selfie is taken again
   // (lib/livenessResume.ts).
   const capture = withoutRestoredSelfie({

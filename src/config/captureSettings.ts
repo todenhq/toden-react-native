@@ -9,7 +9,8 @@
 //       a ~500 kbps bitrate cap. A few seconds stays well under the size target.
 //   • SELFIE still image           — MODERATE: 640×480, JPEG quality 0.8.
 //   • DOCUMENT still image         — CONSERVATIVE (OCR-critical): captured at a
-//       higher resolution, JPEG quality 0.9, never downscaled below 1080 px.
+//       higher resolution, JPEG quality 0.95 written once, never downscaled
+//       below 1080 px (lib/documentStill.ts).
 // ===========================================================================
 
 // --- Liveness / selfie camera (video is recorded from this stream) ---------
@@ -67,9 +68,13 @@ export const SELFIE_SETTLE_MS = 1500;
 
 // --- Still-image JPEG quality (0–1) ----------------------------------------
 export const SELFIE_IMAGE_QUALITY = 0.8; // moderate
-export const DOCUMENT_IMAGE_QUALITY = 0.9; // conservative — keep text sharp
+export const DOCUMENT_IMAGE_QUALITY = 0.95; // conservative — keep text and barcode bars sharp
 
 /** Document stills are never scaled narrower than this (OCR-critical). */
 export const DOCUMENT_MIN_WIDTH = 1080;
-/** Upper bound for document stills — large enough to keep small text legible. */
-export const DOCUMENT_MAX_DIMENSION = 2000;
+/**
+ * Upper bound for document stills, the web SDK's: above what most crops of a
+ * phone photo give, so a card's barcode keeps its bars; it bounds a photo
+ * picked from the device, which can be many times larger.
+ */
+export const DOCUMENT_MAX_DIMENSION = 2600;

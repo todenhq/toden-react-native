@@ -8,7 +8,7 @@
 // image_picker re-encodes at `imageQuality: 90` before its size check.
 //
 // So a photo is first resized and re-encoded as the document still is
-// (`compressDocumentImage`: JPEG q0.9, longest edge at most 2000 px), and the
+// (`compressDocumentImage`: JPEG q0.95, longest edge at most 2600 px), and the
 // cap is checked on the result. The cap stays as the backstop for a photo that
 // cannot be shrunk; a PDF never comes through here.
 //

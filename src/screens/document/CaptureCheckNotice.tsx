@@ -7,6 +7,7 @@ import { UiButton } from '../../components/UiButton';
 import { documentReviewCopy } from '../../components/documentReviewCopy';
 import { useText } from '../../i18n/useText';
 import {
+  canContinueAnyway,
   captureProblemMessage,
   captureRetakeLabel,
   captureRetakeSides,
@@ -21,9 +22,10 @@ import type { DocumentCaptureSide } from '../../services/api-types';
 // barcode (lib/documentCaptureCheck). The words come from that module so they stay in lockstep with the web and
 // Flutter SDKs.
 //
-// A notice, never a gate: the detectors can miss, so "Continue anyway" is
-// always offered and moves on with the photos already uploaded. The first
-// retake is the primary action because a retake is the likelier fix.
+// A face or barcode detector can miss, so "Continue anyway" moves on with the
+// photos already uploaded. A cut-off document offers no way past: the
+// verification would fail it. The first retake is the primary action because
+// a retake is the likelier fix.
 
 export function CaptureCheckNotice({
   problems,
@@ -67,13 +69,15 @@ export function CaptureCheckNotice({
           onPress={() => onRetake(side)}
         />
       ))}
-      <UiButton
-        label={continueAnyway}
-        variant="outline"
-        accessibilityLabel={continueAnyway}
-        accessibilityHint="Carries on with these photos as they are"
-        onPress={onContinueAnyway}
-      />
+      {canContinueAnyway(problems) ? (
+        <UiButton
+          label={continueAnyway}
+          variant="outline"
+          accessibilityLabel={continueAnyway}
+          accessibilityHint="Carries on with these photos as they are"
+          onPress={onContinueAnyway}
+        />
+      ) : null}
     </View>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { VerificationError } from '../types/verification';
+import { applyAppCountry } from '../lib/app-country';
 import type { VerificationConfig, ResolvedVerificationConfig } from '../types/config';
 import type { ServerConfigState } from '../store/serverConfig';
 import { requireCountry, resolveWorkflow } from '../services/workflowGate';
@@ -56,7 +57,8 @@ export interface WorkflowMount {
 /** Synchronous settle for a props-only mount — no network, no barrier. */
 export function settleWithoutWorkflow(config: VerificationConfig): MountState {
   try {
-    return { status: 'ready', mount: { config: requireCountry(config) } };
+    // A props-only flow that lists several countries: `lockCountry` narrows it to the app's own (lib/app-country.ts).
+    return { status: 'ready', mount: { config: applyAppCountry(requireCountry(config), config.country) } };
   } catch (err) {
     return {
       status: 'error',

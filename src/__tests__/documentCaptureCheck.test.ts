@@ -4,6 +4,7 @@ import { join } from 'path';
 import {
   CAPTURE_CHECK_CONTINUE_ANYWAY,
   CAPTURE_CHECK_TITLE,
+  canContinueAnyway,
   captureCheckProblems,
   captureProblemMessage,
   captureRetakeLabel,
@@ -103,6 +104,15 @@ describe('the words', () => {
     );
     expect(CAPTURE_CHECK_TITLE).toBe('Check your photos');
     expect(CAPTURE_CHECK_CONTINUE_ANYWAY).toBe('Continue anyway');
+  });
+
+  it('lets the applicant continue past a face or barcode that could not be read, never past a cut-off document', () => {
+    expect(canContinueAnyway([{ side: 'front', kind: 'no_face' }, { side: 'back', kind: 'no_barcode' }])).toBe(true);
+    expect(canContinueAnyway([{ side: 'front', kind: 'not_complete' }])).toBe(false);
+    expect(canContinueAnyway([{ side: 'front', kind: 'no_face' }, { side: 'back', kind: 'not_complete' }])).toBe(false);
+    // The notice draws the button only where the rule allows it.
+    const notice = readFileSync(join(__dirname, '..', 'screens', 'document', 'CaptureCheckNotice.tsx'), 'utf8');
+    expect(notice).toContain('{canContinueAnyway(problems) ? (');
   });
 
   it('retakes a camera capture and replaces a photo picked from the device', () => {

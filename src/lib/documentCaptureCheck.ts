@@ -12,10 +12,14 @@
 // as a Nigerian voter's card or driver's licence). Asking here turns a decline
 // that arrives by webhook into a retake that costs a few seconds.
 //
-// A NOTICE, NEVER A GATE. A detector can miss, so the applicant can always
-// continue with the photos they have. And the check itself must never block
-// the flow: a timeout, a network error or any answer we cannot read counts as
-// "no problem", exactly like a check that found nothing wrong.
+// A NOTICE, NOT A GATE, WITH ONE EXCEPTION. A face or barcode detector can
+// miss, so the applicant can continue past those with the photos they have.
+// Not past a cut-off document (user decision 2026-11-21): the server only says
+// so when the document clearly runs off the photo, and the verification then
+// fails it (`document_cut_off`), so continuing would only spend the attempt.
+// And the check itself must never block the flow: a timeout, a network error
+// or any answer we cannot read counts as "no problem", exactly like a check
+// that found nothing wrong.
 //
 // Pure apart from the runner's timer, so the rules are pinned by a test
 // without mounting React Native.
@@ -71,6 +75,14 @@ export function captureCheckProblems(results: readonly DocumentCaptureCheckResul
  */
 export function captureRejectionDetail(kind: CaptureProblemKind): 'cut_off' | 'other' {
   return kind === 'not_complete' ? 'cut_off' : 'other';
+}
+
+/**
+ * Whether the applicant may go on with the photos as they are. Never with a
+ * cut-off document: that one must be taken again.
+ */
+export function canContinueAnyway(problems: readonly CaptureProblem[]): boolean {
+  return !problems.some((p) => p.kind === 'not_complete');
 }
 
 /** The sides a retake button is offered for, once each and in problem order. */

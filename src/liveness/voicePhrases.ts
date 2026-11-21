@@ -8,13 +8,95 @@
 // instead of saying something the screen does not.
 // ---------------------------------------------------------------------------
 
+import { primaryLanguage } from '../config/voiceGuidance';
+
 export interface VoiceManifest {
   /** Changes whenever any clip changes; part of every clip URL. */
   version: string;
-  voices: Record<string, { languages: string[] }>;
+  voices: Record<string, ManifestVoice>;
+  /** Whose voices may speak to a country Toden has no voice from, best first; absent from an older server. */
+  neighbours?: Record<string, string[]>;
+  /** The country whose voices speak when nothing nearer does (US); absent from an older server. */
+  fallbackCountry?: string;
   /** Language, then phrase key, then the clip's exact text. */
   phrases: Record<string, Record<string, string>>;
 }
+
+/** One voice in the manifest. An older server sends `languages` alone. */
+export interface ManifestVoice {
+  languages: string[];
+  gender?: 'female' | 'male';
+  /** ISO 3166-1 alpha-2; absent where the accent is not one country's. */
+  country?: string;
+  /** False for a voice Toden no longer offers: playable where named, never chosen for anyone. */
+  offered?: boolean;
+}
+
+/** Who the prompts are for, and how a voice is matched to them. */
+export interface VoiceApplicant {
+  /** A gender, either, or `off`: their own country and its neighbours are skipped. */
+  choice: 'female' | 'male' | 'any' | 'off';
+  /** The country of the document being verified, ISO-2; unknown until one is picked. */
+  country?: string | null;
+  /** The same for one person all session, so their voice does not change part way. */
+  seed: string;
+  /** A neighbouring country's voice where their own has none. Default true. */
+  neighbours?: boolean;
+}
+
+/** FNV-1a, 32 bit: one person's seed to a number that is the same on every run and every Toden SDK. */
+export function voiceSeedNumber(seed: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+/**
+ * The voice that speaks for this person (kyc-core docs/VOICE_GUIDANCE.md, "Who
+ * speaks, from SDK 4.4.0"), or null for the device's voice: their own country's,
+ * a neighbouring country's, the workflow's own `voice`, then an American voice.
+ * `off` skips the first two. The same rule as the web SDK's pickVoice.
+ */
+export function pickVoice(
+  manifest: VoiceManifest,
+  source: { voice?: string; language: string; applicant?: VoiceApplicant },
+): string | null {
+  const lang = primaryLanguage(source.language);
+  const voices = manifest.voices ?? {};
+  const speaks = (id: string) => voices[id]?.languages?.includes(lang) === true;
+  const workflowVoice = source.voice && speaks(source.voice) ? source.voice : null;
+  const who = source.applicant;
+  if (!who) return workflowVoice;
+
+  const from = (code: string) =>
+    Object.keys(voices)
+      .filter((id) => voices[id]!.country === code.toUpperCase() && voices[id]!.offered !== false && speaks(id))
+      .sort();
+  const gender = who.choice === 'off' ? 'any' : who.choice;
+  const ofGender = (ids: string[]) => (gender === 'any' ? ids : ids.filter((id) => voices[id]!.gender === gender));
+  const preferred = (ids: string[]) => (ofGender(ids).length > 0 ? ofGender(ids) : ids);
+  const one = (ids: string[]) => ids[voiceSeedNumber(who.seed) % ids.length]!;
+
+  const country = who.country?.trim().toUpperCase();
+  if (who.choice !== 'off' && country) {
+    const own = from(country);
+    if (own.length > 0) return one(preferred(own));
+    if (who.neighbours !== false) {
+      const nearby = (manifest.neighbours?.[country] ?? []).map(from);
+      const matching = nearby.map(ofGender).find((ids) => ids.length > 0) ?? nearby.find((ids) => ids.length > 0);
+      if (matching) return one(matching);
+    }
+  }
+  if (workflowVoice) return workflowVoice;
+  const fallback = manifest.fallbackCountry ? from(manifest.fallbackCountry) : [];
+  return fallback.length > 0 ? one(preferred(fallback)) : null;
+}
+
+/** A seed for this app session, for a person the app did not name (no `userId`). */
+export const SESSION_VOICE_SEED = Math.random().toString(36).slice(2);
 
 const VOICE_ASSETS_PATH = '/api/kyc/assets/voices';
 

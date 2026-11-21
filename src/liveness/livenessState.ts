@@ -82,6 +82,8 @@ export interface UseLivenessOptions {
    * it every prompt uses the device voice.
    */
   voiceServer?: string;
+  /** Who the prompts are for: the country of the document being verified and the app's user reference. */
+  voicePerson?: { country?: string | null; userId?: string | null };
   /**
    * Whether the liveness recording carries sound, so the voice clips play
    * beside the microphone without interrupting it (iOS audio session).

@@ -11,22 +11,42 @@ import type { VoiceGuidanceConfig, VoiceGuidanceOption } from '../types/appearan
 
 export const DEFAULT_VOICE_LANGUAGE = 'en-US';
 
+/** The `voice` that means the device's own speech, chosen by the admin. */
+export const DEVICE_VOICE_ID = 'device';
+
+export type LocalVoiceSetting = 'female' | 'male' | 'any' | 'off';
+
 export interface ResolvedVoiceGuidance {
   enabled: boolean;
   /** BCP-47 tag for the device voice, e.g. `en-US`. */
   language: string;
-  /** A Toden voice id (e.g. `lyra`), or undefined for the device voice only. */
+  /** The workflow's own Toden voice (e.g. `lyra`), or undefined for none. */
   voice: string | undefined;
+  /** The admin chose the device's own voice: no Toden voice speaks. */
+  deviceVoice: boolean;
+  /** How a voice is matched to the person's country; `off` skips their country and its neighbours. */
+  localVoice: LocalVoiceSetting;
+  /** A neighbouring country's voice where their own has none. */
+  localVoiceNeighbours: boolean;
 }
 
-/** Normalises the `voiceGuidance` config (bool | object | undefined) to an object. */
+/**
+ * Normalises the `voiceGuidance` config (bool | object | undefined). From
+ * 4.4.0 a Toden voice speaks unless the admin chose the device's
+ * (`voice: 'device'`): kyc-core docs/VOICE_GUIDANCE.md, "Who speaks".
+ */
 export function resolveVoiceGuidance(option: VoiceGuidanceOption | undefined): ResolvedVoiceGuidance {
-  if (option === false) return { enabled: false, language: DEFAULT_VOICE_LANGUAGE, voice: undefined };
-  if (option === true || option == null) return { enabled: true, language: DEFAULT_VOICE_LANGUAGE, voice: undefined };
+  const object = typeof option === 'object' && option !== null ? option : {};
+  const named = typeof object.voice === 'string' && object.voice ? object.voice : undefined;
+  const deviceVoice = named === DEVICE_VOICE_ID;
+  const local = object.localVoice;
   return {
-    enabled: option.enabled !== false,
-    language: option.language || DEFAULT_VOICE_LANGUAGE,
-    voice: option.voice || undefined,
+    enabled: typeof option === 'boolean' ? option : object.enabled !== false,
+    language: object.language || DEFAULT_VOICE_LANGUAGE,
+    voice: deviceVoice ? undefined : named,
+    deviceVoice,
+    localVoice: local === 'female' || local === 'male' || local === 'off' ? local : 'any',
+    localVoiceNeighbours: object.localVoiceNeighbours !== false,
   };
 }
 

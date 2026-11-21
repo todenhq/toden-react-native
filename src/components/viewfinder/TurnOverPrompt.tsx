@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { tapHaptic } from '../../services/haptics';
+import { MIN_RECORDED_MS } from '../../lib/documentRecordings';
 
 // ---------------------------------------------------------------------------
 // "Now turn it over."
@@ -26,9 +27,16 @@ import { tapHaptic } from '../../services/haptics';
 /** Time to read this, turn the document over and bring it back into frame (the web's FLIP_UNTAPPED_MS). */
 export const TURN_OVER_MS = 5000;
 
-/** True while the camera should wait. Starts again each time `needed` turns on. */
-export function useTurnOverHold(needed: boolean): { turning: boolean } {
+/**
+ * True while the camera should wait. Starts again each time `needed` turns on.
+ * `recordingLeadIn` turns true for the last MIN_RECORDED_MS of the wait: the
+ * back's clip starts there, so it is already long enough to be checked when the
+ * wait ends, without recording the front through the whole of it
+ * (viewfinder/documentClip.ts).
+ */
+export function useTurnOverHold(needed: boolean): { turning: boolean; recordingLeadIn: boolean } {
   const [turning, setTurning] = useState(needed);
+  const [recordingLeadIn, setRecordingLeadIn] = useState(false);
   // Follow `needed` in the same render it changes, not an effect later: the
   // render where the back's camera appears must already be waiting, or the
   // back's clip and auto-capture start for one render with the front still up.
@@ -39,10 +47,15 @@ export function useTurnOverHold(needed: boolean): { turning: boolean } {
   }
   useEffect(() => {
     setTurning(needed);
+    setRecordingLeadIn(false);
     if (!needed) return undefined;
     tapHaptic();
+    const lead = setTimeout(() => setRecordingLeadIn(true), Math.max(0, TURN_OVER_MS - MIN_RECORDED_MS));
     const t = setTimeout(() => setTurning(false), TURN_OVER_MS);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(lead);
+      clearTimeout(t);
+    };
   }, [needed]);
-  return { turning };
+  return { turning, recordingLeadIn: turning && recordingLeadIn };
 }

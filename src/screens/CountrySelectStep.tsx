@@ -30,7 +30,10 @@ export function CountrySelectStep(): React.ReactElement {
   // Only an actual PICK counts as selected. `useEffectiveCountry` falls back to
   // the workflow's primary country, which on this screen would render a
   // highlighted row for a choice the user has not made yet.
-  const selected = useFlowState((s) => s.selectedCountry);
+  // The one exception: the country the app passed is marked and listed first,
+  // ahead of the location guess. The person can still pick another.
+  const named = config.appCountry ?? null;
+  const selected = useFlowState((s) => s.selectedCountry) ?? named;
 
   // Multi-region flows carry `countries`; the KYB applicant leg does not, so
   // it offers the org's GRANTED countries instead — see countrySelectOptions.
@@ -52,6 +55,7 @@ export function CountrySelectStep(): React.ReactElement {
         countries={options}
         selected={selected}
         geoCountry={serverConfig.geoCountry}
+        appCountry={named}
         onPick={pick}
       />
     );

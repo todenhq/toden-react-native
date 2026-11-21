@@ -52,6 +52,11 @@ export function fieldRows(x: number, y: number, rows: Array<Array<[number, numbe
     .join('');
 }
 
+/** One line of print with nothing to read in it: a name, a number, a notice. */
+export function printLine(x: number, y: number, width: number, height = 14, pale = false): string {
+  return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${height / 2}" fill="${pale ? BAR : MUTED}"/>`;
+}
+
 /** The holder: a drawn person, never a real face. Designed in a 200 × 240 box. */
 export function portrait(x: number, y: number, w: number, h: number, accent: string, id: string): string {
   const scale = Math.max(w / 200, h / 240);

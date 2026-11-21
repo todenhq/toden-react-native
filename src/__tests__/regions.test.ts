@@ -130,7 +130,16 @@ describe('every picker offers the geo row', () => {
 
   it('the country-select step hands the picker the IP country', () => {
     expect(read('screens/CountrySelectStep.tsx')).toMatch(/geoCountry=\{serverConfig\.geoCountry\}/);
-    expect(read('components/CountryRegionPicker.tsx')).toMatch(/badge="Your location"/);
+    // Tagged as the visitor's location unless the app passed the country itself (lib/app-country.ts).
+    expect(read('components/CountryRegionPicker.tsx')).toMatch(/badge=\{appCountry \? undefined : 'Your location'\}/);
+  });
+
+  it('a country row is big enough for a thumb: a 40px flag and 16px padding, a 72px row', () => {
+    const picker = read('components/CountryRegionPicker.tsx');
+    expect(picker).toMatch(/<CountryFlag country=\{code\} size=\{40\} \/>/);
+    expect(picker).toMatch(/padding: spacing\.md,/);
+    // The short list on the country step draws the same row, so it cannot differ.
+    expect(read('screens/CountrySelectStep.tsx')).toMatch(/<CountryRow/);
   });
 
   it('the phone field pins it in the dial-code sheet, on both mounts', () => {

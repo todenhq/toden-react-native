@@ -9,18 +9,26 @@ import { mergeWorkflowConfig } from '../config/workflowMerge';
 
 describe('resolveVoiceGuidance', () => {
   it('still accepts a bare boolean', () => {
-    expect(resolveVoiceGuidance(true)).toEqual({ enabled: true, language: 'en-US', voice: undefined });
-    expect(resolveVoiceGuidance(false)).toEqual({ enabled: false, language: 'en-US', voice: undefined });
-    expect(resolveVoiceGuidance(undefined)).toEqual({ enabled: true, language: 'en-US', voice: undefined });
+    // From 4.4.0 a Toden voice is the default (product owner, 2026-11-21).
+    const automatic = { voice: undefined, deviceVoice: false, localVoice: 'any', localVoiceNeighbours: true };
+    expect(resolveVoiceGuidance(true)).toEqual({ enabled: true, language: 'en-US', ...automatic });
+    expect(resolveVoiceGuidance(false)).toEqual({ enabled: false, language: 'en-US', ...automatic });
+    expect(resolveVoiceGuidance(undefined)).toEqual({ enabled: true, language: 'en-US', ...automatic });
   });
 
   it('reads the voice from an object', () => {
-    expect(resolveVoiceGuidance({ voice: 'lyra' })).toEqual({ enabled: true, language: 'en-US', voice: 'lyra' });
-    expect(resolveVoiceGuidance({ enabled: false, language: 'en-GB', voice: 'rory' })).toEqual({
+    expect(resolveVoiceGuidance({ voice: 'lyra' })).toMatchObject({ enabled: true, language: 'en-US', voice: 'lyra' });
+    expect(resolveVoiceGuidance({ enabled: false, language: 'en-GB', voice: 'rory' })).toMatchObject({
       enabled: false,
       language: 'en-GB',
       voice: 'rory',
     });
+  });
+
+  it("reads the device's voice only where it was chosen, and matching as 'any' unless it says otherwise", () => {
+    expect(resolveVoiceGuidance({ voice: 'device' })).toMatchObject({ voice: undefined, deviceVoice: true });
+    expect(resolveVoiceGuidance({ localVoice: 'off', localVoiceNeighbours: false })).toMatchObject({ localVoice: 'off', localVoiceNeighbours: false });
+    expect(resolveVoiceGuidance({ localVoice: 'random' as never }).localVoice).toBe('any');
   });
 
   it('treats an empty voice as none', () => {

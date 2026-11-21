@@ -1,4 +1,5 @@
 import { markRecordingStart } from '../liveness/flashTimeline';
+import type { RecordingProgress } from '../lib/documentRecordings';
 
 // The recorder behind useVideoRecorder, without React, so it can be tested
 // (videoRecorderCore.test.ts).
@@ -34,6 +35,8 @@ export interface VideoRecorderHandle {
    * it never started, or it started and produced nothing.
    */
   failure: () => 'recorder_start_failed' | 'recording_empty' | null;
+  /** Whether a take is under way and when it began to record (lib/documentRecordings.ts). */
+  progress: () => RecordingProgress;
 }
 
 export interface VideoRecorderTimings {
@@ -52,6 +55,8 @@ interface Take {
   recorder: RecorderLike | null;
   /** The recorder went live. */
   started: boolean;
+  /** When it went live. */
+  startedAt: number | null;
   stopping: boolean;
   path: string | null;
   finished: Promise<string | null>;
@@ -64,7 +69,7 @@ function newTake(): Take {
   const finished = new Promise<string | null>((r) => {
     resolve = r;
   });
-  return { live: true, recorder: null, started: false, stopping: false, path: null, finished, resolve, autoStop: null };
+  return { live: true, recorder: null, started: false, startedAt: null, stopping: false, path: null, finished, resolve, autoStop: null };
 }
 
 export function createVideoRecorder(
@@ -104,6 +109,7 @@ export function createVideoRecorder(
           await recorder.startRecording(onFinished, onError);
           take.recorder = recorder;
           take.started = true;
+          take.startedAt = Date.now();
           // The flash reports its colours' times from here (liveness/flashTimeline.ts).
           markRecordingStart(Date.now());
           // Hard length cap — stop the recording (path arrives via onFinished); a
@@ -173,5 +179,11 @@ export function createVideoRecorder(
     return take.started ? ('recording_empty' as const) : ('recorder_start_failed' as const);
   };
 
-  return { start, stop, isRecording, failure };
+  // A take being stopped (by its length cap, or by stop()) is no longer one to wait for.
+  const progress = (): RecordingProgress => {
+    const take = current;
+    return { live: !!take?.live && !take.stopping, startedAt: take?.startedAt ?? null };
+  };
+
+  return { start, stop, isRecording, failure, progress };
 }

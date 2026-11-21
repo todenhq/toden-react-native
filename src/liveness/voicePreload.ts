@@ -14,15 +14,34 @@ import { resolveVoiceGuidance } from '../config/voiceGuidance';
 import { voiceClipServer } from '../services/resolveUrl';
 import type { VoiceGuidanceOption } from '../types/config';
 import { preloadVoiceClips } from './voiceClips';
+import { voiceApplicant } from './voiceApplicant';
 
-/** Starts fetching the flow's Toden voice; nothing with guidance off, no voice or no server. */
-export function preloadFlowVoice(config: { apiKey: string; devUrl?: string; voiceGuidance?: VoiceGuidanceOption }): void {
+/**
+ * Starts fetching the flow's Toden voice; nothing with guidance off, the
+ * device's voice chosen, or no server. The country is the one the app passed,
+ * if any: the liveness step loads again for the country picked in the flow.
+ */
+export function preloadFlowVoice(config: {
+  apiKey: string;
+  devUrl?: string;
+  voiceGuidance?: VoiceGuidanceOption;
+  country?: string;
+  userId?: string;
+}): void {
   try {
     const guidance = resolveVoiceGuidance(config.voiceGuidance);
-    if (!guidance.enabled || !guidance.voice) return;
+    if (!guidance.enabled || guidance.deviceVoice) return;
     const server = voiceClipServer(config.apiKey, config.devUrl);
     if (!server) return;
-    preloadVoiceClips({ server, voice: guidance.voice, language: guidance.language }, { fresh: true });
+    preloadVoiceClips(
+      {
+        server,
+        voice: guidance.voice,
+        language: guidance.language,
+        applicant: voiceApplicant(guidance, { country: config.country, userId: config.userId }),
+      },
+      { fresh: true },
+    );
   } catch {
     /* the liveness step loads the clips itself */
   }

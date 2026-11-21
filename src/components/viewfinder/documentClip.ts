@@ -4,10 +4,12 @@
 // starts looking for that side until the photo is taken or the length cap
 // (MAX_VIDEO_DURATION_MS) stops it. One exception: when the back follows the
 // front with nothing tapped, the camera first waits while the person turns the
-// document over (useTurnOverHold), and the back's clip starts when that wait
-// ends. Started at the side change, it recorded the FRONT for the whole wait,
-// and on a slow turn the cap ended it before the back was ever in view: a back
-// recording that showed only the front.
+// document over (useTurnOverHold), and the back's clip starts shortly before
+// that wait ends (its lead-in, MIN_RECORDED_MS): long enough that the clip can
+// be checked the moment the back is photographed, short enough that it is of
+// the turn and the back. Started at the side change, it recorded the FRONT for
+// the whole wait, and on a slow turn the cap ended it before the back was ever
+// in view: a back recording that showed only the front.
 
 export function recordsDocumentClip({
   active,

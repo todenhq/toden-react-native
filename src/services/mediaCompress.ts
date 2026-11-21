@@ -4,7 +4,6 @@ import { Video } from 'react-native-compressor';
 
 import {
   DOCUMENT_IMAGE_QUALITY,
-  DOCUMENT_MAX_DIMENSION,
   SELFIE_IMAGE_QUALITY,
   VIDEO_COMPRESS_BITRATE,
   VIDEO_COMPRESS_MAX_SIZE,
@@ -15,6 +14,7 @@ import type { PhotoPreparers } from './pickedPhoto';
 import { cardCropRect, cornerCropRect, guideCropRect, type CropRect } from './cardCrop';
 import { selfieFrameInStill, selfieOutputWidth, type StillFace } from '../lib/selfie-pick';
 import type { DocumentQuad } from '../capture/documentCorners';
+import { documentStillPlan, resizeToLimit } from '../lib/documentStill';
 
 export type { CropRect } from './cardCrop';
 
@@ -47,8 +47,9 @@ export async function compressVideo(uri: string): Promise<string | null> {
 // Post-capture still-image compression — the RN mirror of the Flutter SDK's
 // media_compress_service.dart (and the web SDK's useImageCompress). Effort scales
 // to need:
-//   • DOCUMENT — conservative (OCR-critical): JPEG q0.9, only downscaled when the
-//     longest edge exceeds DOCUMENT_MAX_DIMENSION, so small text stays legible.
+//   • DOCUMENT — conservative (OCR and barcode critical): JPEG q0.95 written
+//     once, only downscaled when the longest edge exceeds
+//     DOCUMENT_MAX_DIMENSION (lib/documentStill.ts).
 //   • SELFIE   — moderate: JPEG q0.8, capped to ~1280 px.
 // Runs natively via expo-image-manipulator (off the JS thread).
 
@@ -78,16 +79,19 @@ export async function imageSize(uri: string): Promise<{ width: number; height: n
 }
 
 /**
- * Crop [uri] to [rect] (source-image pixels) and return a new high-quality JPEG
- * URI — the RN mirror of the Flutter SDK's `cropAndCompress` / `cropCardRegion`.
- * Kept near-lossless here (q0.95); OCR-grade sizing happens in
- * `compressDocumentImage` afterwards, exactly like Flutter.
+ * Crop [uri] to [rect] (source-image pixels) and return a new JPEG URI — the RN
+ * mirror of the Flutter SDK's `cropAndCompress` / `cropCardRegion`. This is the
+ * document photo's ONE lossy write (lib/documentStill.ts): the crop is brought
+ * inside the size limit in the same pass, so `compressDocumentImage` has
+ * nothing left to do to it.
  */
 export async function cropImage(uri: string, rect: CropRect): Promise<string> {
+  const crop = { originX: Math.round(rect.originX), originY: Math.round(rect.originY), width: Math.round(rect.width), height: Math.round(rect.height) };
+  const resize = resizeToLimit(crop);
   const result = await ImageManipulator.manipulateAsync(
     uri,
-    [{ crop: { originX: Math.round(rect.originX), originY: Math.round(rect.originY), width: Math.round(rect.width), height: Math.round(rect.height) } }],
-    { compress: 0.95, format: ImageManipulator.SaveFormat.JPEG },
+    resize ? [{ crop }, { resize }] : [{ crop }],
+    { compress: DOCUMENT_IMAGE_QUALITY, format: ImageManipulator.SaveFormat.JPEG },
   );
   return result.uri;
 }
@@ -156,22 +160,23 @@ export async function rotateImage(uri: string, degrees: number): Promise<string>
   return result.uri;
 }
 
-/** Compress a document still for OCR. Returns a new file URI. */
-export async function compressDocumentImage(uri: string): Promise<string> {
-  let actions: ImageManipulator.Action[] = [];
+/**
+ * Finish a document still for upload. A crop this SDK just wrote (`fromCrop`)
+ * that is inside the size limit comes back as it is, so the photo is compressed
+ * once. Anything else (a photo picked from the device, a crop that failed) is
+ * resized when too large and encoded here, which also drops whatever the
+ * original file carried besides the picture. Returns the file to upload.
+ */
+export async function compressDocumentImage(uri: string, options: { fromCrop?: boolean } = {}): Promise<string> {
+  let size: { width: number; height: number } | null = null;
   try {
-    const { width, height } = await imageSize(uri);
-    const longest = Math.max(width, height);
-    if (longest > DOCUMENT_MAX_DIMENSION) {
-      actions = [
-        width >= height
-          ? { resize: { width: DOCUMENT_MAX_DIMENSION } }
-          : { resize: { height: DOCUMENT_MAX_DIMENSION } },
-      ];
-    }
+    size = await imageSize(uri);
   } catch {
     /* size unknown — recompress without resizing */
   }
+  const plan = documentStillPlan(size, options.fromCrop === true);
+  if (!plan.encode) return uri;
+  const actions: ImageManipulator.Action[] = plan.resize ? [{ resize: plan.resize }] : [];
   const result = await ImageManipulator.manipulateAsync(uri, actions, {
     compress: DOCUMENT_IMAGE_QUALITY,
     format: ImageManipulator.SaveFormat.JPEG,

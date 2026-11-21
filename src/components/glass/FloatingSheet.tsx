@@ -107,7 +107,21 @@ export function FloatingSheet({
   description,
 }: FloatingSheetProps): React.ReactElement {
   const { colors, mode } = useTheme();
-  const translateY = useRef(new Animated.Value(0)).current;
+  // Each opening slides on a value of its OWN.
+  //
+  // One value kept for the sheet's whole life left a reopened sheet stuck off
+  // screen with only the backdrop showing (2026-11-21, the country picker,
+  // closed and opened again at once). After the slide-away, the value sat at
+  // its off-screen end, and when the Modal unmounted its content React Native
+  // read that native value back into it a moment LATER. Reopening inside that
+  // moment reset the value to 0 first, then the late read-back put it off
+  // screen again. A new value per opening cannot be reached by the old one's
+  // read-back. The drag and the dismissals read the current one through the ref.
+  const translateRef = useRef(new Animated.Value(0));
+  const wasVisible = useRef(false);
+  if (visible && !wasVisible.current) translateRef.current = new Animated.Value(0);
+  wasVisible.current = visible;
+  const translateY = translateRef.current;
   // The DEVICE's status bar: this sheet is its own full-screen modal, so the
   // flow's insets do not apply. Without a cap a long form grew under it.
   const { height: screenHeight } = useWindowDimensions();
@@ -120,14 +134,11 @@ export function FloatingSheet({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
-  // A sheet reopened after being dragged away must not still be off-screen.
+  // A reopened sheet can be dismissed again.
   const closingRef = useRef(false);
   useEffect(() => {
-    if (visible) {
-      translateY.setValue(0);
-      closingRef.current = false;
-    }
-  }, [visible, translateY]);
+    if (visible) closingRef.current = false;
+  }, [visible]);
 
   // The close button, the backdrop and Android's back all slide the sheet
   // down first, as a drag does, rather than removing it at once: a parent
@@ -136,7 +147,7 @@ export function FloatingSheet({
   const dismiss = (): void => {
     if (closingRef.current) return;
     closingRef.current = true;
-    Animated.timing(translateY, {
+    Animated.timing(translateRef.current, {
       toValue: 700,
       duration: 200,
       easing: Easing.in(Easing.cubic),
@@ -163,11 +174,11 @@ export function FloatingSheet({
       onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_, g) => {
         // Downward only: dragging up must not detach the sheet from its corner.
-        if (g.dy > 0) translateY.setValue(g.dy);
+        if (g.dy > 0) translateRef.current.setValue(g.dy);
       },
       onPanResponderRelease: (_, g) => {
         if (g.dy > DISMISS_DISTANCE || g.vy > DISMISS_VELOCITY) {
-          Animated.timing(translateY, {
+          Animated.timing(translateRef.current, {
             toValue: 700,
             duration: 180,
             easing: Easing.in(Easing.cubic),
@@ -175,7 +186,7 @@ export function FloatingSheet({
           }).start(() => onCloseRef.current());
           return;
         }
-        Animated.spring(translateY, {
+        Animated.spring(translateRef.current, {
           toValue: 0,
           useNativeDriver: true,
           bounciness: 0,

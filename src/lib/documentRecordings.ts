@@ -112,3 +112,38 @@ export async function uploadDocumentSides(
   }
   return uploaded;
 }
+
+// ─── A recording long enough to be checked ───────────────────────────────────
+//
+// The server reads a side's recording twice a second and needs three readings
+// to compare the photo with it; a shorter recording is "not checked", which
+// lets an injected side through unexamined. A back whose recording began only
+// when the back's turn came was photographed about a second later, the card
+// already steady in the frame: 4 of 11 two-sided captures were not checked on
+// the back (measured 2026-11-21). So no photo of either side is taken until
+// its recording has run this long, and the back's recording starts this long
+// before the turn-over wait ends, so the wait is not added to it.
+//
+// Mirrors the web SDK's lib/document-recordings.ts.
+
+/** The least a side's recording runs before its photo is taken. */
+export const MIN_RECORDED_MS = 2200;
+
+/** What the recorder says about the take in hand. */
+export interface RecordingProgress {
+  /** A take is under way: starting, or recording. False once it stopped, failed or was never begun. */
+  live: boolean;
+  /** When it began to record; null while it is still starting. */
+  startedAt: number | null;
+}
+
+/**
+ * How much longer the photo must wait for its recording. Nothing where no
+ * recording is under way (none will come, so nobody is kept waiting); the
+ * whole length while the recorder is still starting.
+ */
+export function recordingShortBy(progress: RecordingProgress, now: number): number {
+  if (!progress.live) return 0;
+  if (progress.startedAt === null) return MIN_RECORDED_MS;
+  return Math.max(0, Math.ceil(MIN_RECORDED_MS - (now - progress.startedAt)));
+}

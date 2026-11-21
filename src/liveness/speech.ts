@@ -14,6 +14,7 @@ import * as Speech from 'expo-speech';
 import { resolveVoiceGuidance } from '../config/voiceGuidance';
 import type { VoiceGuidanceOption } from '../types/config';
 import { VoiceClips } from './voiceClips';
+import { voiceApplicant } from './voiceApplicant';
 
 export { resolveVoiceGuidance, type ResolvedVoiceGuidance } from '../config/voiceGuidance';
 
@@ -70,6 +71,7 @@ export class LivenessSpeaker {
   private readonly enabled: boolean;
   private readonly language: string;
   private readonly voice: string | undefined;
+  private readonly guidance: ReturnType<typeof resolveVoiceGuidance>;
   private deviceVoice: string | undefined;
   private clips: VoiceClips | null = null;
   private recordsAudio: boolean | null = null;
@@ -91,6 +93,7 @@ export class LivenessSpeaker {
     this.enabled = resolved.enabled;
     this.language = resolved.language;
     this.voice = resolved.voice;
+    this.guidance = resolved;
     if (this.enabled) {
       // Warm the engine NOW, not at the first phrase. Android's TextToSpeech
       // initialises asynchronously, and when the user is well-positioned from
@@ -111,15 +114,21 @@ export class LivenessSpeaker {
   /**
    * Starts loading the Toden voice's clips from `server` (once), joining the
    * download the flow started when it resolved its voice (voicePreload.ts). A
-   * no-op with guidance off, no voice chosen or no server. A phrase whose clip
-   * is still on its way waits up to CLIP_GRACE_MS for it, then uses the device
-   * voice.
+   * no-op with guidance off, the device's voice chosen, or no server. The
+   * voice is chosen for `person` (their country and who they are). A phrase
+   * whose clip is still on its way waits up to CLIP_GRACE_MS for it, then uses
+   * the device voice.
    */
-  prepareVoice(server: string | undefined): void {
-    if (!this.enabled || !this.voice || !server || this.clips) return;
+  prepareVoice(server: string | undefined, person: { country?: string | null; userId?: string | null } = {}): void {
+    if (!this.enabled || this.guidance.deviceVoice || !server || this.clips) return;
     this.clips = new VoiceClips();
     if (this.recordsAudio !== null) this.clips.setRecordsAudio(this.recordsAudio);
-    void this.clips.load({ server, voice: this.voice, language: this.language });
+    void this.clips.load({
+      server,
+      voice: this.voice,
+      language: this.language,
+      applicant: voiceApplicant(this.guidance, person),
+    });
   }
 
   /** Whether the liveness recording carries sound, so clips play beside the microphone. */

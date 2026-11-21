@@ -106,7 +106,10 @@ import {
 } from './livenessState';
 
 export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
-  const { config, voiceGuidance, voiceServer, recordsAudio = false, announce = true } = opts;
+  const { config, voiceGuidance, voiceServer, voicePerson, recordsAudio = false, announce = true } = opts;
+  // Read when the voice is prepared: who it is for does not change during the step.
+  const voicePersonRef = useRef(voicePerson);
+  voicePersonRef.current = voicePerson;
   // The capture callbacks are read through a ref: they fire from frame
   // handlers created long before the screen's latest render.
   const callbacksRef = useRef(opts);
@@ -314,7 +317,7 @@ export function useLiveness(opts: UseLivenessOptions = {}): UseLivenessReturn {
   // phrase uses the device voice (speech.ts).
   useEffect(() => {
     const speaker = speakerRef.current;
-    speaker?.prepareVoice(voiceServer);
+    speaker?.prepareVoice(voiceServer, voicePersonRef.current);
     return () => speaker?.dispose();
   }, [voiceServer]);
   // Whether the recording carries sound is settled once the step announces

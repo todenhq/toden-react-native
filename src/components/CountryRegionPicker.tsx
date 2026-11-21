@@ -25,6 +25,7 @@ export function CountryRegionPicker({
   countries,
   selected,
   geoCountry,
+  appCountry,
   onPick,
 }: {
   countries: string[];
@@ -35,6 +36,12 @@ export function CountryRegionPicker({
    * they see rather than something to scroll for.
    */
   geoCountry?: string | null;
+  /**
+   * The country the app passed (lib/app-country.ts). It takes the top row in
+   * place of the location guess, without the "Your location" tag: the app said
+   * so, the visitor's IP did not.
+   */
+  appCountry?: string | null;
   onPick: (country: string) => void;
 }): React.ReactElement {
   const { colors } = useTheme();
@@ -49,9 +56,9 @@ export function CountryRegionPicker({
             regionCountryName(code).toLowerCase().includes(needle),
         )
       : countries;
-    const split = pinGeoRow(visible, geoCountry, (code) => code);
+    const split = pinGeoRow(visible, appCountry ?? geoCountry, (code) => code);
     return { pinned: split.pinned, groups: groupCountriesByRegion(split.rest) };
-  }, [countries, query, geoCountry]);
+  }, [countries, query, geoCountry, appCountry]);
 
   const empty = groups.length === 0 && pinned === null;
 
@@ -89,7 +96,7 @@ export function CountryRegionPicker({
               code={pinned}
               name={regionCountryName(pinned)}
               selected={pinned === selected}
-              badge="Your location"
+              badge={appCountry ? undefined : 'Your location'}
               onPress={() => onPick(pinned)}
             />
           ) : null}
@@ -152,11 +159,12 @@ export function CountryRow({
       accessibilityRole="radio"
       accessibilityState={{ checked: selected }}
       accessibilityLabel={badge ? `${name}, ${badge.toLowerCase()}` : name}
-      // Matches the Flutter SDK's CountryOptionTile exactly — the two had
-      // drifted (24px flag / 12px padding here vs 32 / 16 there), which is why
-      // the same screen looked like a different component on each platform. The
-      // spacing and radius scales are identical across the SDKs, so there is
-      // nothing platform-specific to reconcile: `md` means 16 on both.
+      // Matches the Flutter SDK's CountryOptionTile exactly: a 40px flag and
+      // 16px padding make a 72px row, big enough for a thumb to land on the
+      // row it aimed at. The two had drifted once (24px flag / 12px padding
+      // here), which is why the same screen looked like a different component
+      // on each platform. The spacing and radius scales are identical across
+      // the SDKs, so `md` means 16 on both.
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -168,9 +176,9 @@ export function CountryRow({
         marginBottom: spacing.sm,
       }}
     >
-      <CountryFlag country={code} size={32} />
-      <View style={{ width: 12 }} />
-      <UiText variant="label" style={{ flex: 1, fontWeight: '500' }}>
+      <CountryFlag country={code} size={40} />
+      <View style={{ width: spacing.md }} />
+      <UiText variant="body" style={{ flex: 1, fontWeight: '500' }}>
         {name}
       </UiText>
       {badge ? <GeoBadge label={badge} /> : null}

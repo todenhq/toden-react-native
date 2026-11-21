@@ -1,5 +1,31 @@
 # Changelog
 
+## 4.4.0
+
+No breaking changes for hosts, and no new native code: no rebuild is needed beyond installing the new version.
+
+**Deploy note for Toden:** the voice chosen for each person comes from what the matching Toden server says about each voice. Until it is deployed, a workflow with a voice speaks with it, and one without speaks with the device's voice, as before.
+
+### Added
+
+- **`country` chooses among a multi-country workflow's countries, and `lockCountry` removes the picker.** On a workflow that offers several countries, the `country` you pass is now the one the country picker opens on, listed first, ahead of the workflow's own country and the device's location. Add `lockCountry` and the person is not asked at all. A country the workflow does not offer is ignored, and on a single-country workflow nothing changes.
+
+- **A Toden voice by default, from the person's own country.** The liveness prompts are now spoken by a Toden voice unless the workflow names the device's own (`voiceGuidance.voice: 'device'`): a voice from the country of the document being verified (a Nigerian hears a Nigerian voice, a Kenyan a Kenyan one), else a neighbouring country's (a Tanzanian hears a Kenyan voice; Toden's own short list), else the workflow's `voice`, else an American voice. `localVoice` chooses how: `'any'` (the default), `'female'`, `'male'`, or `'off'` to skip the person's country and its neighbours; `localVoiceNeighbours: false` skips neighbours only. One voice is chosen per person (by `userId` when you pass one) and kept for the session.
+
+### Changed
+
+- **The device's voice is no longer the default.** A workflow or app that names no voice used to speak with the device's voice; it now speaks with a Toden voice as above. Set `voiceGuidance: { voice: 'device' }` to keep the device's voice. A prompt with no Toden clip (a workflow's own wording, a language other than English) is still said by the device's voice.
+- **A document cut off by its photo must be taken again.** When the capture check says the document runs off the photo, the review offers only the retake. "Continue anyway" is still offered for a face or a barcode that could not be read. The verification fails a cut-off document, so continuing only spent the attempt.
+- **Sharper document photos.** The photo keeps up to 2600 pixels on its longer side (it was 2000) at JPEG 0.95 (it was 0.9), and is compressed once instead of twice. A card's barcode keeps its bars, so it can be read from the photo.
+- **The photo waits for its recording.** No photo of a document side is taken until that side's recording has run 2.2 seconds: the automatic photo is held while the frame is still read and guided, and the shutter waits out the remainder. The back's recording starts 2.2 seconds before the turn-over wait ends, so that wait is not lengthened. A shorter recording could not be checked against its photo.
+- **Bigger country rows.** A country in the picker is a 40 point flag in a 72 point row (it was 32 in 64) with its name at 16 points (it was 14), easier to pick with a thumb.
+- **The sample of a Nigerian voter's card and driver's licence matches the card.** The voter's card back shows its two barcodes at the top and its front shows none; the Nigerian licence back shows its short barcode at the top right with the large block under it. Other countries' licences keep the general sample.
+
+### Fixed
+
+- **A sheet reopened straight after closing shows its panel.** Closing a sheet (the country picker, say) and opening it again at once left only the dimmed backdrop on screen. Each opening now has its own slide.
+- **A resumed session cannot bring back a country the flow no longer offers.** A session saved on one country and reopened with another locked used to open on the saved one. It now starts again on the country the flow offers.
+
 ## 4.3.0
 
 No breaking changes for hosts. **Rebuild the app once (`pod install` on iOS):** the SDK now depends on `expo-audio`, which has native code.

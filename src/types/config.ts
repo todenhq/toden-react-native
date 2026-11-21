@@ -119,10 +119,32 @@ export interface VerificationConfig<C extends SupportedCountry = SupportedCountr
   /**
    * Two-letter (ISO-2) country code. Required unless {@link workflowId} is set
    * (the flow carries the country) or {@link subjectType} is `'business'` (the
-   * business block carries its own registry country). When both are present the
-   * flow's country wins.
+   * business block carries its own registry country).
+   *
+   * With a workflow, the workflow's countries win. On a workflow that offers
+   * ONE country this prop changes nothing. On a workflow that offers SEVERAL,
+   * pass the country your app already knows this person is from: when the
+   * workflow offers it, the country picker opens on it, ahead of the
+   * workflow's own country and the visitor's location, and
+   * {@link lockCountry} removes the picker altogether. A country the workflow
+   * does not offer is ignored.
    */
   country?: C;
+
+  /**
+   * With {@link country}, on a flow that offers several countries: fix the
+   * flow to that country, with no country picker at all. Ignored when no
+   * `country` is passed, or when the flow does not offer it (the picker then
+   * shows as usual).
+   */
+  lockCountry?: boolean;
+
+  /**
+   * @internal Set by the SDK, never by your code: the offered country your
+   * `country` prop named on a multi-country flow, so the country step can mark
+   * it and list it first (lib/app-country.ts).
+   */
+  appCountry?: string;
 
   /** Subset of ID types to offer. Only types valid for the country are accepted. */
   idTypes?: IdTypeForCountry<C>[];

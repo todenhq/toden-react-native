@@ -24,6 +24,7 @@ import { useBackCamera } from './viewfinder/useBackCamera';
 import { cameraTopInset } from './viewfinder/cameraInsets';
 import { guideFractions, guideRect, immersiveBand, screenGuideAspect, turnsDocument, type GuideRect } from '../capture/documentTurn';
 import { recordCameraError } from '../lib/step-log';
+import { recordingShortBy } from '../lib/documentRecordings';
 
 // Back-camera viewfinder for document capture — the RN mirror of the Flutter
 // SDK's _DocumentViewfinder. Shows a VisionCamera preview with an ID-card guide
@@ -138,7 +139,7 @@ export function CameraViewfinder({
 
   // Only over the full-screen camera, where the prompt can be drawn.
   const turnedOver = !!turnOver && !!fill && side === 'back';
-  const { turning } = useTurnOverHold(turnedOver);
+  const { turning, recordingLeadIn } = useTurnOverHold(turnedOver);
   // Read at press time, as the corner gate is: the shutter is held while the
   // card is turned over, so the front still in hand is not taken as the back.
   const turningRef = useRef(turning);
@@ -151,11 +152,26 @@ export function CameraViewfinder({
   }, [turning, turnText]);
 
   // Record while the side's camera is live; restart when the side changes. The
-  // back's clip waits for the turn-over to end (viewfinder/documentClip.ts).
-  const recordingClip = recordsDocumentClip({ active, ready, waitingForTurn: turnedOver && turning });
+  // back's clip waits for the turn-over, and starts a little before it ends
+  // (viewfinder/documentClip.ts).
+  const recordingClip = recordsDocumentClip({ active, ready, waitingForTurn: turnedOver && turning && !recordingLeadIn });
+  // No photo of a side until its recording is long enough for the server to
+  // check (lib/documentRecordings.ts). The recorder starts in its own time, so
+  // this asks it rather than counting from here. True while nothing records.
+  const [recordedEnough, setRecordedEnough] = useState(true);
+  const [holdingShutter, setHoldingShutter] = useState(false);
   useEffect(() => {
-    if (recordingClip) recorder.start();
+    if (!recordingClip) return undefined;
+    recorder.start();
+    setRecordedEnough(false);
+    const watch = setInterval(() => {
+      if (recordingShortBy(recorder.progress(), Date.now()) > 0) return;
+      clearInterval(watch);
+      setRecordedEnough(true);
+    }, 100);
     return () => {
+      clearInterval(watch);
+      setRecordedEnough(true);
       void recorder.stop();
     };
     // `side` in the deps restarts the recording for the back side.
@@ -202,6 +218,16 @@ export function CameraViewfinder({
     // two concurrent captures contend for the camera and one of them fails.
     capturingRef.current = true;
     try {
+      // The shutter waits for the recording as the automatic photo does, and the
+      // photo is taken at the end of the wait, so it is still the clip's last moment.
+      const short = recordingShortBy(recorder.progress(), Date.now());
+      if (short > 0) {
+        setHoldingShutter(true);
+        await new Promise((resolve) => setTimeout(resolve, short));
+        setHoldingShutter(false);
+        // The side was left while waiting: there is nothing to photograph.
+        if (!recorder.isRecording()) return;
+      }
       // Stop the video first (and grab its path) so the still and the clip don't
       // contend for the camera, then capture the OCR still.
       const videoPath = await recorder.stop();
@@ -230,6 +256,8 @@ export function CameraViewfinder({
   // identify the frame as, and firing on "some text" would shoot anything.
   const auto = useAutoCapture({
     enabled: active && ready && !busy && !turning && !!country && !!idType,
+    // The photo waits for its recording; the frame is still read and guided.
+    holdFire: !recordedEnough,
     country: country ?? '',
     idType: idType ?? '',
     // The back has no branding to identify itself by — the gate relaxes its
@@ -329,7 +357,7 @@ export function CameraViewfinder({
                 })
           }
           progress={auto.progress}
-          busy={busy}
+          busy={busy || holdingShutter}
           torch={torch}
           hasTorch={hasTorch}
           onToggleTorch={() => void toggleTorch()}
@@ -348,6 +376,7 @@ export function CameraViewfinder({
             idType: idType ?? null,
             title: specimenTitle(idType ?? null, documentLabel),
             country: country ? regionCountryName(country) : null,
+            countryCode: country ?? null,
             side,
           }}
         />
@@ -379,7 +408,7 @@ export function CameraViewfinder({
       {/* Immersive draws its own shutter inside BottomBar (with the torch and
           the upload escape), so only the framed variant needs this one. */}
       {fill ? null : (
-        <Shutter onPress={capture} ready={ready} busy={busy} progress={auto.progress} blockedHint={blockedHint} />
+        <Shutter onPress={capture} ready={ready} busy={busy || holdingShutter} progress={auto.progress} blockedHint={blockedHint} />
       )}
     </View>
   );

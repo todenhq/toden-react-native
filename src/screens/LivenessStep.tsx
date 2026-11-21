@@ -96,6 +96,8 @@ export function LivenessStep(): React.ReactElement {
   const { colors } = useTheme();
   const toast = useToast();
   const config = useVerificationConfig();
+  // The country of the document being verified: the one picked, or the one the app passed.
+  const voiceCountry = useFlowState((s) => s.selectedCountry ?? s.config.country ?? null);
   const t = useText();
   const api = useFlowState((s) => s.api);
   const setMediaId = useFlowState((s) => s.setMediaId);
@@ -250,6 +252,8 @@ export function LivenessStep(): React.ReactElement {
     voiceGuidance: config.voiceGuidance,
     // Where the workflow's Toden voice clips come from (liveness/voiceClips).
     voiceServer,
+    // The voice is chosen for the person's country (liveness/voicePhrases pickVoice).
+    voicePerson: { country: voiceCountry, userId: config.userId },
     recordsAudio: wantsAudio && microphone.granted,
     // Silent until the primer is dismissed and the camera is actually up: the
     // machine is built behind the primer and would talk to nobody.

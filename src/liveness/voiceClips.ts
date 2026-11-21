@@ -30,8 +30,10 @@ import {
   normalisePhrase,
   parseVoiceManifest,
   phraseKeyMap,
+  pickVoice,
   voiceClipUrl,
   voiceManifestUrl,
+  type VoiceApplicant,
   type VoiceManifest,
 } from './voicePhrases';
 
@@ -102,10 +104,12 @@ async function cachedClipUri(fs: FileSystemModule, url: string, path: string[]):
 export interface VoiceClipSource {
   /** Toden's API origin, as the rest of the SDK resolves it. */
   server: string;
-  /** A Toden voice id, e.g. `lyra`. */
-  voice: string;
+  /** The workflow's own Toden voice, e.g. `lyra`: who speaks when the person's country and its neighbours have none. */
+  voice?: string;
   /** BCP-47 tag; clips are chosen by its primary subtag. */
   language: string;
+  /** Who the prompts are for; the voice is chosen from them once the manifest is in (pickVoice). */
+  applicant?: VoiceApplicant;
 }
 
 type LoadState = 'loading' | 'ready' | 'failed';
@@ -179,10 +183,13 @@ export class VoiceDownload {
     }
   }
 
-  private async run(fs: FileSystemModule, { server, voice, language }: VoiceClipSource, onManifestFailed: () => void): Promise<void> {
+  private async run(fs: FileSystemModule, source: VoiceClipSource, onManifestFailed: () => void): Promise<void> {
+    const { server, language } = source;
     const manifest = await fetchVoiceManifest(server);
     const lang = primaryLanguage(language);
-    if (!manifest || !manifestHasVoice(manifest, voice, lang)) {
+    // Only now is it known who speaks: the manifest says which voices are whose.
+    const voice = manifest ? pickVoice(manifest, source) : null;
+    if (!manifest || !voice || !manifestHasVoice(manifest, voice, lang)) {
       this.manifestState = 'failed';
       onManifestFailed();
       this.changed();
@@ -209,7 +216,11 @@ export class VoiceDownload {
 
 const downloads = new Map<string, VoiceDownload>();
 
-const downloadKey = (source: VoiceClipSource) => `${source.server}|${source.voice}|${primaryLanguage(source.language)}`;
+const downloadKey = (source: VoiceClipSource) => {
+  const who = source.applicant;
+  const applicant = who ? `${who.choice}:${who.country?.toUpperCase() ?? ''}:${who.seed}:${who.neighbours !== false}` : '';
+  return `${source.server}|${source.voice ?? ''}|${primaryLanguage(source.language)}|${applicant}`;
+};
 
 /**
  * Starts fetching a voice's clips to the device, in the background, or joins

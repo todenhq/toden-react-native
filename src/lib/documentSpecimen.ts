@@ -6,10 +6,13 @@
 // It carries the ID's own name and the country, and SPECIMEN wherever a real
 // document would print a person, so nobody could take it for a real one.
 import {
-  INK, barcode, chip, chipMark, fieldRows, fitSize, label, mrz, portrait, signature, stackedBarcode,
+  INK, barcode, chip, chipMark, fieldRows, fitSize, label, mrz, portrait, printLine, signature, stackedBarcode,
 } from './documentSpecimenParts';
 
-export type SpecimenKind = 'passport' | 'national_id' | 'nin_slip' | 'drivers_license' | 'voter_card' | 'residence_permit' | 'generic';
+// 'pvc' is Nigeria's voter card: a voter card on the front, and a back of its own.
+// 'drivers_license_ng' is Nigeria's driver's licence: a licence on the front, and a back of its own.
+export type SpecimenKind =
+  | 'passport' | 'national_id' | 'nin_slip' | 'drivers_license' | 'drivers_license_ng' | 'voter_card' | 'pvc' | 'residence_permit' | 'generic';
 
 const KINDS: Record<string, SpecimenKind> = {
   passport: 'passport',
@@ -20,14 +23,20 @@ const KINDS: Record<string, SpecimenKind> = {
   'nin-slip': 'nin_slip',
   'ghana-card': 'national_id',
   cni: 'national_id',
-  pvc: 'voter_card',
+  pvc: 'pvc',
   voters: 'voter_card',
   'residence-card': 'residence_permit',
   'residence-permit': 'residence_permit',
 };
 
-export function specimenKind(idType: string | null | undefined): SpecimenKind {
-  return (idType && KINDS[idType]) || 'generic';
+/**
+ * The drawing for an ID. A few are drawn as one country's own card, measured
+ * off real ones: `country` is the document's ISO-2 code, and without it (or for
+ * any other country) the ID's general drawing is used.
+ */
+export function specimenKind(idType: string | null | undefined, country?: string | null): SpecimenKind {
+  const kind = (idType && KINDS[idType]) || 'generic';
+  return kind === 'drivers_license' && country?.toUpperCase() === 'NG' ? 'drivers_license_ng' : kind;
 }
 
 export interface SpecimenInput {
@@ -111,7 +120,7 @@ const TALL_FIELDS: Array<Array<[number, number]>> = [[[120, 330]], [[100, 400]],
 function cardFront(i: SpecimenInput): string {
   const { kind, accent } = i;
   const parts = [guilloche(780, 420, accent), cardBand(i), portrait(INSET, 146, 232, 340, accent, 'cd')];
-  if (kind === 'drivers_license') {
+  if (kind === 'drivers_license' || kind === 'drivers_license_ng') {
     parts.push(
       fieldRows(312, 158, TALL_FIELDS.slice(0, 3), 72),
       fieldRows(756, 158, [[[80, 190]], [[70, 150]]], 72),
@@ -119,12 +128,15 @@ function cardFront(i: SpecimenInput): string {
       signature(590, 400, 1.05),
       fieldRows(INSET, 520, [[[150, 340], [120, 260], [90, 220]]], 66, 34),
     );
-  } else if (kind === 'voter_card') {
+  } else if (kind === 'voter_card' || kind === 'pvc') {
     parts.push(
       fieldRows(312, 158, TALL_FIELDS, 72),
       `<circle cx="840" cy="226" r="76" fill="#FFFFFF" fill-opacity="0.6" stroke="${accent}" stroke-width="8"/><path d="M806 226L830 254L878 198" fill="none" stroke="${accent}" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>`,
       signature(320, 392, 1.05),
-      barcode(INSET, 512, WIDTH - INSET * 2, 72),
+      // A PVC's front carries no barcode: both of its barcodes are on the back.
+      kind === 'pvc'
+        ? fieldRows(INSET, 520, [[[150, 340], [120, 260], [90, 220]]], 66, 34)
+        : barcode(INSET, 512, WIDTH - INSET * 2, 72),
     );
   } else if (kind === 'residence_permit') {
     parts.push(
@@ -146,8 +158,72 @@ function cardFront(i: SpecimenInput): string {
   return parts.join('');
 }
 
+/**
+ * The back of Nigeria's Permanent Voter's Card, laid out as the card is
+ * (measured off real backs: both barcodes sat in the top half of all twelve).
+ * The linear barcode comes first, the two-dimensional block directly under it,
+ * both starting further in from the left edge than they stop short of the right.
+ * Then the security strip across the card, and the print at the foot: two
+ * centred lines, the emblem with the batch and serial numbers, the notice.
+ */
+function pvcBack(i: SpecimenInput, height: number): string {
+  const { accent } = i;
+  const codeX = 160;
+  const codeWidth = WIDTH - codeX - 76;
+  const stripTop = 348;
+  const stripHeight = Math.max(40, height - 199 - stripTop);
+  let strip = '';
+  for (let x = 40; x < WIDTH - 60; x += 62) {
+    strip += `M${x} ${stripTop + stripHeight * 0.42}l30 -11M${x + 31} ${stripTop + stripHeight * 0.8}l30 -11`;
+  }
+  const row = height - 96;
+  return [
+    cardBand(i),
+    barcode(codeX, 140, codeWidth, 84),
+    stackedBarcode(codeX, 240, codeWidth, 90),
+    `<rect x="11" y="${stripTop}" width="${WIDTH - 22}" height="${stripHeight}" fill="${accent}" fill-opacity="0.1"/>`,
+    `<path d="${strip}" fill="none" stroke="${accent}" stroke-opacity="0.4" stroke-width="5" stroke-linecap="round"/>`,
+    `<rect x="${INSET + 20}" y="${height - 181}" width="${WIDTH - (INSET + 20) * 2}" height="3" fill="${INK}" fill-opacity="0.3"/>`,
+    printLine(280, height - 165, 440),
+    printLine(365, height - 135, 270, 12),
+    crest(INSET + 62, row + 6, 30, accent),
+    printLine(190, row + 2, 80, 10, true),
+    printLine(284, row, 190),
+    `<rect x="518" y="${row - 6}" width="4" height="26" rx="2" fill="${INK}" fill-opacity="0.3"/>`,
+    printLine(560, row + 2, 120, 10, true),
+    printLine(WIDTH - INSET - 150, row, 150),
+    printLine(180, height - 52, 640, 10, true),
+  ].join('');
+}
+
+/**
+ * The back of Nigeria's driver's licence (measured off real backs): a short linear barcode at the top right with its number beside it,
+ * the large two-dimensional block directly under it across the card, both in
+ * the top half. Below them the class of licence, then the notes at the foot
+ * with the crest at their right.
+ */
+function licenceBack(i: SpecimenInput, height: number): string {
+  const notes = height - 123;
+  const classes = height - 229;
+  return [
+    cardBand(i),
+    printLine(190, 152, 190, 10, true),
+    barcode(470, 136, WIDTH - INSET - 470, 44),
+    stackedBarcode(INSET, 188, WIDTH - INSET * 2, height - 281 - 188),
+    printLine(INSET, classes, 800, 12),
+    printLine(INSET, classes + 26, 690, 12),
+    printLine(INSET, classes + 52, 330, 12),
+    ...[720, 640, 700, 660].map((width, n) => printLine(INSET, notes + n * 24, width, 10, true)),
+    crest(WIDTH - INSET - 60, height - 88, 46, i.accent),
+  ].join('');
+}
+
 function cardBack(i: SpecimenInput, height: number): string {
+  if (i.kind === 'pvc') return pvcBack(i, height);
+  if (i.kind === 'drivers_license_ng') return licenceBack(i, height);
   const band = cardBand(i);
+  // Any other country's licence: its fields, then one large barcode block. Not
+  // measured off a real card, so it claims no one country's layout.
   if (i.kind === 'drivers_license') {
     return [band, fieldRows(INSET, 148, [[[130, 400], [100, 300]], [[110, 330], [130, 370]]], 70), stackedBarcode(INSET, 300, WIDTH - INSET * 2, height - 346)].join('');
   }

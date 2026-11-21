@@ -41,6 +41,17 @@ describe('the sheet header', () => {
     expect(sheet).not.toMatch(/icon="close"\s*onPress=\{onClose\}/);
   });
 
+  it('slides each opening on its own value, so a sheet reopened at once is not left off screen', () => {
+    // 2026-11-21: closed and reopened immediately, the country picker showed only its backdrop.
+    // One lifelong value was reset on open, then overwritten by the previous closing's late read-back.
+    const sheet = read('components/glass/FloatingSheet.tsx');
+    expect(sheet).toContain('if (visible && !wasVisible.current) translateRef.current = new Animated.Value(0);');
+    expect(sheet).not.toContain('useRef(new Animated.Value(0)).current');
+    // The drag and both dismissals move the current opening's value, not one captured at mount.
+    expect(sheet.match(/Animated\.(timing|spring)\(translateRef\.current,/g)).toHaveLength(3);
+    expect(sheet).toContain('translateRef.current.setValue(g.dy)');
+  });
+
   it('takes the web default radius where the screen has no curve', () => {
     expect(read('components/glass/FloatingSheet.tsx')).toMatch(/: 28;/);
   });

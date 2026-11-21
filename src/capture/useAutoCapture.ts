@@ -38,6 +38,7 @@ const INITIAL: DocumentGuidance = { framing: 'none', hint: 'searching' };
 
 export function useAutoCapture({
   enabled,
+  holdFire = false,
   country,
   idType,
   side = 'front',
@@ -92,7 +93,7 @@ export function useAutoCapture({
   const lastReadAtRef = useRef(0);
   // Refs, not deps: the worklet callback is created once, and re-creating it on
   // every guidance change would tear down the frame output mid-stream.
-  const opts = { enabled, country, idType, side, requireMrz, mrzAlreadyCaptured, onMrz, onFire, guideAspect, viewAr, guide };
+  const opts = { enabled, holdFire, country, idType, side, requireMrz, mrzAlreadyCaptured, onMrz, onFire, guideAspect, viewAr, guide };
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
@@ -203,7 +204,7 @@ export function useAutoCapture({
       }
     }
 
-    if (verdict.framing === 'ready' && !firedRef.current) {
+    if (verdict.framing === 'ready' && !firedRef.current && !o.holdFire) {
       firedRef.current = true;
       o.onFire();
     }

@@ -67,9 +67,9 @@ import { recordJourneyEvent, recordUploadFailure } from '../lib/step-log';
 //
 // Before moving on, each uploaded side goes past the server's capture check
 // (lib/documentCaptureCheck): no face on the printed photo, or a barcode that
-// will not read, turns the review footer into a retake notice. A notice, never
-// a gate: "Continue anyway" always advances, and a failed or slow check reads
-// as no problem.
+// will not read, turns the review footer into a retake notice with "Continue
+// anyway" under it. A document cut off by its photo offers the retake alone:
+// the verification would fail it. A failed or slow check reads as no problem.
 //
 // The per-phase title/description live in the SHEET HEADER (VerificationFlow reads the
 // synced `documentCapturePhase` from the store and calls `documentCaptureMeta` in components/stepHeaderCopy),
@@ -215,12 +215,14 @@ function DocumentCapture({
 
   // ── Capture → compress → store for the current side ────────────────────────
   const storeCapture = useCallback(
-    async (rawUri: string, source: 'camera' | 'upload', videoPath: string | null = null) => {
+    async (rawUri: string, source: 'camera' | 'upload', videoPath: string | null = null, fromCrop = false) => {
       setBusy(true);
       setUploadError(null);
       setCaptureProblems(null);
       try {
-        const compressed = await compressDocumentImage(rawUri);
+        // A camera photo was written once, by its crop: it is not encoded again
+        // (lib/documentStill.ts).
+        const compressed = await compressDocumentImage(rawUri, { fromCrop });
         // Read the MRZ off the FRONT while we have it. It is the key that
         // unlocks the chip, and taking it from the photo the user just captured
         // is what spares them scanning the same passport a second time.
@@ -290,7 +292,7 @@ function DocumentCapture({
         // An upright slip is turned back to landscape, so the review, the upload
         // and the server see the document the usual way round.
         const upright = turn ? await rotateImage(carded, undoDegrees(turn.readTurn)).catch(() => carded) : carded;
-        await storeCapture(upright, 'camera', videoPath);
+        await storeCapture(upright, 'camera', videoPath, carded !== rawUri);
       } finally {
         setBusy(false);
       }
@@ -542,6 +544,7 @@ function DocumentCapture({
                   idType: selectedIdType ?? null,
                   title: specimenTitle(selectedIdType ?? null, documentLabel),
                   country: country ? regionCountryName(country) : null,
+                  countryCode: country ?? null,
                 }}
                 twoSided={isTwoSided}
                 accent={colors.primary}

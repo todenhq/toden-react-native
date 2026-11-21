@@ -9,6 +9,12 @@ import type { CornerFraming } from './useCornerGate';
 export interface AutoCaptureOptions {
   /** Off while capturing/uploading, on a preview, or when there is no camera. */
   enabled: boolean;
+  /**
+   * Keep reading the frame and guiding, but do not take the photo yet (the
+   * side's recording is still too short to be checked). It is taken on the
+   * first ready frame after the hold ends.
+   */
+  holdFire?: boolean;
   country: string;
   idType: string;
   /**
