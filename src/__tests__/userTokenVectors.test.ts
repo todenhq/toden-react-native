@@ -19,16 +19,21 @@ jest.mock('../presence/fs', () => ({ readJsonFile: () => ({}), writeJsonFile: ()
 
 // The cases live in the Flutter package, so they exist only in the monorepo.
 // The public toden-react-native repo, where the npm publish runs its tests, has
-// no sdk-flutter beside it: reading them there failed the 4.5.0 publish. The
-// monorepo's CI runs every case; the public copy skips them.
+// no sdk-flutter beside it: reading them there failed the 4.5.0 publish. There
+// each group is replaced by one skipped placeholder and its body never runs: a
+// group whose body ran with no cases would still register its beforeEach, which
+// Jest refuses in a group with no tests. The monorepo's CI runs every case.
 const VECTORS = resolve(__dirname, '../../../sdk-flutter/test/user_token_vectors.json');
-const describeShared = existsSync(VECTORS) ? describe : describe.skip;
+const HAS_VECTORS = existsSync(VECTORS);
+/** A group of shared cases, or a skipped placeholder outside the monorepo. */
+const describeShared = (name: string, body: () => void) =>
+  HAS_VECTORS
+    ? describe(name, body)
+    : describe.skip(name, () => {
+        it('runs in the monorepo, beside sdk-flutter', () => undefined);
+      });
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-// Skipped groups still run their bodies to name their tests, so without the
-// file every case list reads as empty.
-const vectors: any = existsSync(VECTORS)
-  ? JSON.parse(readFileSync(VECTORS, 'utf8'))
-  : new Proxy({}, { get: () => [] });
+const vectors: any = HAS_VECTORS ? JSON.parse(readFileSync(VECTORS, 'utf8')) : {};
 
 describeShared('shared user-token vectors', () => {
   it('names the header the server reads', () => {
