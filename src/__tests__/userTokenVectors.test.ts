@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 
 import { flushChunks, runFlush } from '../presence/flush';
@@ -17,12 +17,20 @@ import {
 
 jest.mock('../presence/fs', () => ({ readJsonFile: () => ({}), writeJsonFile: () => undefined }));
 
+// The cases live in the Flutter package, so they exist only in the monorepo.
+// The public toden-react-native repo, where the npm publish runs its tests, has
+// no sdk-flutter beside it: reading them there failed the 4.5.0 publish. The
+// monorepo's CI runs every case; the public copy skips them.
+const VECTORS = resolve(__dirname, '../../../sdk-flutter/test/user_token_vectors.json');
+const describeShared = existsSync(VECTORS) ? describe : describe.skip;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const vectors: any = JSON.parse(
-  readFileSync(resolve(__dirname, '../../../sdk-flutter/test/user_token_vectors.json'), 'utf8'),
-);
+// Skipped groups still run their bodies to name their tests, so without the
+// file every case list reads as empty.
+const vectors: any = existsSync(VECTORS)
+  ? JSON.parse(readFileSync(VECTORS, 'utf8'))
+  : new Proxy({}, { get: () => [] });
 
-describe('shared user-token vectors', () => {
+describeShared('shared user-token vectors', () => {
   it('names the header the server reads', () => {
     expect(USER_TOKEN_HEADER).toBe(vectors.header);
   });
@@ -118,7 +126,7 @@ describe('shared user-token vectors', () => {
   });
 });
 
-describe('flushChunks', () => {
+describeShared('flushChunks', () => {
   it('sorts by day and cuts at the chunk size', () => {
     const chunks = flushChunks(vectors.background[0].queue.map((day: string) => ({ day })));
     expect(chunks.map((c) => c.length)).toEqual([vectors.chunkDays, 40 - vectors.chunkDays]);
