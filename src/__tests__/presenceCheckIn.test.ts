@@ -5,7 +5,11 @@ jest.mock('expo-location', () => ({
   getLastKnownPositionAsync: jest.fn(),
 }));
 jest.mock('../presence/store', () => ({ loadPresencePin: jest.fn() }));
-jest.mock('../presence/post', () => ({ postObservations: jest.fn() }));
+jest.mock('../presence/post', () => ({ sendObservations: jest.fn() }));
+jest.mock('../presence/secure-token', () => ({
+  backgroundTokenFor: async () => ({ kind: 'none' }),
+  markStoredUserTokenStale: async () => undefined,
+}));
 jest.mock('../presence/geofence', () => ({ armGeofence: jest.fn(), geofenceArmed: jest.fn() }));
 jest.mock('../presence/background-store', () => {
   const state: Record<string, unknown> = {};
@@ -25,6 +29,9 @@ jest.mock('../presence/background-store', () => {
     replacePending: (u: string, v: unknown[]) => {
       state[`q:${u}`] = v;
     },
+    // No held watch, and no presence device: every sent day leaves the queue.
+    loadHeldDeadline: () => null,
+    saveClockOffset: () => undefined,
     queueObservations: (u: string, fresh: unknown[], merge: (a: unknown[], b: unknown[]) => unknown[]) => {
       state[`q:${u}`] = merge((state[`q:${u}`] as unknown[]) ?? [], fresh);
     },
@@ -38,7 +45,7 @@ const Location = require('expo-location') as {
   getLastKnownPositionAsync: jest.Mock;
 };
 const { loadPresencePin } = require('../presence/store') as { loadPresencePin: jest.Mock };
-const { postObservations } = require('../presence/post') as { postObservations: jest.Mock };
+const { sendObservations: postObservations } = require('../presence/post') as { sendObservations: jest.Mock };
 const geofence = require('../presence/geofence') as { armGeofence: jest.Mock; geofenceArmed: jest.Mock };
 const store = require('../presence/background-store') as { __state: Record<string, unknown> };
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -58,7 +65,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   for (const k of Object.keys(store.__state)) delete store.__state[k];
   loadPresencePin.mockReturnValue(PIN);
-  postObservations.mockResolvedValue(true);
+  postObservations.mockResolvedValue({ ok: true, status: 200 });
   geofence.geofenceArmed.mockResolvedValue(true);
   geofence.armGeofence.mockResolvedValue(undefined);
   store.__state[`cfg:${USER}`] = { apiKey: 'pk_test_x' };
@@ -87,7 +94,7 @@ describe('recordCheckIn', () => {
     expect(store.__state[`start:${USER}`]).toBe(at(2026, 9, 3, 9));
     expect(postObservations).toHaveBeenCalledWith('pk_test_x', undefined, USER, [
       expect.objectContaining({ day: '2026-09-03', dwellMinutes: 60, source: 'geofence' }),
-    ]);
+    ], {});
   });
 
   it('waits three hours once the stay has been recorded', async () => {
@@ -104,12 +111,12 @@ describe('recordCheckIn', () => {
     expect(store.__state[`enter:${USER}`]).toBe(at(2026, 9, 3, 13));
     expect(postObservations).toHaveBeenCalledWith('pk_test_x', undefined, USER, [
       expect.objectContaining({ day: '2026-09-03', dwellMinutes: 240, source: 'geofence' }),
-    ]);
+    ], {});
     expect(store.__state[`q:${USER}`]).toEqual([]);
   });
 
   it('keeps the queue when the flush fails', async () => {
-    postObservations.mockResolvedValue(false);
+    postObservations.mockResolvedValue({ ok: false, status: 503 });
     store.__state[`enter:${USER}`] = at(2026, 9, 3, 9);
     await recordCheckIn(USER, inside(at(2026, 9, 3, 13)));
     expect(store.__state[`q:${USER}`]).toHaveLength(1);
@@ -145,7 +152,7 @@ describe('runPeriodicCheckIn', () => {
     expect(await runPeriodicCheckIn()).toBe(true);
     expect(postObservations).toHaveBeenCalledWith('pk_test_x', undefined, USER, [
       expect.objectContaining({ day: '2026-09-03', nightPresent: true }),
-    ]);
+    ], {});
   });
 
   it('falls back to the last known position, and re-arms a dropped fence', async () => {

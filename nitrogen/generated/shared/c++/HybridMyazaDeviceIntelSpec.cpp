@@ -22,6 +22,10 @@ namespace margelo::nitro::myazakyc {
       prototype.registerHybridMethod("appAttestAttestNewKey", &HybridMyazaDeviceIntelSpec::appAttestAttestNewKey);
       prototype.registerHybridMethod("appAttestAssert", &HybridMyazaDeviceIntelSpec::appAttestAssert);
       prototype.registerHybridMethod("playIntegrityToken", &HybridMyazaDeviceIntelSpec::playIntegrityToken);
+      prototype.registerHybridMethod("presenceKeyCreate", &HybridMyazaDeviceIntelSpec::presenceKeyCreate);
+      prototype.registerHybridMethod("presenceKeySign", &HybridMyazaDeviceIntelSpec::presenceKeySign);
+      prototype.registerHybridMethod("presenceKeyDelete", &HybridMyazaDeviceIntelSpec::presenceKeyDelete);
+      prototype.registerHybridMethod("presenceKeyStorage", &HybridMyazaDeviceIntelSpec::presenceKeyStorage);
     });
   }
 

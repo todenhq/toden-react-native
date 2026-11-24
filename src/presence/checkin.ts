@@ -27,16 +27,14 @@
 
 import * as Location from 'expo-location';
 import { armGeofence, geofenceArmed } from './geofence';
-import { postObservations } from './post';
+import { flushPendingObservations } from './flush';
 import { applyLocationSamples, mergeObservations, type SampleFix } from './sampler';
 import { loadPresencePin } from './store';
 import {
   loadFenceUser,
   loadStay,
   loadReporterConfig,
-  pendingObservations,
   queueObservations,
-  replacePending,
   saveStay,
 } from './background-store';
 import { nativeModulePresent } from '../lib/native-module-present';
@@ -74,14 +72,6 @@ function backgroundTask(): BackgroundTaskLike | null {
   }
 }
 
-async function flushQueue(userId: string): Promise<void> {
-  const cfg = loadReporterConfig(userId);
-  if (!cfg) return;
-  const pending = pendingObservations(userId);
-  if (pending.length === 0) return;
-  const ok = await postObservations(cfg.apiKey, cfg.devUrl, userId, pending);
-  if (ok) replacePending(userId, []);
-}
 
 /**
  * Apply one confirmed reading to the background tier's stay. A no-op unless
@@ -99,7 +89,7 @@ export async function recordCheckIn(userId: string, fix: SampleFix): Promise<voi
     if (result.observations.length > 0) {
       queueObservations(userId, result.observations, mergeObservations);
     }
-    await flushQueue(userId);
+    await flushPendingObservations(userId);
   } catch {
     // A check-in is best-effort; the fence and the next check-in carry on.
   }

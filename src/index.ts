@@ -179,6 +179,19 @@ export { clearPresencePin, savePresencePin } from './presence/store';
 // What the SDK does when the organisation stops monitoring; a host may also
 // call it itself (for example on sign-out).
 export { standDownPresence, type StandDownResult } from './presence/stand-down';
+// User tokens for scoped publishable keys: the host's provider asks its own
+// backend for a short-lived token (it gets no user id from the SDK), and
+// setUserToken takes one from a silent push for the background queue.
+export {
+  USER_TOKEN_HEADER,
+  UserTokenError,
+  setUserTokenProvider,
+  type UserTokenErrorCode,
+  type UserTokenProvider,
+  type UserTokenPurpose,
+  type UserTokenResponse,
+} from './presence/user-token';
+export { setUserToken } from './presence/set-user-token';
 
 // Country grouping for multi-region flows
 export { groupCountriesByRegion, regionCountryName, type Region } from './config/regions';

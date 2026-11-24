@@ -7,8 +7,8 @@ import { poaOfferedCountries } from '../lib/poa-country-gate';
 import { useText } from '../i18n/useText';
 
 // ---------------------------------------------------------------------------
-// The Proof of Address step's country control, on every scope (the Didit PoA
-// model: the applicant names where the document is from, then uploads it).
+// The Proof of Address step's country control, on every scope: the applicant
+// names where the document is from, then uploads it.
 // The step owns the value and what a pick does (lib/poa-country-gate.ts): on
 // the address scope the pick is the flow's declared country, which also drives
 // the search filter, the map's opening view and the submission's country;

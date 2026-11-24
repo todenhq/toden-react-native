@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Company documents asked for one per GROUP (Didit's model): the documents an
+// Company documents asked for one per GROUP: the documents an
 // organisation ticks inside one group are alternatives, and the applicant
 // uploads whichever one they hold. A group is required when any document in it
 // is required. The step walks the groups one at a time.

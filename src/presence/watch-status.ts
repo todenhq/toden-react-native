@@ -8,6 +8,8 @@
 // presence_watch_status.dart is the same read; keep the two in lockstep.
 
 import { resolveBaseUrl } from '../services/resolveUrl';
+import { saveHeldDeadline } from './background-store';
+import { sendWithUserToken, type UserTokenProvider } from './user-token';
 
 /** The server's status words. `unknown` is a word this SDK build does not
  *  know yet; treat it as still in progress. */
@@ -84,21 +86,46 @@ export function parsePresenceWatchStatus(body: unknown): PresenceWatchStatus | n
 
 /**
  * Reads the check's status with the publishable key. Never throws: null
- * means the server could not be reached or refused the key.
+ * means the server could not be reached or refused the key. With a scoped
+ * publishable key, pass `getUserToken` (or call setUserTokenProvider once).
  */
+/**
+ * PURE. The deadline day (UTC) the background flush holds later days back
+ * for: the watch is still in progress past its deadline, held for late
+ * sealed reports. Null otherwise, which lets every sent day leave the queue.
+ */
+export function heldDeadlineDay(status: PresenceWatchStatus, nowMs: number): string | null {
+  if (status.state !== 'in_progress' || !status.deadlineAt) return null;
+  const deadline = Date.parse(status.deadlineAt);
+  if (Number.isNaN(deadline) || !(nowMs > deadline)) return null;
+  return new Date(deadline).toISOString().slice(0, 10);
+}
+
 export async function fetchPresenceWatchStatus(options: {
   apiKey: string;
   externalUserId: string;
   devUrl?: string;
+  getUserToken?: UserTokenProvider;
 }): Promise<PresenceWatchStatus | null> {
   try {
     const base = resolveBaseUrl(options.apiKey, options.devUrl);
-    const response = await fetch(
-      `${base}/api/v1/address/presence/${encodeURIComponent(options.externalUserId)}`,
-      { headers: { Authorization: `Bearer ${options.apiKey}` } },
+    const sent = await sendWithUserToken(
+      {
+        apiKey: options.apiKey,
+        externalUserId: options.externalUserId,
+        purpose: 'presence',
+        ...(options.getUserToken ? { getUserToken: options.getUserToken } : {}),
+      },
+      (headers) =>
+        fetch(`${base}/api/v1/address/presence/${encodeURIComponent(options.externalUserId)}`, {
+          headers: { Authorization: `Bearer ${options.apiKey}`, ...headers },
+        }),
     );
-    if (!response.ok) return null;
-    return parsePresenceWatchStatus(await response.json());
+    if (!sent.response || !sent.response.ok) return null;
+    const status = parsePresenceWatchStatus(await sent.response.json());
+    // The background flush keeps days after a held watch's deadline queued.
+    if (status) saveHeldDeadline(options.externalUserId, heldDeadlineDay(status, Date.now()));
+    return status;
   } catch {
     return null;
   }

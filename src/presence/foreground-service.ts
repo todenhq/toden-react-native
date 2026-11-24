@@ -22,15 +22,12 @@ import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 import { armGeofence, geofenceArmed } from './geofence';
 import { applyLocationSamples, mergeObservations } from './sampler';
-import { postObservations } from './post';
+import { flushPendingObservations } from './flush';
 import { loadPresencePin } from './store';
 import {
   loadStay,
-  loadReporterConfig,
   loadServiceUser,
-  pendingObservations,
   queueObservations,
-  replacePending,
   saveStay,
   saveReporterConfig,
   saveServiceUser,
@@ -63,14 +60,6 @@ type LocationLike = {
   mocked?: boolean;
 };
 
-async function flushQueue(userId: string): Promise<void> {
-  const cfg = loadReporterConfig(userId);
-  if (!cfg) return;
-  const pending = pendingObservations(userId);
-  if (pending.length === 0) return;
-  const ok = await postObservations(cfg.apiKey, cfg.devUrl, userId, pending);
-  if (ok) replacePending(userId, []);
-}
 
 /** Define the location task. Called by registerBackgroundPresence(), so the
  *  host's one root-level call covers both background tiers. */
@@ -104,7 +93,7 @@ export function defineLocationTask(tm: TaskManagerLike): void {
     }
     // A live process is the one moment a stuck queue (an EXIT flush that met
     // no network) can drain, and a dropped fence can come back.
-    void flushQueue(userId);
+    void flushPendingObservations(userId);
     void geofenceArmed().then((armed) => {
       if (!armed) armGeofence(userId, pin).catch(() => undefined);
     });

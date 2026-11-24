@@ -73,4 +73,16 @@ class HybridMyazaDeviceIntel : HybridMyazaDeviceIntelSpec() {
         ?: throw IllegalStateException("no application context")
       PlayIntegrityClient.token(context, cloudProjectNumber, challengeBase64)
     }
+
+  // ── Presence device key (PresenceDeviceKey.kt) ───────────────────────────
+
+  override fun presenceKeyCreate(alias: String): String =
+    PresenceDeviceKey.create(NitroModules.applicationContext, alias)?.publicKey ?: ""
+
+  override fun presenceKeySign(alias: String, text: String): String = PresenceDeviceKey.sign(alias, text) ?: ""
+
+  override fun presenceKeyDelete(alias: String) = PresenceDeviceKey.delete(NitroModules.applicationContext, alias)
+
+  override fun presenceKeyStorage(alias: String): String =
+    PresenceDeviceKey.storage(NitroModules.applicationContext, alias)
 }

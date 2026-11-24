@@ -13,6 +13,7 @@
 // ---------------------------------------------------------------------------
 
 import { resolveBaseUrl } from '../services/resolveUrl';
+import { sendWithUserToken, type UserTokenErrorCode, type UserTokenProvider } from './user-token';
 
 /** A pin saved this recently was captured by a flow whose watch may still be minting. */
 export const FRESH_PIN_MS = 15 * 60 * 1000;
@@ -49,33 +50,59 @@ export async function fetchWatchStatus(
   apiKey: string,
   devUrl: string | undefined,
   externalUserId: string,
+  getUserToken?: UserTokenProvider,
 ): Promise<string | null> {
-  return (await fetchWatchState(apiKey, devUrl, externalUserId))?.status ?? null;
+  return (await fetchWatchState(apiKey, devUrl, externalUserId, getUserToken))?.status ?? null;
 }
 
 export async function fetchWatchState(
   apiKey: string,
   devUrl: string | undefined,
   externalUserId: string,
+  getUserToken?: UserTokenProvider,
 ): Promise<WatchState | null> {
+  return (await readWatch(apiKey, devUrl, externalUserId, getUserToken)).state;
+}
+
+/** The status read, and why it failed when a user token is the reason. */
+export interface WatchRead {
+  state: WatchState | null;
+  refusal: UserTokenErrorCode | null;
+}
+
+export async function readWatch(
+  apiKey: string,
+  devUrl: string | undefined,
+  externalUserId: string,
+  getUserToken?: UserTokenProvider,
+): Promise<WatchRead> {
   try {
     const base = resolveBaseUrl(apiKey, devUrl);
-    const response = await fetch(
-      `${base}/api/v1/address/presence/${encodeURIComponent(externalUserId)}`,
-      { headers: { Authorization: `Bearer ${apiKey}` } },
+    const sent = await sendWithUserToken(
+      { apiKey, externalUserId, purpose: 'presence', ...(getUserToken ? { getUserToken } : {}) },
+      (headers) =>
+        fetch(`${base}/api/v1/address/presence/${encodeURIComponent(externalUserId)}`, {
+          headers: { Authorization: `Bearer ${apiKey}`, ...headers },
+        }),
     );
-    if (!response.ok) return null;
+    const response = sent.response;
+    if (sent.refusal || !response || !response.ok) return { state: null, refusal: sent.refusal };
     const body = (await response.json()) as { status?: unknown; stopped?: unknown };
-    if (typeof body.status !== 'string') return null;
+    if (typeof body.status !== 'string') return { state: null, refusal: null };
     // An older server sends no flag: a revoked check is the one stop it reports.
-    return { status: body.status, stopped: body.stopped === true || body.status === 'revoked' };
+    return {
+      state: { status: body.status, stopped: body.stopped === true || body.status === 'revoked' },
+      refusal: null,
+    };
   } catch {
-    return null;
+    return { state: null, refusal: null };
   }
 }
 
 export interface AwaitWatchDeps {
   fetchStatus: () => Promise<string | null>;
+  /** True ends the wait now (a user-token refusal: waiting will not fix it). */
+  stop?: () => boolean;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   waitMs?: number;
@@ -101,6 +128,7 @@ export async function awaitWatch(fresh: boolean, deps: AwaitWatchDeps): Promise<
   for (;;) {
     const status = await deps.fetchStatus();
     if (status === 'in_progress') return 'live';
+    if (deps.stop?.()) return 'unknown';
     if (!fresh) return status === null ? 'unknown' : 'absent';
     if (now() >= deadline) return status === null ? 'unknown' : 'absent';
     await sleep(pollMs);

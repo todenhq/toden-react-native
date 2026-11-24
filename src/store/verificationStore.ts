@@ -66,7 +66,8 @@ import { reserveSilentFrame, settleSilentFrame } from '../lib/silentCapture';
 import { resetBusinessCheck, runBusinessCheck } from './businessCheck';
 import { addressBookActions, EMPTY_ADDRESS_BOOK_FLOW } from './addressBook';
 import { reusedAddressStep } from '../lib/address-book';
-import { startAttemptSession, watchSessionProgress } from './session';
+import { remountAttemptSession, startAttemptSession, watchSessionProgress } from './session';
+import { remountFixes } from '../services/mount-user-token';
 import { applicantMediaCaptured, buildApplicantVerifyRequest } from './submitApplicant';
 import { keptIdType } from '../lib/resubmit';
 import { documentPeopleReducer } from '../config/documentPeople';
@@ -780,10 +781,20 @@ export function createVerificationStore(
           : undefined;
         const request = buildVerifyRequest(state, fingerprint, captureProof);
         try {
-          const res = await withRetry(() => api.verify(request), { onRetry });
+          const res = await withRetry(() => api.verify(request), { onRetry }).catch(async (err: unknown) => {
+            // A scoped key's face check whose bound user token died: a fresh
+            // token, a re-mount (which rebinds the session) and one resubmission.
+            const externalUserId = state.config.userId ?? state.config.metadata?.['userId'];
+            if (!remountFixes(state.config, externalUserId, err)) throw err;
+            // Only a resume of this same session rebinds it; a different id
+            // means the server started afresh, so the host decides.
+            const sessionId = await remountAttemptSession(store);
+            if (!sessionId || sessionId !== request.sessionId) throw err;
+            return withRetry(() => api.verify(request), { onRetry });
+          });
           // Before anything can report: the first report starts when the
           // submitted screen sees this result.
-          keepPresenceToken(state.config, res.presenceToken);
+          await keepPresenceToken(state.config, res.presenceToken);
           const result: VerificationSubmissionResult = {
             verificationId: res.verificationId,
             status: 'processing',

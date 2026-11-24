@@ -134,6 +134,36 @@ namespace margelo::nitro::myazakyc {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::string presenceKeyCreate(const std::string& alias) override {
+      auto __result = _swiftPart.presenceKeyCreate(alias);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::string presenceKeySign(const std::string& alias, const std::string& text) override {
+      auto __result = _swiftPart.presenceKeySign(alias, text);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline void presenceKeyDelete(const std::string& alias) override {
+      auto __result = _swiftPart.presenceKeyDelete(alias);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline std::string presenceKeyStorage(const std::string& alias) override {
+      auto __result = _swiftPart.presenceKeyStorage(alias);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
 
   private:
     KycSdkReactNative::HybridMyazaDeviceIntelSpec_cxx _swiftPart;

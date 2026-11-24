@@ -12,9 +12,12 @@
 // ---------------------------------------------------------------------------
 
 import { disableBackgroundPresence } from './background';
+import { forgetPresenceDevice } from './device';
 import { loadFenceUser, loadServiceUser } from './background-store';
 import { disableForegroundService } from './foreground-service';
 import { clearPresencePin } from './store';
+import { clearStoredUserToken } from './secure-token';
+import { forgetUserTokens } from './user-token';
 
 export interface StandDownResult {
   geofence: boolean;
@@ -36,5 +39,11 @@ export async function standDownPresence(externalUserId: string): Promise<StandDo
     // Best-effort: the pin is still forgotten below, which is what stops reports.
   }
   clearPresencePin(externalUserId);
+  // Logout too: the user's token goes with the pin. The docs tell backends to
+  // revoke by user as well.
+  forgetUserTokens(externalUserId);
+  await clearStoredUserToken(externalUserId);
+  // And the presence device: its key, registration id and marks.
+  await forgetPresenceDevice(externalUserId);
   return result;
 }

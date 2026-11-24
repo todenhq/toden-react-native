@@ -143,5 +143,24 @@ namespace margelo::nitro::myazakyc {
       return __promise;
     }();
   }
+  std::string JHybridMyazaDeviceIntelSpec::presenceKeyCreate(const std::string& alias) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>(jni::alias_ref<jni::JString> /* alias */)>("presenceKeyCreate");
+    auto __result = method(_javaPart, jni::make_jstring(alias));
+    return __result->toStdString();
+  }
+  std::string JHybridMyazaDeviceIntelSpec::presenceKeySign(const std::string& alias, const std::string& text) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>(jni::alias_ref<jni::JString> /* alias */, jni::alias_ref<jni::JString> /* text */)>("presenceKeySign");
+    auto __result = method(_javaPart, jni::make_jstring(alias), jni::make_jstring(text));
+    return __result->toStdString();
+  }
+  void JHybridMyazaDeviceIntelSpec::presenceKeyDelete(const std::string& alias) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* alias */)>("presenceKeyDelete");
+    method(_javaPart, jni::make_jstring(alias));
+  }
+  std::string JHybridMyazaDeviceIntelSpec::presenceKeyStorage(const std::string& alias) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>(jni::alias_ref<jni::JString> /* alias */)>("presenceKeyStorage");
+    auto __result = method(_javaPart, jni::make_jstring(alias));
+    return __result->toStdString();
+  }
 
 } // namespace margelo::nitro::myazakyc

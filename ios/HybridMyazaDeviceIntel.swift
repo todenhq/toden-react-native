@@ -86,6 +86,24 @@ final class HybridMyazaDeviceIntel: HybridMyazaDeviceIntelSpec {
     Promise.rejected(withError: DeviceIntelError("Play Integrity is Android-only"))
   }
 
+  // MARK: - Presence device key (PresenceDeviceKey.swift)
+
+  func presenceKeyCreate(alias: String) throws -> String {
+    PresenceDeviceKey.create(alias: alias) ?? ""
+  }
+
+  func presenceKeySign(alias: String, text: String) throws -> String {
+    PresenceDeviceKey.sign(alias: alias, text: text) ?? ""
+  }
+
+  func presenceKeyDelete(alias: String) throws {
+    PresenceDeviceKey.delete(alias: alias)
+  }
+
+  func presenceKeyStorage(alias: String) throws -> String {
+    PresenceDeviceKey.exists(alias: alias) ? "secure_enclave" : ""
+  }
+
   /// `clientDataHash = SHA256(challenge bytes)` — the contract's binding of
   /// the attestation to the server's single-use challenge.
   private static func clientDataHash(_ challengeBase64: String) throws -> Data {

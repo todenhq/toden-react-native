@@ -62,6 +62,10 @@ namespace margelo::nitro::myazakyc {
     std::shared_ptr<Promise<AppAttestKey>> appAttestAttestNewKey(const std::string& challengeBase64) override;
     std::shared_ptr<Promise<std::string>> appAttestAssert(const std::string& keyId, const std::string& challengeBase64) override;
     std::shared_ptr<Promise<std::string>> playIntegrityToken(const std::string& cloudProjectNumber, const std::string& challengeBase64) override;
+    std::string presenceKeyCreate(const std::string& alias) override;
+    std::string presenceKeySign(const std::string& alias, const std::string& text) override;
+    void presenceKeyDelete(const std::string& alias) override;
+    std::string presenceKeyStorage(const std::string& alias) override;
 
   private:
     jni::global_ref<JHybridMyazaDeviceIntelSpec::JavaPart> _javaPart;

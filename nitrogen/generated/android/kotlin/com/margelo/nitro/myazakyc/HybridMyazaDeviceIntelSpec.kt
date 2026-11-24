@@ -60,6 +60,22 @@ abstract class HybridMyazaDeviceIntelSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun playIntegrityToken(cloudProjectNumber: String, challengeBase64: String): Promise<String>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun presenceKeyCreate(alias: String): String
+  
+  @DoNotStrip
+  @Keep
+  abstract fun presenceKeySign(alias: String, text: String): String
+  
+  @DoNotStrip
+  @Keep
+  abstract fun presenceKeyDelete(alias: String): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun presenceKeyStorage(alias: String): String
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

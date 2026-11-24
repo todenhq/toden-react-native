@@ -112,7 +112,7 @@ export interface CameraPermissionPrimingViewProps {
 
 /**
  * "Allow camera access" priming screen, shown right before the native OS camera
- * permission prompt (mirrors Stripe Identity). The actual `requestPermission()`
+ * permission prompt. The actual `requestPermission()`
  * only fires once the user taps "Grant access". Distinct from
  * `CameraPermissionView`, which is shown *after* a denial.
  */

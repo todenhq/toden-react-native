@@ -27,20 +27,20 @@ import { foldSpanIntoDays } from './background-math';
 import { cancelCheckIns, defineCheckInTask, scheduleCheckIns } from './checkin';
 import { defineLocationTask } from './foreground-service';
 import { PRESENCE_GEOFENCE_TASK, armGeofence } from './geofence';
-import { postObservations } from './post';
+import { flushPendingObservations } from './flush';
 import { mergeObservations } from './sampler';
-import { loadPresencePin } from './store';
+import { loadPresencePin, presenceTokenFor } from './store';
+import { registerPresenceDevice } from './device';
 import {
   loadEnterAt,
-  loadReporterConfig,
-  pendingObservations,
   queueObservations,
-  replacePending,
   saveEnterAt,
   saveFenceUser,
   saveReporterConfig,
 } from './background-store';
 import { nativeModulePresent } from '../lib/native-module-present';
+import { userTokenFor, type UserTokenProvider } from './user-token';
+import './secure-token';
 
 // Kept exported from here for hosts (and status.ts) that imported it before
 // the primitive moved to geofence.ts.
@@ -63,16 +63,6 @@ function taskManager(): TaskManagerLike | null {
   }
 }
 
-async function flushQueue(externalUserId: string): Promise<void> {
-  const cfg = loadReporterConfig(externalUserId);
-  if (!cfg) return;
-  const pending = pendingObservations(externalUserId);
-  if (pending.length === 0) return;
-  const ok = await postObservations(cfg.apiKey, cfg.devUrl, externalUserId, pending);
-  // The server ingest is idempotent per (watch, day, source) and MERGES, so a
-  // flush that half-landed is safe to retry whole next time.
-  if (ok) replacePending(externalUserId, []);
-}
 
 /**
  * Define the background tasks (the geofence task AND the foreground-service
@@ -108,7 +98,7 @@ export function registerBackgroundPresence(): boolean {
         days.map((d) => ({ ...d, source: 'geofence' as const, samples: 1 })),
         mergeObservations,
       );
-      void flushQueue(userId);
+      void flushPendingObservations(userId);
     }
   });
   defineLocationTask(tm);
@@ -154,6 +144,8 @@ export async function enableBackgroundPresence(options: {
   apiKey: string;
   externalUserId: string;
   devUrl?: string;
+  /** With a scoped publishable key: see ReportPresenceOptions.getUserToken. */
+  getUserToken?: UserTokenProvider;
 }): Promise<EnableBackgroundResult> {
   const tm = taskManager();
   if (!tm) return { enabled: false, reason: 'module_missing' };
@@ -184,6 +176,14 @@ export async function enableBackgroundPresence(options: {
     apiKey: options.apiKey,
     ...(options.devUrl ? { devUrl: options.devUrl } : {}),
   });
+  // A token now, kept for the headless flush (secure-token.ts). No provider:
+  // nothing happens and the background posts as it always has.
+  await userTokenFor({
+    apiKey: options.apiKey,
+    externalUserId: options.externalUserId,
+    purpose: 'presence',
+    ...(options.getUserToken ? { getUserToken: options.getUserToken } : {}),
+  });
 
   try {
     await armGeofence(options.externalUserId, pin);
@@ -192,6 +192,18 @@ export async function enableBackgroundPresence(options: {
     // host installed expo-background-task. Without them a stay is recorded
     // when the person leaves or opens the app.
     await scheduleCheckIns();
+    // A later foreground registers a device the 202 could not (offline, or an
+    // older SDK then). A registered phone answers without a mint.
+    const held = await presenceTokenFor(options.externalUserId);
+    if (held.token) {
+      void registerPresenceDevice({
+        apiKey: options.apiKey,
+        externalUserId: options.externalUserId,
+        presenceToken: held.token,
+        ...(options.devUrl ? { devUrl: options.devUrl } : {}),
+        ...(options.getUserToken ? { getUserToken: options.getUserToken } : {}),
+      });
+    }
     return { enabled: true, reason: 'enabled' };
   } catch {
     return { enabled: false, reason: 'start_failed' };

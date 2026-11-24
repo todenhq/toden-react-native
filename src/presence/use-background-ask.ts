@@ -29,6 +29,7 @@ function optionsOf(config: AutoReportConfig) {
     apiKey: config.apiKey,
     externalUserId: config.userId!,
     ...(config.devUrl ? { devUrl: config.devUrl } : {}),
+    ...(config.getUserToken ? { getUserToken: config.getUserToken } : {}),
   };
 }
 

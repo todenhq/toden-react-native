@@ -75,4 +75,25 @@ export interface MyazaDeviceIntel extends HybridObject<{ ios: 'swift'; android: 
    * bytes. Rejects on iOS.
    */
   playIntegrityToken(cloudProjectNumber: string, challengeBase64: string): Promise<string>;
+
+  // ── Presence device key (user token design rev 4, section 14) ────────────
+
+  /**
+   * A new non-exportable P-256 key under `alias`: the Secure Enclave on iOS,
+   * the Android Keystore (StrongBox when the phone has it, else the TEE). No
+   * biometry, user presence or unlocked-device requirement, so background code
+   * can sign while the phone is locked after its first unlock. The public key
+   * as base64 DER SubjectPublicKeyInfo, or '' when the phone has no such key
+   * (a simulator, Android below 6).
+   */
+  presenceKeyCreate(alias: string): string;
+
+  /** ECDSA-SHA256 over the UTF-8 bytes of `text`, base64 DER; '' when the key is gone or locked. */
+  presenceKeySign(alias: string, text: string): string;
+
+  /** Deletes the key. A missing key is not an error. */
+  presenceKeyDelete(alias: string): void;
+
+  /** Where the key lives: 'secure_enclave', 'strongbox' or 'tee'; '' when there is no key. */
+  presenceKeyStorage(alias: string): string;
 }

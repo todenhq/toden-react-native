@@ -165,6 +165,18 @@ export interface VerificationConfig<C extends SupportedCountry = SupportedCountr
    */
   userId?: string;
 
+  /**
+   * With a scoped publishable key: asks your server for a short-lived user
+   * token for the signed-in user. Your server mints it with a secret key
+   * (`POST /user-tokens/presence` or `POST /user-tokens/biometric`) for the
+   * user in ITS OWN session; the SDK passes no user id, only the purpose.
+   * Presence tokens let address presence report after the flow. A biometric
+   * token is fetched fresh before a face check or face enrolment starts
+   * (each start spends one use), held in memory for that flow only and never
+   * stored. Omit it with a legacy key: every request is then 4.4.0's.
+   */
+  getUserToken?: import('../presence/user-token').UserTokenProvider;
+
   /** Pre-populated user data. Fields provided here won't be collected again. */
   userData?: {
     firstName?: string;

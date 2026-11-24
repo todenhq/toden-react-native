@@ -60,6 +60,10 @@ namespace margelo::nitro::myazakyc {
       virtual std::shared_ptr<Promise<AppAttestKey>> appAttestAttestNewKey(const std::string& challengeBase64) = 0;
       virtual std::shared_ptr<Promise<std::string>> appAttestAssert(const std::string& keyId, const std::string& challengeBase64) = 0;
       virtual std::shared_ptr<Promise<std::string>> playIntegrityToken(const std::string& cloudProjectNumber, const std::string& challengeBase64) = 0;
+      virtual std::string presenceKeyCreate(const std::string& alias) = 0;
+      virtual std::string presenceKeySign(const std::string& alias, const std::string& text) = 0;
+      virtual void presenceKeyDelete(const std::string& alias) = 0;
+      virtual std::string presenceKeyStorage(const std::string& alias) = 0;
 
     protected:
       // Hybrid Setup

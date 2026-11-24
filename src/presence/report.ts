@@ -13,12 +13,20 @@ import * as Location from 'expo-location';
 import { currentPosition } from '../services/location';
 import { insideFence, localDayAndNight } from './math';
 import { recordCheckIn } from './checkin';
-import { postObservations } from './post';
+import { sendObservations } from './post';
+import { flushPendingObservations } from './flush';
+import {
+  cachedUserToken,
+  rekeepUserToken,
+  sendWithUserToken,
+  userTokenProvider,
+  type UserTokenProvider,
+} from './user-token';
 import { loadPresencePin } from './store';
 import { standDownPresence } from './stand-down';
 import { maybeArmBackground } from './auto-arm';
 import type { EnableBackgroundResult } from './background';
-import { awaitWatch, fetchWatchState, pinIsFresh, shouldStandDown } from './watch-wait';
+import { awaitWatch, pinIsFresh, readWatch, shouldStandDown, type WatchState } from './watch-wait';
 
 export interface ReportPresenceOptions {
   /** The org's PUBLISHABLE key (the same one the KYC flow mounts with). */
@@ -34,6 +42,13 @@ export interface ReportPresenceOptions {
    * choose. Default `true`.
    */
   autoBackground?: boolean;
+  /**
+   * With a scoped publishable key: asks your server for a user token for the
+   * signed-in user (it gets no user id from the SDK). Your server mints it
+   * with `POST /user-tokens/presence` and a secret key. Omit it with a legacy
+   * key; or call `setUserTokenProvider` once instead.
+   */
+  getUserToken?: UserTokenProvider;
 }
 
 export interface ReportPresenceResult {
@@ -51,7 +66,15 @@ export interface ReportPresenceResult {
     /** The organisation stopped monitoring. Background location was switched
      *  off for this user and the stored pin forgotten. */
     | 'stopped'
-    | 'network_error';
+    | 'network_error'
+    /** A scoped publishable key needs a user token, and none was given. */
+    | 'user_token_required'
+    /** The server refused the user token, after one new token and one retry. */
+    | 'user_token_invalid'
+    /** The provider's token is for another user or purpose, or expired: nothing was sent. */
+    | 'user_token_mismatch'
+    /** The publishable key is limited to workflows and cannot use presence. */
+    | 'scope_not_declared';
   /** Set when this report tried to switch background monitoring on. */
   background?: EnableBackgroundResult;
 }
@@ -75,8 +98,15 @@ async function report(
   // Asked before anything touches location: when the organisation has stopped
   // monitoring, the phone stops too (stand-down.ts), and takes no fix at all.
   const fresh = pinIsFresh(pin);
-  const read = () => fetchWatchState(options.apiKey, options.devUrl, options.externalUserId);
+  let refusal: ReportPresenceResult['reason'] | null = null;
+  const read = async (): Promise<WatchState | null> => {
+    const answer = await readWatch(options.apiKey, options.devUrl, options.externalUserId, options.getUserToken);
+    if (answer.refusal) refusal = answer.refusal;
+    return answer.state;
+  };
   let known = fresh ? undefined : await read();
+  // A user-token refusal is not a stopped watch, and waiting will not fix it.
+  if (refusal) return { reported: false, inside: null, reason: refusal };
   if (shouldStandDown(known ?? null, fresh)) {
     await standDownPresence(options.externalUserId);
     return { reported: false, inside: null, reason: 'stopped' };
@@ -116,23 +146,41 @@ async function report(
       known = undefined;
       return state?.status ?? null;
     },
+    stop: () => refusal !== null,
   });
+  // A refusal ends the wait at once: polling 90 seconds would not fix it.
+  if (refusal) return { reported: false, inside, reason: refusal };
   if (watch === 'absent') return { reported: false, inside, reason: 'no_watch' };
 
   const { day, nightPresent } = localDayAndNight();
   // One wire path for both tiers (post.ts) — the request shape cannot fork.
-  const ok = await postObservations(options.apiKey, options.devUrl, options.externalUserId, [
+  const observation = {
+    day,
+    source: 'foreground' as const,
+    dwellMinutes: 0,
+    nightPresent,
+    samples: 1,
+    // A mocked fix is REPORTED, flagged — evidence OF fraud is worth
+    // more to the watch than silence.
+    ...(fix.mocked === true ? { integrity: { mockLocation: true } } : {}),
+  };
+  const sent = await sendWithUserToken(
     {
-      day,
-      source: 'foreground',
-      dwellMinutes: 0,
-      nightPresent,
-      samples: 1,
-      // A mocked fix is REPORTED, flagged — evidence OF fraud is worth
-      // more to the watch than silence.
-      ...(fix.mocked === true ? { integrity: { mockLocation: true } } : {}),
+      apiKey: options.apiKey,
+      externalUserId: options.externalUserId,
+      purpose: 'presence',
+      ...(options.getUserToken ? { getUserToken: options.getUserToken } : {}),
     },
-  ]);
-  if (!ok) return { reported: false, inside, reason: 'network_error' };
+    (headers) => sendObservations(options.apiKey, options.devUrl, options.externalUserId, [observation], headers),
+  );
+  if (sent.refusal) return { reported: false, inside, reason: sent.refusal };
+  // With a token in hand, the days the background held while it had none go
+  // now, and the background's stored copy is replaced (it may be stale).
+  const held = options.getUserToken ?? userTokenProvider() ? cachedUserToken(options.externalUserId, 'presence') : null;
+  if (held) {
+    await rekeepUserToken(held);
+    await flushPendingObservations(options.externalUserId, held.token);
+  }
+  if (!sent.response?.ok) return { reported: false, inside, reason: 'network_error' };
   return { reported: true, inside, reason: 'reported' };
 }

@@ -11,6 +11,7 @@ import type { SessionStartResponse } from '../services/api-types';
 import { persistentDeviceId } from '../services/fingerprint-sources';
 import { openingStep } from './derive';
 import { cancelledRefusalOf, shouldStopOnSessionStartFailure } from '../lib/session-cancelled';
+import { startWithMountToken } from '../services/mount-user-token';
 
 // ---------------------------------------------------------------------------
 // The attempt SESSION: minting at launch, and progress writes as the user moves.
@@ -55,16 +56,7 @@ export function startAttemptSession(store: VerificationStore): void {
     // The device id is the anonymous-mount resume fallback: without a userId
     // the server has nothing else to find the previous attempt by, and every
     // app relaunch minted a fresh session. Hashed server-side before storage.
-    start = persistentDeviceId().then((deviceRef) =>
-      s.api.startSession({
-        externalUserId,
-        ...(deviceRef ? { deviceRef } : {}),
-        ...(s.config.workflowId ? { workflowId: s.config.workflowId } : {}),
-        // What this phone is, sent up front: the dashboard's in-progress row
-        // shows Device and Source from the moment the SDK loads.
-        device: collectDeviceMetadata() as unknown as Record<string, unknown>,
-      }),
-    );
+    start = mintSession(s, externalUserId);
     inflightStarts.set(key, start);
     start.then(
       () => setTimeout(() => inflightStarts.delete(key), 2000),
@@ -88,6 +80,54 @@ export function startAttemptSession(store: VerificationStore): void {
         store.getState().markCancelled(cancelledRefusalOf(err)!.message);
       }
     });
+}
+
+/**
+ * One /session/start. A face-scope mount with a user-token provider carries a
+ * fresh biometric token (services/mount-user-token.ts); everything else is
+ * 4.4.0's request.
+ */
+function mintSession(
+  s: ReturnType<VerificationStore['getState']>,
+  externalUserId: string | undefined,
+  options: { anyScope?: boolean } = {},
+): Promise<SessionStartResponse> {
+  return persistentDeviceId().then((deviceRef) =>
+    startWithMountToken(s.config, externalUserId, (headers) =>
+      s.api.startSession(
+        {
+          externalUserId,
+          // A resume needs deviceRef with a publishable key: without it a
+          // re-mount mints a new session instead of rebinding this one.
+          ...(deviceRef ? { deviceRef } : {}),
+          ...(s.config.workflowId ? { workflowId: s.config.workflowId } : {}),
+          // What this phone is, sent up front: the dashboard's in-progress row
+          // shows Device and Source from the moment the SDK loads.
+          device: collectDeviceMetadata() as unknown as Record<string, unknown>,
+        },
+        headers,
+      ),
+      options,
+    ),
+  );
+}
+
+/**
+ * Mount again with a fresh biometric token, after /verify said the session's
+ * bound token is no longer good (403 `user_token_invalid`). A resume, which
+ * rebinds the session; never the once-per-launch path above, which returns
+ * early once a session exists. The session id the server answered with.
+ */
+export async function remountAttemptSession(store: VerificationStore): Promise<string | null> {
+  const s = store.getState();
+  const externalUserId = s.config.userId ?? s.config.metadata?.['userId'];
+  try {
+    const res = await mintSession(s, externalUserId, { anyScope: true });
+    store.getState().setSessionId(res.sessionId, res.url ?? null);
+    return res.sessionId;
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.5.0
+
+No breaking changes: with a legacy publishable key and no provider, every request is exactly what 4.4.0 sent. The SDK's native module gains the presence device key, so rebuild the app.
+
+**Deploy note for Toden:** user tokens need the matching Toden server release. Until it is deployed, a provider's token is sent and ignored.
+
+### Added
+
+- **User tokens for scoped publishable keys.** A scoped publishable key needs a short-lived user token from your server for address presence. Give the SDK a provider with `setUserTokenProvider`, or `getUserToken` on the SDK config, `reportAddressPresence`, `enableBackgroundPresence` or `fetchPresenceWatchStatus`. The provider gets no user id: your server mints the token for the user in its own session. The SDK checks each token is for this user, for presence, for this key's environment and not expired before it sends it in `X-Toden-User-Token`; a provider that answers `null` means no header, and one that fails keeps an unexpired token it gave before or sends no header.
+- **One new token and one retry.** A 403 `user_token_invalid`, with a provider, gets one new token and one retry. `user_token_required`, `scope_not_declared` and every other answer are never retried, and none of these is treated as an invalid API key.
+- **`setUserToken` for silent pushes.** Hand the SDK a token from a silent push and the background queue is sent at once. A token for another user throws `UserTokenError` with `user_token_mismatch`.
+- **Background tokens in secure storage.** The background task never calls your provider. The last presence token is kept in `expo-secure-store` (after first unlock, this device only), never in the app's documents. It is an optional module: without it, days found in the background wait until the app is next opened. `standDownPresence` forgets the token.
+
+- **Face checks with a scoped publishable key.** A flow whose scope is `biometric-authentication` or `biometric-enrollment` asks your provider for a `biometric` token before each start and sends it on `/session/start`; it is kept in memory for that flow only. A workflow mount refused with `user_token_required` gets one token and one more start, and a face check refused with `user_token_invalid` gets one new token, a resumed session and one more submission. `too_many_attempts` goes to your app.
+- **Presence device.** With a provider, the phone registers a key it never exports (Secure Enclave, Android Keystore) right after an address verification. The background task then signs for its own 1-hour presence token, and every queued day is sealed with the key, so a late report still counts for its own day. On a watch kept open past its deadline for late reports, the days after the deadline stay queued after a send. `standDownPresence` deletes the key. Needs `expo-secure-store`.
+- **`expo-secure-store` is an optional peer dependency.**
+- **API key expiry webhooks (your server only).** The `api_key.expiring` and `api_key.expired` webhook events go to your webhook endpoint, not to the SDK. Nothing in this SDK changes for them.
+
+### Changed
+
+- **The verification's presence token is kept in `expo-secure-store`.** The token from the address verification moves out of the app's documents (which backups copy) on first run, when `expo-secure-store` is installed. Without it, it stays where it was.
+- **The background queue is sent oldest first, in chunks of 31 days.** A chunk the server takes leaves the queue; a chunk it answers with 400 is dropped, since it can never succeed; any other answer keeps the queue for next time. Days are never dropped for their age. With user tokens in use and no fresh token, the background keeps its queue and sends nothing.
+- **More reasons on `ReportPresenceResult`.** `reason` gains `user_token_required`, `user_token_invalid`, `user_token_mismatch` and `scope_not_declared`, and a user-token refusal ends the wait for the watch at once instead of reporting `no_watch`. Check exhaustive `switch` statements on `reason`.
+
 ## 4.4.0
 
 No breaking changes for hosts, and no new native code: no rebuild is needed beyond installing the new version.

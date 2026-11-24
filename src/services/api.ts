@@ -485,10 +485,13 @@ export function createVerificationApi(baseUrl: string, apiKey: string, options: 
        *  in-progress row shows the device and SDK from the moment the SDK
        *  loads rather than after the applicant finishes (2026-09-08). */
       device?: Record<string, unknown>;
-    }): Promise<SessionStartResponse> {
+    }, extraHeaders: Record<string, string> = {}): Promise<SessionStartResponse> {
+      // extraHeaders: the biometric user token of a face-scope mount
+      // (services/mount-user-token.ts); none otherwise, so 4.4.0's request.
       return request<SessionStartResponse>('/session/start', {
         method: 'POST',
         body: JSON.stringify(input),
+        ...(Object.keys(extraHeaders).length > 0 ? { headers: extraHeaders } : {}),
       });
     },
 

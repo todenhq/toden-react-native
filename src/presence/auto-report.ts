@@ -27,11 +27,14 @@
 
 import { enableBackgroundPresence, type EnableBackgroundResult } from './background';
 import { reportAddressPresence, type ReportPresenceResult } from './report';
+import type { UserTokenProvider } from './user-token';
 
 export interface AutoReportConfig {
   apiKey: string;
   devUrl?: string;
   userId?: string;
+  /** With a scoped publishable key: see ReportPresenceOptions.getUserToken. */
+  getUserToken?: UserTokenProvider;
   addressCollection?: { presence?: { enabled?: boolean; background?: boolean } } | null;
 }
 
@@ -68,6 +71,7 @@ export async function autoReportPresence(
     apiKey: config.apiKey,
     externalUserId: config.userId!,
     ...(config.devUrl ? { devUrl: config.devUrl } : {}),
+    ...(config.getUserToken ? { getUserToken: config.getUserToken } : {}),
   };
   // Background first: its permission prompt belongs on the success screen,
   // not a minute later when the report has finished waiting for the watch.

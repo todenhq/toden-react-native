@@ -6,6 +6,7 @@
 // from flush bookkeeping.
 
 import { readJsonFile, writeJsonFile } from './fs';
+import { stampChanged, type QueuedObservation } from './device-rules';
 import type { WireObservation } from './post';
 
 const FILE_NAME = 'myaza-kyc-presence-bg.json';
@@ -17,6 +18,12 @@ interface BgRecord {
   pending?: WireObservation[];
   config?: { apiKey: string; devUrl?: string };
   serviceUser?: string;
+  /** User tokens are in use for this user (the token itself is in secure-token.ts). */
+  userTokens?: boolean;
+  /** Server minus device, from the presence device's last core answer (device.ts). */
+  clockOffset?: number;
+  /** The watch's deadline day while it is in progress past it (watch-status.ts). */
+  heldDeadlineDay?: string | null;
 }
 
 /** The foreground-service tier serves ONE user at a time (one notification,
@@ -82,7 +89,24 @@ export function queueObservations(
   fresh: WireObservation[],
   merge: (existing: WireObservation[], fresh: WireObservation[]) => WireObservation[],
 ): void {
-  write(userId, { pending: merge(pendingObservations(userId), fresh) });
+  const before: QueuedObservation[] = pendingObservations(userId);
+  const at = Date.now() + (readAll()[userId]?.clockOffset ?? 0);
+  // A new or changed day is stamped, so its seal (device.ts) says when.
+  write(userId, { pending: stampChanged(before, merge(before, fresh), at) });
+}
+
+export function saveClockOffset(userId: string, offset: number): void {
+  write(userId, { clockOffset: offset });
+}
+
+/** Null clears it: every sent day may leave the queue again. */
+export function saveHeldDeadline(userId: string, day: string | null): void {
+  write(userId, { heldDeadlineDay: day });
+}
+
+export function loadHeldDeadline(userId: string): string | null {
+  const day = readAll()[userId]?.heldDeadlineDay;
+  return typeof day === 'string' ? day : null;
 }
 
 export function saveReporterConfig(userId: string, config: { apiKey: string; devUrl?: string }): void {
@@ -92,6 +116,16 @@ export function saveReporterConfig(userId: string, config: { apiKey: string; dev
 export function loadReporterConfig(userId: string): { apiKey: string; devUrl?: string } | null {
   const cfg = readAll()[userId]?.config;
   return cfg && typeof cfg.apiKey === 'string' ? cfg : null;
+}
+
+/** Not a secret: whether the background flush needs a user token for this user. */
+export function saveUserTokensInUse(userId: string, inUse: boolean): void {
+  if (!inUse && readAll()[userId] === undefined) return;
+  write(userId, { userTokens: inUse });
+}
+
+export function userTokensInUse(userId: string): boolean {
+  return readAll()[userId]?.userTokens === true;
 }
 
 export function saveServiceUser(userId: string | null): void {

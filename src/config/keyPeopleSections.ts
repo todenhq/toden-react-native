@@ -108,8 +108,8 @@ export const SECTION_ROLE: Record<KeyPeopleSection, KeyPersonRole> = {
 /**
  * Entries offerable as quick-add chips for a section: already entered, named,
  * not yet a member, and eligible (a company can never be quick-added as a
- * UBO). One tap grants the section's role — the Didit chip, minus its
- * duplicate-name bug.
+ * UBO). One tap grants the section's role, and a name already in the section
+ * is never offered twice.
  */
 export function quickAddCandidates(
   rows: KeyPersonEntry[],

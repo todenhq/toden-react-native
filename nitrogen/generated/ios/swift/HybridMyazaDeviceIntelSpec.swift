@@ -21,6 +21,10 @@ public protocol HybridMyazaDeviceIntelSpec_protocol: HybridObject {
   func appAttestAttestNewKey(challengeBase64: String) throws -> Promise<AppAttestKey>
   func appAttestAssert(keyId: String, challengeBase64: String) throws -> Promise<String>
   func playIntegrityToken(cloudProjectNumber: String, challengeBase64: String) throws -> Promise<String>
+  func presenceKeyCreate(alias: String) throws -> String
+  func presenceKeySign(alias: String, text: String) throws -> String
+  func presenceKeyDelete(alias: String) throws -> Void
+  func presenceKeyStorage(alias: String) throws -> String
 }
 
 public extension HybridMyazaDeviceIntelSpec_protocol {

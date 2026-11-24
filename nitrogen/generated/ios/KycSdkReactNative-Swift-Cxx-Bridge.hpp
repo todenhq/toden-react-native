@@ -346,6 +346,15 @@ namespace margelo::nitro::myazakyc::bridge::swift {
     return Result<std::shared_ptr<Promise<AppAttestKey>>>::withError(error);
   }
   
+  // pragma MARK: Result<void>
+  using Result_void_ = Result<void>;
+  inline Result_void_ create_Result_void_() noexcept {
+    return Result<void>::withValue();
+  }
+  inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
+    return Result<void>::withError(error);
+  }
+  
   // pragma MARK: std::shared_ptr<Promise<EmrtdTagInfo>>
   /**
    * Specialized version of `std::shared_ptr<Promise<EmrtdTagInfo>>`.
@@ -582,15 +591,6 @@ namespace margelo::nitro::myazakyc::bridge::swift {
   }
   inline Result_DetectedRect_ create_Result_DetectedRect_(const std::exception_ptr& error) noexcept {
     return Result<DetectedRect>::withError(error);
-  }
-  
-  // pragma MARK: Result<void>
-  using Result_void_ = Result<void>;
-  inline Result_void_ create_Result_void_() noexcept {
-    return Result<void>::withValue();
-  }
-  inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
-    return Result<void>::withError(error);
   }
   
   // pragma MARK: std::shared_ptr<Promise<TextResult>>

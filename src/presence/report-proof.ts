@@ -36,18 +36,21 @@ export function reportDigestText(input: {
     input.externalUserId,
     input.device?.stableId ?? '',
     input.device?.deviceId ?? '',
-    ...input.observations.map((o) =>
-      [
-        o.day,
-        o.source,
-        o.dwellMinutes,
-        o.nightPresent ? 1 : 0,
-        o.samples,
-        o.integrity?.mockLocation === true ? 1 : 0,
-        o.integrity?.emulator === true ? 1 : 0,
-      ].join('|'),
-    ),
+    ...input.observations.map(reportDigestRow),
   ].join('\n');
+}
+
+/** One observation's line of the digest; a seal signs the same line (device-rules.ts). */
+export function reportDigestRow(o: WireObservation): string {
+  return [
+    o.day,
+    o.source,
+    o.dwellMinutes,
+    o.nightPresent ? 1 : 0,
+    o.samples,
+    o.integrity?.mockLocation === true ? 1 : 0,
+    o.integrity?.emulator === true ? 1 : 0,
+  ].join('|');
 }
 
 const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text);

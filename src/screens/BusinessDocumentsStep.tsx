@@ -20,7 +20,7 @@ import { BUSINESS_DOCUMENTS_COPY as COPY } from './business-documents/copy';
 import { useGroupUpload, type GroupSlot } from './business-documents/useGroupUpload';
 
 // ---------------------------------------------------------------------------
-// Supporting company documents, one GROUP at a time (Didit's model): the
+// Supporting company documents, one GROUP at a time: the
 // documents an organisation ticks in one group are alternatives, so the
 // applicant uploads one per group and never says which it is (the server
 // recognises it). The groups are a vertical carousel: the open group's card in
